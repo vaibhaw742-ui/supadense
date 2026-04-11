@@ -1,0 +1,50 @@
+services:
+
+  # ── Backend: OpenCode headless server ──────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
+    ports:
+      - "4096:4096"
+    volumes:
+      # Hot reload: mount source dirs — changes on your Mac reflect instantly
+      - ../packages/opencode/src:/app/packages/opencode/src
+      - ../packages/sdk/js/src:/app/packages/sdk/js/src
+      - ../packages/util/src:/app/packages/util/src
+      - ../packages/plugin/src:/app/packages/plugin/src
+
+      # Persist DB + snapshots across container restarts
+      # Bind mount so TablePlus (and other tools) can access the SQLite file directly
+      - ../data/opencode:/root/.local/share/opencode
+    environment:
+      # Suppress the "server is unsecured" warning in dev
+      # Set a real password in production: OPENCODE_SERVER_PASSWORD=yourpassword
+      - OPENCODE_SERVER_PASSWORD=
+    restart: unless-stopped
+
+  # ── Frontend: Vite dev server ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      # Hot reload: Vite HMR picks up changes from these mounts instantly
+      - ../packages/app/src:/app/packages/app/src
+      - ../packages/app/public:/app/packages/app/public
+      - ../packages/ui/src:/app/packages/ui/src
+    environment:
+      # Required for Vite file watching inside Docker (bind mounts need polling)
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300
+
+      # Backend server address — browser connects directly to localhost:4096
+      # because both ports are exposed to the host
+      - VITE_OPENCODE_SERVER_HOST=localhost
+      - VITE_OPENCODE_SERVER_PORT=4096
+    depends_on:
+      - backend
+    restart: unless-stopped
+

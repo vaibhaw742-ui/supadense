@@ -1,0 +1,56 @@
+FROM oven/bun:1.3.12-debian
+
+WORKDIR /app
+
+# ── Copy workspace manifests for layer-cached bun install ────────────────────
+COPY package.json bun.lock bunfig.toml tsconfig.json ./
+COPY patches ./patches/
+
+COPY packages/app/package.json         packages/app/
+COPY packages/app/tsconfig.json        packages/app/
+COPY packages/app/vite.config.ts       packages/app/
+COPY packages/app/vite.js              packages/app/
+COPY packages/ui/package.json          packages/ui/
+COPY packages/ui/tsconfig.json         packages/ui/
+COPY packages/sdk/js/package.json      packages/sdk/js/
+COPY packages/sdk/js/tsconfig.json     packages/sdk/js/
+COPY packages/util/package.json        packages/util/
+COPY packages/util/tsconfig.json       packages/util/
+COPY packages/plugin/package.json      packages/plugin/
+COPY packages/plugin/tsconfig.json     packages/plugin/
+COPY packages/script/package.json      packages/script/
+COPY packages/script/tsconfig.json     packages/script/
+COPY packages/opencode/package.json    packages/opencode/
+COPY packages/opencode/tsconfig.json   packages/opencode/
+COPY packages/opencode/script          packages/opencode/script
+COPY packages/slack/package.json       packages/slack/
+COPY packages/storybook/package.json   packages/storybook/
+COPY packages/web/package.json         packages/web/
+COPY packages/desktop/package.json     packages/desktop/
+COPY packages/desktop-electron/package.json packages/desktop-electron/
+COPY packages/enterprise/package.json  packages/enterprise/
+COPY packages/function/package.json    packages/function/
+COPY packages/console/app/package.json     packages/console/app/
+COPY packages/console/core/package.json    packages/console/core/
+COPY packages/console/function/package.json packages/console/function/
+COPY packages/console/mail/package.json    packages/console/mail/
+COPY packages/console/resource/package.json packages/console/resource/
+
+# --ignore-scripts skips native module compilation (tree-sitter, node-pty etc.)
+# Frontend only needs JS/TS packages — no native builds required.
+RUN bun install --ignore-scripts
+
+# ── Copy source code ──────────────────────────────────────────────────────────
+# Overridden by bind mounts in docker-compose for hot reload.
+COPY packages/app/index.html packages/app/index.html
+COPY packages/app/src       packages/app/src
+COPY packages/app/public    packages/app/public
+COPY packages/ui/src        packages/ui/src
+COPY packages/sdk/js/src    packages/sdk/js/src
+COPY packages/util/src      packages/util/src
+
+EXPOSE 3000
+
+# Vite dev server with HMR
+# CHOKIDAR_USEPOLLING is set via docker-compose env for file watching on bind mounts
+CMD ["bun", "--cwd", "packages/app", "dev"]

@@ -23,6 +23,9 @@ target
 .scripts
 .direnv/
 
+# Docker local data (SQLite DB, logs, snapshots)
+data/
+
 # Local dev files
 opencode-dev
 UPCOMING_CHANGELOG.md
