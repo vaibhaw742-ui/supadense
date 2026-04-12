@@ -11,6 +11,17 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import {
+  KbWorkspaceInitTool,
+  KbOnboardCompleteTool,
+  KbResourceCreateTool,
+  KbResourcePlaceTool,
+  KbConceptUpsertTool,
+  KbWikiBuildTool,
+  KbRetrieveTool,
+  KbEventLogTool,
+  KbCategoryManageTool,
+} from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -166,6 +177,16 @@ export namespace ToolRegistry {
             question: Tool.init(question),
             lsp: Tool.init(LspTool),
             plan: Tool.init(PlanExitTool),
+            // Learning KB tools
+            kb_workspace_init: Tool.init(KbWorkspaceInitTool),
+            kb_onboard_complete: Tool.init(KbOnboardCompleteTool),
+            kb_resource_create: Tool.init(KbResourceCreateTool),
+            kb_resource_place: Tool.init(KbResourcePlaceTool),
+            kb_concept_upsert: Tool.init(KbConceptUpsertTool),
+            kb_wiki_build: Tool.init(KbWikiBuildTool),
+            kb_retrieve: Tool.init(KbRetrieveTool),
+            kb_event_log: Tool.init(KbEventLogTool),
+            kb_category_manage: Tool.init(KbCategoryManageTool),
           })
 
           return {
@@ -188,6 +209,16 @@ export namespace ToolRegistry {
               tool.patch,
               ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
               ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+              // Learning KB tools
+              tool.kb_workspace_init,
+              tool.kb_onboard_complete,
+              tool.kb_resource_create,
+              tool.kb_resource_place,
+              tool.kb_concept_upsert,
+              tool.kb_wiki_build,
+              tool.kb_retrieve,
+              tool.kb_event_log,
+              tool.kb_category_manage,
             ],
             task: tool.task,
             read: tool.read,

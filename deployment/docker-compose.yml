@@ -17,6 +17,9 @@ services:
       # Persist DB + snapshots across container restarts
       # Bind mount so TablePlus (and other tools) can access the SQLite file directly
       - ../data/opencode:/root/.local/share/opencode
+
+      # Mount Desktop so any folder on it can be opened as a project
+      - /Users/vaibhawkhemka/Desktop:/workspaces/Desktop
     environment:
       # Suppress the "server is unsecured" warning in dev
       # Set a real password in production: OPENCODE_SERVER_PASSWORD=yourpassword
