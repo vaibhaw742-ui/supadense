@@ -49,6 +49,8 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   }),
 
   async execute(params, ctx) {
+    type M = { category_slug: string; pages_removed?: number; file_path?: string }
+
     const project = Instance.project
     const workspace = Workspace.get(project.id)
     if (!workspace) throw new Error("No KB workspace found. Run kb_workspace_init first.")
@@ -128,7 +130,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
 
       return {
         title: `Category added: ${params.category_name}`,
-        metadata: { category_slug: params.category_slug },
+        metadata: { category_slug: params.category_slug } as M,
         output: `Added category '${params.category_name}' → wiki/${params.category_slug}.md`,
       }
     }
@@ -200,7 +202,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
 
       return {
         title: `Category removed: ${category.name}`,
-        metadata: { category_slug: params.category_slug, pages_removed: pages.length },
+        metadata: { category_slug: params.category_slug, pages_removed: pages.length } as M,
         output: `Removed category '${category.name}' and ${pages.length} wiki page(s).`,
       }
     }
@@ -269,7 +271,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
 
       return {
         title: `Subcategory added: ${params.subcategory_name}`,
-        metadata: { file_path: filePath },
+        metadata: { file_path: filePath } as M,
         output: `Added subcategory '${params.subcategory_name}' → ${filePath}`,
       }
     }
@@ -323,7 +325,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
 
       return {
         title: `Subcategory removed: ${page.title}`,
-        metadata: { file_path: page.file_path },
+        metadata: { file_path: page.file_path } as M,
         output: `Removed subcategory '${page.title}' and deleted ${page.file_path}.`,
       }
     }
