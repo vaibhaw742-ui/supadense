@@ -9,6 +9,7 @@ services:
       - "4096:4096"
     volumes:
       # Hot reload: mount source dirs — changes on your Mac reflect instantly
+      - ../packages/opencode/migration:/app/packages/opencode/migration
       - ../packages/opencode/src:/app/packages/opencode/src
       - ../packages/sdk/js/src:/app/packages/sdk/js/src
       - ../packages/util/src:/app/packages/util/src
@@ -35,6 +36,7 @@ services:
       - "3000:3000"
     volumes:
       # Hot reload: Vite HMR picks up changes from these mounts instantly
+      - ../packages/app/index.html:/app/packages/app/index.html
       - ../packages/app/src:/app/packages/app/src
       - ../packages/app/public:/app/packages/app/public
       - ../packages/ui/src:/app/packages/ui/src

@@ -20,6 +20,7 @@ import {
   LearningWikiPageTable,
   LearningResourceWikiPlacementTable,
 } from "../../learning/schema.sql"
+import { KbSchema, DEFAULT_SUBCATEGORIES } from "../../learning/kb-schema"
 
 export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   description: [
@@ -51,8 +52,8 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   async execute(params, ctx) {
     type M = { category_slug: string; pages_removed?: number; file_path?: string }
 
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const kbPath = Instance.directory
+    const workspace = Workspace.getByKbPath(kbPath)
     if (!workspace) throw new Error("No KB workspace found. Run kb_workspace_init first.")
 
     const workspaceId = workspace.id
@@ -99,9 +100,10 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
+      const catPageId = ulid()
       Database.use((db) =>
         db.insert(LearningWikiPageTable).values({
-          id: ulid(),
+          id: catPageId,
           workspace_id: workspaceId,
           category_id: categoryId,
           page_type: "category",
@@ -118,6 +120,34 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
+      // Apply subcategories from schema (or defaults if not yet set up)
+      const schemaContent = KbSchema.buildContent(workspaceId)
+      const existingSubcats = schemaContent.categories[0]?.subcategories ?? DEFAULT_SUBCATEGORIES
+      for (const sub of existingSubcats) {
+        Database.use((db) =>
+          db.insert(LearningWikiPageTable).values({
+            id: ulid(),
+            workspace_id: workspaceId,
+            category_id: categoryId,
+            parent_page_id: catPageId,
+            page_type: "subcategory",
+            category_slug: params.category_slug,
+            subcategory_slug: sub.slug,
+            slug: sub.slug,
+            title: `${params.category_name} — ${sub.name}`,
+            file_path: `wiki/${params.category_slug}--${sub.slug}.md`,
+            sections: sub.sections.map((s) => ({ slug: s.slug, heading: s.heading, description: s.description })),
+            resource_count: 0,
+            word_count: 0,
+            time_created: now,
+            time_updated: now,
+          }).run(),
+        )
+      }
+
+      KbSchema.ensure(workspaceId)
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
       WikiBuilder.buildSupadenseMd(workspace)
 
@@ -190,6 +220,8 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         if (existsSync(fullPath)) unlinkSync(fullPath)
       }
 
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
       WikiBuilder.buildSupadenseMd(workspace)
 
@@ -260,6 +292,8 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
 
       Workspace.logEvent(workspaceId, {
@@ -315,6 +349,9 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       const { unlinkSync, existsSync } = await import("fs")
       const fullPath = `${workspace.kb_path}/${page.file_path}`
       if (existsSync(fullPath)) unlinkSync(fullPath)
+
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
 
       Workspace.logEvent(workspaceId, {
         event_type: "subcategory_removed",

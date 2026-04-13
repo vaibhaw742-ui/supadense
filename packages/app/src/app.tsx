@@ -8,7 +8,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useLocation } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Duration, Effect } from "effect"
 import {
@@ -49,6 +49,8 @@ import { useCheckServerHealth } from "./utils/server-health"
 const HomeRoute = lazy(() => import("@/pages/home"))
 const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
+const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
+const WikiPage = lazy(() => import("@/pages/wiki/wiki-page"))
 const Loading = () => <div class="size-full" />
 
 if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
@@ -119,13 +121,25 @@ function SessionProviders(props: ParentProps) {
 }
 
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
+  const location = useLocation()
+  const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
+
   return (
-    <AppShellProviders>
-      <Suspense fallback={<Loading />}>
-        {props.appChildren}
-        {props.children}
-      </Suspense>
-    </AppShellProviders>
+    <Show
+      when={!isWiki()}
+      fallback={
+        <Suspense fallback={<Loading />}>
+          {props.children}
+        </Suspense>
+      }
+    >
+      <AppShellProviders>
+        <Suspense fallback={<Loading />}>
+          {props.appChildren}
+          {props.children}
+        </Suspense>
+      </AppShellProviders>
+    </Show>
   )
 }
 
@@ -300,6 +314,8 @@ export function AppInterface(props: {
                   <Route path="/" component={SessionIndexRoute} />
                   <Route path="/session/:id?" component={SessionRoute} />
                 </Route>
+                <Route path="/:dir/wiki" component={WikiHome} />
+                <Route path="/:dir/wiki/:slug" component={WikiPage} />
               </Dynamic>
             </GlobalSyncProvider>
           </GlobalSDKProvider>

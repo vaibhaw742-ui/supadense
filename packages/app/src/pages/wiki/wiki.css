@@ -1,0 +1,528 @@
+/* ── Wiki root layout ─────────────────────────────────────────────────────── */
+.wk-root {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  color: #202122;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.wk-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.wk-logo {
+  font-size: 15px;
+  font-weight: 700;
+  color: #202122;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.wk-search {
+  width: 200px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 13px;
+  font-size: 12px;
+  color: #374151;
+  background: #f9fafb;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wk-search:focus {
+  border-color: #93c5fd;
+  background: #fff;
+}
+
+.wk-search::placeholder {
+  color: #9ca3af;
+}
+
+.wk-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.wk-nav-item {
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wk-nav-item:hover {
+  color: #111827;
+}
+
+.wk-nav-active {
+  font-weight: 600;
+  color: #111827;
+}
+
+.wk-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 0.02em;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.wk-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.wk-sidebar {
+  width: 156px;
+  flex-shrink: 0;
+  background: #f8f9fa;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+  padding: 14px 0 14px;
+}
+
+.wk-sb-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  padding: 0 14px;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.wk-sb-link {
+  display: block;
+  font-size: 12px;
+  color: #3b82f6;
+  padding: 3px 14px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wk-sb-link:hover {
+  background: #eff6ff;
+}
+
+.wk-sb-link-active {
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.wk-sb-link-sub {
+  padding-left: 22px;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.wk-sb-link-back {
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.wk-sb-link-back:hover {
+  color: #4b5563;
+  background: #eff6ff;
+}
+
+.wk-sb-stat {
+  font-size: 11px;
+  color: #9ca3af;
+  padding: 2px 14px;
+}
+
+/* ── Main area ───────────────────────────────────────────────────────────── */
+.wk-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  background: #fff;
+}
+
+.wk-loading {
+  color: #9ca3af;
+  font-size: 13px;
+  margin-top: 40px;
+}
+
+/* ── Home content ─────────────────────────────────────────────────────────── */
+.wk-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #202122;
+  margin: 0 0 4px;
+}
+
+.wk-subtitle {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0 0 20px;
+}
+
+.wk-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+/* ── Category grid ───────────────────────────────────────────────────────── */
+.wk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 680px;
+}
+
+/* ── Category card ───────────────────────────────────────────────────────── */
+.wk-card {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+
+.wk-card:hover {
+  border-color: #9ca3af;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.wk-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #202122;
+  margin-bottom: 4px;
+}
+
+.wk-card-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+/* ── Wiki page styles (wiki-page.tsx) ────────────────────────────────────── */
+.wk-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 10px;
+}
+
+.wk-breadcrumb-link {
+  color: #3b82f6;
+  cursor: pointer;
+}
+
+.wk-breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.wk-breadcrumb-sep {
+  color: #d1d5db;
+}
+
+.wk-breadcrumb-current {
+  color: #6b7280;
+}
+
+.wk-page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #202122;
+  margin: 0 0 8px;
+}
+
+.wk-page-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ── TOC ─────────────────────────────────────────────────────────────────── */
+.wk-toc {
+  float: right;
+  clear: right;
+  margin: 0 0 16px 24px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px 14px;
+  min-width: 160px;
+  max-width: 200px;
+  font-size: 12px;
+}
+
+.wk-toc-title {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wk-toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wk-toc-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.wk-toc-link:hover {
+  text-decoration: underline;
+}
+
+.wk-toc-sub {
+  padding-left: 10px;
+}
+
+/* ── Prose ───────────────────────────────────────────────────────────────── */
+.wk-prose {
+  line-height: 1.7;
+  color: #374151;
+  font-size: 14px;
+  max-width: 720px;
+}
+
+.wk-prose h1, .wk-prose .wk-h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #202122;
+  margin: 20px 0 10px;
+}
+
+.wk-prose h2, .wk-prose .wk-h2 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #202122;
+  margin: 24px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.wk-prose h3, .wk-prose .wk-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 16px 0 6px;
+}
+
+.wk-prose p {
+  margin: 8px 0;
+}
+
+.wk-prose ul, .wk-prose ol {
+  margin: 8px 0 8px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wk-prose ul {
+  list-style: disc;
+}
+
+.wk-prose ol {
+  list-style: decimal;
+}
+
+.wk-prose blockquote {
+  border-left: 3px solid #d1d5db;
+  padding-left: 12px;
+  color: #6b7280;
+  font-style: italic;
+  margin: 10px 0;
+}
+
+.wk-prose pre {
+  background: #f3f4f6;
+  border-radius: 5px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 10px 0;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.wk-prose code {
+  background: #f3f4f6;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+.wk-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.wk-prose a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.wk-prose a:hover {
+  text-decoration: underline;
+}
+
+.wk-prose hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 18px 0;
+}
+
+/* ── Concepts section ────────────────────────────────────────────────────── */
+.wk-concepts-section {
+  margin-top: 28px;
+  clear: both;
+}
+
+.wk-section-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.wk-concepts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wk-concept-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.wk-concept-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1d4ed8;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.wk-concept-def {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* ── Subcategories section ───────────────────────────────────────────────── */
+.wk-subcat-section {
+  margin-top: 20px;
+  clear: both;
+}
+
+.wk-subcat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.wk-subcat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.wk-subcat-item:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.wk-subcat-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.wk-subcat-count {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* ── Page content wrapper ────────────────────────────────────────────────── */
+.wk-page-content {
+  max-width: 760px;
+}
+
+/* Clearfix */
+.wk-page-content::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* ── Wiki images ─────────────────────────────────────────────────────────── */
+.wiki-img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 12px 0;
+  display: block;
+}

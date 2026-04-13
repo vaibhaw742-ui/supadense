@@ -173,10 +173,14 @@ export namespace Project {
           const dotgit = dotgitMatches[0]
 
           if (!dotgit) {
+            // No .git found — treat the directory itself as the project root.
+            // Use a deterministic ID from the path so each folder gets its own
+            // isolated project (avoids sharing ProjectID.global across all
+            // non-git folders and scanning the entire filesystem as worktree).
             return {
-              id: ProjectID.global,
-              worktree: "/",
-              sandbox: "/",
+              id: ProjectID.make(`dir:${directory}`),
+              worktree: directory,
+              sandbox: directory,
               vcs: fakeVcs,
             }
           }
@@ -187,7 +191,7 @@ export namespace Project {
 
           if (!gitBinary) {
             return {
-              id: id ?? ProjectID.global,
+              id: id ?? ProjectID.make(`dir:${sandbox}`),
               worktree: sandbox,
               sandbox,
               vcs: fakeVcs,
@@ -197,7 +201,7 @@ export namespace Project {
           const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
           if (commonDir.code !== 0) {
             return {
-              id: id ?? ProjectID.global,
+              id: id ?? ProjectID.make(`dir:${sandbox}`),
               worktree: sandbox,
               sandbox,
               vcs: fakeVcs,

@@ -12,7 +12,7 @@
  */
 import path from "path"
 import { writeFileSync, mkdirSync } from "fs"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { Database } from "../storage/db"
 import {
   LearningWikiPageTable,
@@ -24,6 +24,7 @@ import {
   LearningWikiCrossRefTable,
   LearningKbWorkspaceTable,
   LearningKbEventTable,
+  LearningMediaAssetTable,
 } from "./schema.sql"
 import { Placement } from "./resource"
 
@@ -50,6 +51,17 @@ export namespace WikiBuilder {
       db.select().from(LearningKbWorkspaceTable).where(eq(LearningKbWorkspaceTable.id, page.workspace_id)).get(),
     )
     if (!workspace) throw new Error(`Workspace ${page.workspace_id} not found`)
+
+    // Migrate any placements stored with slug instead of UUID (pre-fix data)
+    // Before the FK fix, wiki_page_id was stored as a slug (e.g. "agents") not a UUID
+    if (page.slug) {
+      Database.use((db) =>
+        db.update(LearningResourceWikiPlacementTable)
+          .set({ wiki_page_id: page.id, time_updated: Date.now() })
+          .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, page.slug!))
+          .run()
+      )
+    }
 
     let content: string
     switch (page.page_type) {
@@ -236,6 +248,57 @@ export namespace WikiBuilder {
       }
     }
 
+    // Placements directly on the category page (when no subcategory was created)
+    const categoryPlacements = Placement.byPage(page.id)
+    if (categoryPlacements.length > 0) {
+      const sections = new Map<string, { heading: string; entries: typeof categoryPlacements }>()
+      for (const p of categoryPlacements) {
+        if (!sections.has(p.section_slug)) {
+          sections.set(p.section_slug, { heading: p.section_heading, entries: [] })
+        }
+        sections.get(p.section_slug)!.entries.push(p)
+      }
+
+      const resourceImagesShown = new Set<string>()
+
+      for (const [, { heading, entries }] of sections) {
+        lines.push(heading, "")
+        for (const entry of entries.sort((a, b) => a.placement_position - b.placement_position)) {
+          lines.push(entry.extracted_content.trim())
+
+          const resource = Database.use((db) =>
+            db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, entry.resource_id)).get(),
+          )
+          if (resource) {
+            const cite = resource.url
+              ? `[Source](${resource.url})`
+              : resource.title
+                ? `_Source: ${resource.title}_`
+                : "_Source: text paste_"
+            lines.push("", `> ${cite}`)
+          }
+
+          if (!resourceImagesShown.has(entry.resource_id)) {
+            const assets = Database.use((db) =>
+              db.select().from(LearningMediaAssetTable)
+                .where(eq(LearningMediaAssetTable.resource_id, entry.resource_id))
+                .all()
+            )
+            if (assets.length > 0) {
+              resourceImagesShown.add(entry.resource_id)
+              for (const asset of assets) {
+                const relPath = asset.local_path.replace(/^wiki\//, "")
+                const alt = asset.alt_text ?? asset.description ?? "Image"
+                lines.push("", `![${alt}](${relPath})`)
+              }
+            }
+          }
+
+          lines.push("")
+        }
+      }
+    }
+
     // Cross-references
     const crossRefs = buildCrossRefSection(page.id)
     if (crossRefs) {
@@ -279,6 +342,9 @@ export namespace WikiBuilder {
     if (sections.size === 0) {
       lines.push("_No content yet. Memorize resources to populate this page._", "")
     } else {
+      // Track which resources have already had their images embedded (show once per resource)
+      const resourceImagesShown = new Set<string>()
+
       for (const [, { heading, entries }] of sections) {
         lines.push(heading, "")
         for (const entry of entries.sort((a, b) => a.placement_position - b.placement_position)) {
@@ -295,6 +361,23 @@ export namespace WikiBuilder {
                 ? `_Source: ${resource.title}_`
                 : "_Source: text paste_"
             lines.push("", `> ${cite}`)
+          }
+
+          // Embed images once per resource (on first placement encountered)
+          if (!resourceImagesShown.has(entry.resource_id)) {
+            const assets = Database.use((db) =>
+              db.select().from(LearningMediaAssetTable)
+                .where(eq(LearningMediaAssetTable.resource_id, entry.resource_id))
+                .all()
+            )
+            if (assets.length > 0) {
+              resourceImagesShown.add(entry.resource_id)
+              for (const asset of assets) {
+                const relPath = asset.local_path.replace(/^wiki\//, "")
+                const alt = asset.alt_text ?? asset.description ?? "Image"
+                lines.push("", `![${alt}](${relPath})`)
+              }
+            }
           }
 
           lines.push("")

@@ -66,7 +66,7 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
     let page = Workspace.getWikiPageById(params.wiki_page_id)
     if (!page) {
       // Try slug lookup within this project's workspace
-      const workspace = Workspace.get(Instance.project.id)
+      const workspace = Workspace.getByKbPath(Instance.directory)
       if (workspace) {
         page = Database.use((db) =>
           db.select().from(LearningWikiPageTable)
@@ -81,8 +81,10 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
 
     type M = { skipped: boolean; placement_id?: string; resource_id?: string; wiki_page_id?: string; section_slug?: string; file_path?: string }
 
+    const pageId = page.id
+
     // Idempotency: skip if already placed
-    if (Placement.exists(params.resource_id, params.wiki_page_id, params.section_slug)) {
+    if (Placement.exists(params.resource_id, pageId, params.section_slug)) {
       return {
         title: "Already placed",
         metadata: { skipped: true } as M,
@@ -93,7 +95,7 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
     // Determine position (append after existing placements in same section)
     let position = params.placement_position
     if (position === undefined) {
-      const existing = Placement.byPage(params.wiki_page_id).filter(
+      const existing = Placement.byPage(pageId).filter(
         (p) => p.section_slug === params.section_slug,
       )
       position = existing.length
@@ -101,7 +103,7 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
 
     const placement = Placement.create({
       resource_id: params.resource_id,
-      wiki_page_id: params.wiki_page_id,
+      wiki_page_id: pageId,
       section_slug: params.section_slug,
       section_heading: params.section_heading,
       extracted_content: params.extracted_content,

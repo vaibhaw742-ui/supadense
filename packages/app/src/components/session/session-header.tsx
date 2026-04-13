@@ -11,6 +11,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
+import { useNavigate, useParams } from "@solidjs/router"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -126,6 +127,26 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+function WikiButton() {
+  const navigate = useNavigate()
+  const params = useParams<{ dir: string }>()
+  return (
+    <Tooltip placement="bottom" value="Open Wiki">
+      <Button
+        variant="ghost"
+        class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+        onClick={() => window.open(`/${params.dir}/wiki`, "_blank")}
+        aria-label="Open Wiki"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+        </svg>
+      </Button>
+    </Tooltip>
+  )
 }
 
 export function SessionHeader() {
@@ -415,6 +436,7 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <WikiButton />
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>

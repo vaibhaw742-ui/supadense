@@ -1,60 +1,22 @@
 import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { Timestamps } from "../storage/schema.sql"
 
-// ─── Schema Templates ────────────────────────────────────────────────────────
-// Blueprints that define what sub-categories and sections every category gets.
-// Chosen once during onboarding. Built-in templates ship with the platform.
-// Custom templates are created by users during onboarding.
+// ─── KB Schema ───────────────────────────────────────────────────────────────
+// Per-workspace schema metadata. One row per workspace.
+// The full structure (categories → subcategories → sections) lives in:
+//   learning_categories + learning_wiki_pages.sections
+// This table tracks the schema version and the path to the generated schema.json.
 
-export const LearningSchemaTemplateTable = sqliteTable("learning_schema_templates", {
+export const LearningKbSchemaTable = sqliteTable("learning_kb_schema", {
   id: text().primaryKey(),
-  name: text().notNull(),
-  slug: text().notNull().unique(),
-  description: text(),
-  is_builtin: integer({ mode: "boolean" }).notNull().default(true),
-  created_by: text(), // user/workspace reference for custom templates
+  workspace_id: text()
+    .notNull()
+    .unique()
+    .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
+  schema_path: text().notNull().default("schema.json"), // relative to kb_path
+  version: integer().notNull().default(1), // bumped on every structural change
   ...Timestamps,
 })
-
-// ─── Schema Subcategories ────────────────────────────────────────────────────
-// The sub-categories that every category gets when a template is applied.
-// Each row = one .md file per category (e.g. agents--key-concepts.md)
-
-export const LearningSchemaSubcategoryTable = sqliteTable(
-  "learning_schema_subcategories",
-  {
-    id: text().primaryKey(),
-    template_id: text()
-      .notNull()
-      .references(() => LearningSchemaTemplateTable.id, { onDelete: "cascade" }),
-    slug: text().notNull(), // "key-concepts" — clean, no -- separator
-    name: text().notNull(), // "Key Concepts"
-    description: text(),
-    position: integer().notNull().default(0), // ordering within category
-    ...Timestamps,
-  },
-  (t) => [index("learning_schema_subcategories_template_idx").on(t.template_id)],
-)
-
-// ─── Schema Sections ─────────────────────────────────────────────────────────
-// The ## headings inside each sub-category .md file.
-// Used by fill_wiki skill to know exactly where to place extracted content.
-
-export const LearningSchemaSection = sqliteTable(
-  "learning_schema_sections",
-  {
-    id: text().primaryKey(),
-    subcategory_id: text()
-      .notNull()
-      .references(() => LearningSchemaSubcategoryTable.id, { onDelete: "cascade" }),
-    slug: text().notNull(), // "definitions", "examples", "key-papers"
-    heading: text().notNull(), // "## Definitions" — exact markdown heading
-    description: text(), // guidance for fill_wiki LLM prompt
-    position: integer().notNull().default(0),
-    ...Timestamps,
-  },
-  (t) => [index("learning_schema_sections_subcategory_idx").on(t.subcategory_id)],
-)
 
 // ─── KB Workspaces ───────────────────────────────────────────────────────────
 // One row per project folder. Root anchor for everything in the learning schema.
@@ -64,7 +26,6 @@ export const LearningSchemaSection = sqliteTable(
 export const LearningKbWorkspaceTable = sqliteTable("learning_kb_workspaces", {
   id: text().primaryKey(),
   project_id: text().notNull().unique(), // matches opencode project id
-  template_id: text().references(() => LearningSchemaTemplateTable.id),
   kb_path: text().notNull(), // absolute path to project folder on disk
   kb_initialized: integer({ mode: "boolean" }).notNull().default(false),
   learning_intent: text(), // "Build production-grade AI agent systems"
@@ -125,7 +86,7 @@ export const LearningWikiPageTable = sqliteTable(
     file_path: text().notNull(), // "wiki/index.md" | "wiki/agents.md" | "wiki/agents--key-concepts.md"
     description: text(),
     sections: text({ mode: "json" })
-      .$type<{ slug: string; heading: string; updated_at: number }[]>()
+      .$type<{ slug: string; heading: string; description?: string; updated_at?: number }[]>()
       .notNull()
       .default([]),
     resource_count: integer().notNull().default(0),

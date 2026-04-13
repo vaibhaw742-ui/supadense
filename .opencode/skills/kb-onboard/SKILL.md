@@ -19,7 +19,7 @@ Ask the user ALL of the following in a single message. Wait for their answers be
 To set up your knowledge base, I need a few details:
 
 1. **Knowledge base folder path** — where should I create the files?
-   (e.g. `/Users/you/Desktop/KnowledgeBase_Vaibhaw`)
+   (e.g. `/Users/you/Desktop/KnowledgeBase`)
 
 2. **Learning intent** — in one sentence, what are you trying to achieve?
    (e.g. "Build production-grade AI agent systems")
@@ -30,12 +30,9 @@ To set up your knowledge base, I need a few details:
    For each: name, brief description, and depth (deep / working / awareness).
 
 5. **Trusted sources** — websites, authors, or publications you trust most.
-
-6. **Template** — choose a subcategory structure:
-   - **software-engineering**: key-concepts, examples, tools, papers, gaps, roadmap
-   - **research**: overview, methodology, findings, critiques, related-work
-   - **none**: just category pages, no subcategories
 ```
+
+The subcategory structure (key-concepts, papers, examples, tools) is applied automatically — no need to ask.
 
 ---
 
@@ -72,8 +69,7 @@ kb_onboard_complete({
       icon: "<emoji>"
     },
     ...
-  ],
-  template_slug: "software-engineering"  // or "research" or omit for none
+  ]
 })
 ```
 
@@ -82,9 +78,10 @@ kb_onboard_complete({
 ## Step 4: Confirm to user
 
 After both tools succeed, tell the user:
-- Which files were created and where
+- Which files were created and where (schema.json, supadense.md, log.md, wiki/)
 - How many wiki pages were generated
 - How to memorize their first resource: "Say 'memorize <URL>' to add content"
+- How to evolve the schema: "Say 'add a section' or 'add a subcategory' to change the structure"
 
 ---
 

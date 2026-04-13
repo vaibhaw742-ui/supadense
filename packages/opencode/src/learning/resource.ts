@@ -10,6 +10,7 @@ import {
   LearningConceptTable,
   LearningConceptWikiPlacementTable,
   LearningWikiPageTable,
+  LearningMediaAssetTable,
 } from "./schema.sql"
 
 export type Resource = typeof LearningResourceTable.$inferSelect
@@ -70,6 +71,16 @@ export namespace Resource {
   export function get(id: string): Resource | undefined {
     return Database.use((db) =>
       db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, id)).get(),
+    )
+  }
+
+  export function getByUrl(workspaceId: string, url: string): Resource | undefined {
+    return Database.use((db) =>
+      db
+        .select()
+        .from(LearningResourceTable)
+        .where(and(eq(LearningResourceTable.workspace_id, workspaceId), eq(LearningResourceTable.url, url)))
+        .get(),
     )
   }
 
@@ -184,6 +195,93 @@ export namespace Placement {
         .get(),
     )
     return !!row
+  }
+
+  export function attachAssets(placementId: string, assetIds: string[]): void {
+    const existing = Database.use((db) =>
+      db.select({ media_asset_ids: LearningResourceWikiPlacementTable.media_asset_ids })
+        .from(LearningResourceWikiPlacementTable)
+        .where(eq(LearningResourceWikiPlacementTable.id, placementId))
+        .get()
+    )
+    if (!existing) return
+    const current: string[] = (existing.media_asset_ids as string[] | null) ?? []
+    const merged = Array.from(new Set([...current, ...assetIds]))
+    Database.use((db) =>
+      db.update(LearningResourceWikiPlacementTable)
+        .set({ media_asset_ids: merged, time_updated: Date.now() })
+        .where(eq(LearningResourceWikiPlacementTable.id, placementId))
+        .run()
+    )
+  }
+}
+
+// ─── MediaAsset ───────────────────────────────────────────────────────────────
+
+export type MediaAsset = typeof LearningMediaAssetTable.$inferSelect
+
+export namespace MediaAsset {
+  export function create(input: {
+    resource_id: string
+    workspace_id: string
+    asset_type: string
+    source_url?: string
+    local_path: string
+    alt_text?: string
+    caption?: string
+    description?: string
+    width?: number
+    height?: number
+    mime_type?: string
+    is_diagram?: boolean
+  }): MediaAsset {
+    const now = Date.now()
+    const id = ulid()
+    Database.use((db) =>
+      db.insert(LearningMediaAssetTable).values({
+        id,
+        resource_id: input.resource_id,
+        workspace_id: input.workspace_id,
+        asset_type: input.asset_type,
+        source_url: input.source_url,
+        local_path: input.local_path,
+        alt_text: input.alt_text,
+        caption: input.caption,
+        description: input.description,
+        width: input.width,
+        height: input.height,
+        mime_type: input.mime_type,
+        is_diagram: input.is_diagram ?? false,
+        time_created: now,
+        time_updated: now,
+      }).run()
+    )
+    return get(id)!
+  }
+
+  export function get(id: string): MediaAsset | undefined {
+    return Database.use((db) =>
+      db.select().from(LearningMediaAssetTable).where(eq(LearningMediaAssetTable.id, id)).get()
+    )
+  }
+
+  export function byResource(resourceId: string): MediaAsset[] {
+    return Database.use((db) =>
+      db.select().from(LearningMediaAssetTable)
+        .where(eq(LearningMediaAssetTable.resource_id, resourceId))
+        .all()
+    )
+  }
+
+  export function findByLocalPath(workspaceId: string, localPath: string): MediaAsset | undefined {
+    return Database.use((db) =>
+      db.select().from(LearningMediaAssetTable)
+        .where(and(
+          eq(LearningMediaAssetTable.workspace_id, workspaceId),
+          eq(LearningMediaAssetTable.local_path, localPath),
+        ))
+        .get()
+    )
   }
 }
 

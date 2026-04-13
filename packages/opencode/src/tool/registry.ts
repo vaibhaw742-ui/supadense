@@ -21,6 +21,9 @@ import {
   KbRetrieveTool,
   KbEventLogTool,
   KbCategoryManageTool,
+  KbResourceExtractImagesTool,
+  KbPipelineRunTool,
+  KbWorkspaceDeleteTool,
 } from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -103,6 +106,7 @@ export namespace ToolRegistry {
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const kbPipelineRun = yield* KbPipelineRunTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -187,6 +191,9 @@ export namespace ToolRegistry {
             kb_retrieve: Tool.init(KbRetrieveTool),
             kb_event_log: Tool.init(KbEventLogTool),
             kb_category_manage: Tool.init(KbCategoryManageTool),
+            kb_resource_extract_images: Tool.init(KbResourceExtractImagesTool),
+            kb_pipeline_run: Tool.init(kbPipelineRun),
+            kb_workspace_delete: Tool.init(KbWorkspaceDeleteTool),
           })
 
           return {
@@ -219,6 +226,8 @@ export namespace ToolRegistry {
               tool.kb_retrieve,
               tool.kb_event_log,
               tool.kb_category_manage,
+              tool.kb_pipeline_run,
+              tool.kb_workspace_delete,
             ],
             task: tool.task,
             read: tool.read,

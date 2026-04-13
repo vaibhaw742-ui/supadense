@@ -48,8 +48,7 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
 
     let workspaceId = params.workspace_id
     if (!workspaceId) {
-      const project = Instance.project
-      const ws = Workspace.get(project.id)
+      const ws = Workspace.getByKbPath(Instance.directory)
       if (!ws) {
         return {
           title: "No KB workspace",

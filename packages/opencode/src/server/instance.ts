@@ -28,6 +28,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { WikiRoutes } from "./routes/wiki"
 import { errorHandler } from "./middleware"
 import { getMimeType } from "hono/utils/mime"
 
@@ -59,6 +60,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
     .route("/tui", TuiRoutes())
+    .route("/wiki", WikiRoutes())
     .post(
       "/instance/dispose",
       describeRoute({

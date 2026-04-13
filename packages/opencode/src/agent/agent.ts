@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_KB_CURATOR from "./prompt/kb-curator.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -230,6 +231,30 @@ export namespace Agent {
                 user,
               ),
               prompt: PROMPT_SUMMARY,
+            },
+            "kb-curator": {
+              name: "kb-curator",
+              description: "Background knowledge base curator. Extracts and organizes resource content into the KB wiki following the schema.",
+              mode: "subagent",
+              native: true,
+              hidden: true,
+              prompt: PROMPT_KB_CURATOR,
+              options: {},
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  // Allow all KB tools — deny everything else
+                  "*": "deny",
+                  kb_workspace_init: "allow",
+                  kb_resource_place: "allow",
+                  kb_concept_upsert: "allow",
+                  kb_wiki_build: "allow",
+                  kb_event_log: "allow",
+                  kb_retrieve: "allow",
+                  read: "allow", // may need to inspect existing wiki files
+                }),
+                user,
+              ),
             },
           }
 

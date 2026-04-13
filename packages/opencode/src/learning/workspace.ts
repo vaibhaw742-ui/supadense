@@ -11,9 +11,8 @@ import {
   LearningCategoryTable,
   LearningWikiPageTable,
   LearningKbEventTable,
-  LearningSchemaTemplateTable,
-  LearningSchemaSubcategoryTable,
 } from "./schema.sql"
+import { type SchemaSubcategory } from "./kb-schema"
 
 export type Workspace = typeof LearningKbWorkspaceTable.$inferSelect
 export type Category = typeof LearningCategoryTable.$inferSelect
@@ -33,7 +32,7 @@ export interface OnboardingProfile {
     color?: string
     icon?: string
   }[]
-  template_slug?: string
+  subcategories: SchemaSubcategory[] // applied to every category
 }
 
 export namespace Workspace {
@@ -49,16 +48,29 @@ export namespace Workspace {
     )
   }
 
+  export function getByKbPath(kbPath: string): Workspace | undefined {
+    return Database.use((db) =>
+      db.select().from(LearningKbWorkspaceTable).where(eq(LearningKbWorkspaceTable.kb_path, kbPath)).get(),
+    )
+  }
+
   export function ensure(projectId: string, kbPath: string): Workspace {
-    const existing = get(projectId)
-    if (existing) return existing
+    // Always key workspaces by kb_path — each unique folder is a separate KB
+    const byPath = getByKbPath(kbPath)
+    if (byPath) return byPath
+
+    // project_id must be unique per row. If another workspace already holds this
+    // project_id (e.g. "global" for all non-git folders), use kb_path as a
+    // synthetic project_id so the unique constraint stays satisfied.
+    const byProject = get(projectId)
+    const effectiveProjectId = byProject ? kbPath : projectId
 
     const now = Date.now()
     const id = ulid()
     Database.use((db) =>
       db.insert(LearningKbWorkspaceTable).values({
         id,
-        project_id: projectId,
+        project_id: effectiveProjectId,
         kb_path: kbPath,
         kb_initialized: false,
         goals: [],
@@ -71,7 +83,7 @@ export namespace Workspace {
         time_updated: now,
       }).run(),
     )
-    return get(projectId)!
+    return getByKbPath(kbPath)!
   }
 
   export function update(id: string, data: Partial<Omit<Workspace, "id" | "project_id" | "time_created">>): void {
@@ -190,20 +202,7 @@ export namespace Workspace {
     const workspace = getById(workspaceId)
     if (!workspace) throw new Error(`Workspace ${workspaceId} not found`)
 
-    let templateId: string | undefined
-    if (profile.template_slug) {
-      const tpl = Database.use((db) =>
-        db
-          .select()
-          .from(LearningSchemaTemplateTable)
-          .where(eq(LearningSchemaTemplateTable.slug, profile.template_slug!))
-          .get(),
-      )
-      templateId = tpl?.id
-    }
-
     update(workspaceId, {
-      template_id: templateId,
       learning_intent: profile.learning_intent,
       goals: profile.goals,
       depth_prefs: profile.depth_prefs,
@@ -256,36 +255,27 @@ export namespace Workspace {
         }).run(),
       )
 
-      if (templateId) {
-        const subcats = Database.use((db) =>
-          db
-            .select()
-            .from(LearningSchemaSubcategoryTable)
-            .where(eq(LearningSchemaSubcategoryTable.template_id, templateId!))
-            .all(),
+      // Create subcategory pages with their sections seeded
+      for (const sub of profile.subcategories) {
+        Database.use((db) =>
+          db.insert(LearningWikiPageTable).values({
+            id: ulid(),
+            workspace_id: workspaceId,
+            category_id: categoryId,
+            parent_page_id: catPageId,
+            page_type: "subcategory",
+            category_slug: cat.slug,
+            subcategory_slug: sub.slug,
+            slug: sub.slug,
+            title: `${cat.name} — ${sub.name}`,
+            file_path: `wiki/${cat.slug}--${sub.slug}.md`,
+            sections: sub.sections.map((s) => ({ slug: s.slug, heading: s.heading, description: s.description })),
+            resource_count: 0,
+            word_count: 0,
+            time_created: now,
+            time_updated: now,
+          }).run(),
         )
-
-        for (const sub of subcats) {
-          Database.use((db) =>
-            db.insert(LearningWikiPageTable).values({
-              id: ulid(),
-              workspace_id: workspaceId,
-              category_id: categoryId,
-              parent_page_id: catPageId,
-              page_type: "subcategory",
-              category_slug: cat.slug,
-              subcategory_slug: sub.slug,
-              slug: sub.slug,
-              title: `${cat.name} — ${sub.name}`,
-              file_path: `wiki/${cat.slug}--${sub.slug}.md`,
-              sections: [],
-              resource_count: 0,
-              word_count: 0,
-              time_created: now,
-              time_updated: now,
-            }).run(),
-          )
-        }
       }
 
       categories.push(
@@ -298,7 +288,7 @@ export namespace Workspace {
     logEvent(workspaceId, {
       event_type: "onboarding",
       summary: `Onboarding completed. Intent: "${profile.learning_intent}". Categories: ${profile.categories.map((c) => c.name).join(", ")}.`,
-      payload: { template_slug: profile.template_slug, category_count: profile.categories.length },
+      payload: { category_count: profile.categories.length, subcategory_count: profile.subcategories.length },
     })
 
     return categories

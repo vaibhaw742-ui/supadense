@@ -5,9 +5,14 @@
  * scaffold files exist. Returns workspace info + current status.
  */
 import z from "zod"
+import { existsSync } from "fs"
+import { join } from "path"
+import { spawnSync } from "child_process"
 import { Tool } from "../tool"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
+import { KbSchema } from "../../learning/kb-schema"
+import { Project } from "../../project/project"
 
 export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
   description: [
@@ -41,17 +46,40 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
     const project = Instance.project
     const kbPath = params.kb_path ?? Instance.directory
 
-    let workspace = Workspace.get(project.id)
+    // Always look up by kb_path first — each folder is its own independent KB
+    let workspace = Workspace.getByKbPath(kbPath)
 
     if (!workspace) {
-      // First time — create and scaffold
       workspace = Workspace.ensure(project.id, kbPath)
-      Workspace.scaffoldFiles(workspace)
-    } else if (params.kb_path && workspace.kb_path !== params.kb_path) {
-      // User is pointing to a different folder — update kb_path and scaffold there
-      Workspace.update(workspace.id, { kb_path: kbPath })
-      workspace = Workspace.get(project.id)!
-      Workspace.scaffoldFiles(workspace)
+    }
+    // Always scaffold — idempotent (only writes files/DB records that are missing)
+    Workspace.scaffoldFiles(workspace)
+
+    // Auto-initialize git if the KB folder isn't already a git repo.
+    // This prevents the "initialize git?" prompt from appearing in the UI.
+    if (!existsSync(join(kbPath, ".git"))) {
+      const { which } = await import("../../util/which")
+      if (which("git")) {
+        const git = (args: string[]) =>
+          spawnSync("git", args, { cwd: kbPath, encoding: "utf8", stdio: "pipe" })
+
+        git(["init", "--quiet"])
+        git(["add", "."])
+        git(["commit", "--quiet", "-m", "Initialize knowledge base"])
+
+        // Re-discover the project so it picks up the new git repo and gets
+        // a stable git-based project ID (derived from the root commit hash).
+        await Project.fromDirectory(kbPath)
+
+        // Reload workspace after project re-registration (kb_path lookup still works)
+        workspace = Workspace.getByKbPath(kbPath) ?? workspace
+      }
+    }
+
+    // Render schema.json if the workspace has been onboarded
+    if (workspace.kb_initialized) {
+      KbSchema.ensure(workspace.id)
+      KbSchema.renderToFile(workspace.id)
     }
 
     const categories = Workspace.getCategories(workspace.id)
