@@ -192,6 +192,7 @@ export const LearningResourceWikiPlacementTable = sqliteTable(
     media_asset_ids: text({ mode: "json" }).$type<string[]>().notNull().default([]),
     placement_position: integer().notNull().default(0), // ordering within section
     confidence: real().notNull().default(1.0), // 0.0–1.0 LLM confidence
+    group_assignments: text("group_assignments"), // JSON GroupAssignment[] | null — null = ungrouped
     placed_at: integer()
       .notNull()
       .$default(() => Date.now()),

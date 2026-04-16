@@ -74,6 +74,67 @@ function buildImagesSectionLines(pageId: string): string[] {
 
 type PlacementRow = typeof LearningResourceWikiPlacementTable.$inferSelect
 
+interface GroupAssignment {
+  group_num: number
+  group: string
+  definition: string
+  concepts: string[]
+}
+
+/**
+ * Render a section in grouped mode.
+ * Preserves the full original <details> content of every placement — just reorganised
+ * under group headings. Nothing is summarised or removed.
+ * Placements without group_assignments are rendered under "### Ungrouped" at the bottom.
+ */
+function renderGroupedSection(sectionSlug: string, entries: PlacementRow[]): string[] {
+  const lines: string[] = []
+
+  // Build group map: group_num → { name, definition, placements[] }
+  const groupMap = new Map<number, { name: string; definition: string; placements: PlacementRow[] }>()
+  const ungrouped: PlacementRow[] = []
+
+  for (const entry of entries.sort((a, b) => a.placement_position - b.placement_position)) {
+    if (!entry.group_assignments) {
+      ungrouped.push(entry)
+      continue
+    }
+    let assignments: GroupAssignment[] = []
+    try { assignments = JSON.parse(entry.group_assignments) } catch { ungrouped.push(entry); continue }
+
+    for (const a of assignments) {
+      if (!groupMap.has(a.group_num)) {
+        groupMap.set(a.group_num, { name: a.group, definition: a.definition, placements: [] })
+      }
+      // avoid duplicate if a placement maps to the same group more than once
+      const existing = groupMap.get(a.group_num)!
+      if (!existing.placements.find((p) => p.id === entry.id)) {
+        existing.placements.push(entry)
+      }
+    }
+  }
+
+  // Sort groups by group_num and render each one
+  const sortedGroups = [...groupMap.entries()].sort((a, b) => a[0] - b[0])
+
+  for (const [groupNum, { name, definition, placements }] of sortedGroups) {
+    lines.push(`### [${groupNum}] ${name}`)
+    lines.push("")
+    if (definition) { lines.push(`_${definition}_`); lines.push("") }
+
+    // Render every member placement in full using the same <details> structure
+    lines.push(...renderSectionEntries(sectionSlug, placements))
+  }
+
+  // Ungrouped placements at the bottom (e.g. newly added resources not yet re-grouped)
+  if (ungrouped.length > 0) {
+    lines.push("### Ungrouped", "")
+    lines.push(...renderSectionEntries(sectionSlug, ungrouped))
+  }
+
+  return lines
+}
+
 function renderSectionEntries(sectionSlug: string, entries: PlacementRow[]): string[] {
   const lines: string[] = []
 
@@ -369,7 +430,8 @@ export namespace WikiBuilder {
 
         lines.push(heading, "")
         if (entries.length > 0) {
-          lines.push(...renderSectionEntries(sectionSlug, entries))
+          const isGrouped = entries.some((e) => e.group_assignments != null)
+          lines.push(...(isGrouped ? renderGroupedSection(sectionSlug, entries) : renderSectionEntries(sectionSlug, entries)))
         } else {
           lines.push("_No content yet._", "")
         }
@@ -432,7 +494,8 @@ export namespace WikiBuilder {
 
       lines.push(heading, "")
       if (entries.length > 0) {
-        lines.push(...renderSectionEntries(sectionSlug, entries))
+        const isGrouped = entries.some((e) => e.group_assignments != null)
+        lines.push(...(isGrouped ? renderGroupedSection(entries) : renderSectionEntries(sectionSlug, entries)))
       } else {
         lines.push("_No content yet._", "")
       }

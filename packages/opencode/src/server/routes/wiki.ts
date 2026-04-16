@@ -5,7 +5,7 @@
 import { Hono } from "hono"
 import { readFileSync, existsSync } from "fs"
 import path from "path"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, inArray } from "drizzle-orm"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
 import { Retrieval } from "../../learning/retrieval"
@@ -15,6 +15,7 @@ import {
   LearningResourceTable,
   LearningConceptTable,
   LearningKbWorkspaceTable,
+  LearningResourceWikiPlacementTable,
 } from "../../learning/schema.sql"
 
 /** Resolve the KB workspace for the current request context.
@@ -55,6 +56,99 @@ export const WikiRoutes = () => {
         .all(),
     )
 
+    // ── Graph data ────────────────────────────────────────────────────────────
+    type GraphNode = { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string }
+    type GraphEdge = { source: string; target: string }
+    const graphNodes: GraphNode[] = []
+    const graphEdges: GraphEdge[] = []
+    const seenEdges = new Set<string>()
+    function addEdge(source: string, target: string) {
+      const key = `${source}→${target}`
+      if (!seenEdges.has(key)) { seenEdges.add(key); graphEdges.push({ source, target }) }
+    }
+
+    // Category nodes
+    for (const cat of categories) {
+      graphNodes.push({ id: `cat_${cat.id}`, type: "category", label: cat.name, color: cat.color ?? "#6366f1", slug: cat.slug })
+    }
+
+    // Subcategory page nodes + category→page edges
+    const subPages = pages.filter((p) => p.page_type === "subcategory")
+    for (const page of subPages) {
+      const label = page.subcategory_slug?.replace(/-/g, " ") ?? page.slug
+      graphNodes.push({ id: `page_${page.id}`, type: "subcategory", label, category_slug: page.category_slug ?? undefined, slug: page.subcategory_slug ?? undefined })
+      const cat = categories.find((c) => c.slug === page.category_slug)
+      if (cat) addEdge(`cat_${cat.id}`, `page_${page.id}`)
+    }
+
+    // Resources + page→resource edges + group nodes
+    // Use ALL pages (category + subcategory) since placements can be on either
+    const resources = Database.use((db) =>
+      db.select().from(LearningResourceTable).where(eq(LearningResourceTable.workspace_id, workspace.id)).all(),
+    )
+    const allPageIds = pages.filter((p) => p.page_type !== "index").map((p) => p.id)
+
+    if (allPageIds.length > 0) {
+      const placements = Database.use((db) =>
+        db.select().from(LearningResourceWikiPlacementTable)
+          .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, allPageIds))
+          .all(),
+      )
+
+      const seenResources = new Set<string>()
+      const seenGroups = new Set<string>()
+
+      for (const placement of placements) {
+        const resource = resources.find((r) => r.id === placement.resource_id)
+        if (!resource) continue
+
+        // Resource node (deduplicated) — domain-only label
+        if (!seenResources.has(resource.id)) {
+          let label = "Source"
+          if (resource.url) {
+            try { label = new URL(resource.url).hostname.replace(/^www\./, "") } catch { label = resource.title ?? "Source" }
+          } else if (resource.title) {
+            label = resource.title.split(" ").slice(0, 2).join(" ")
+          }
+          graphNodes.push({ id: `res_${resource.id}`, type: "resource", label, url: resource.url ?? undefined })
+          seenResources.add(resource.id)
+        }
+
+        // Edge: page → resource (deduplicated)
+        // For category-page placements, connect directly to the category node
+        const placementPage = pages.find((p) => p.id === placement.wiki_page_id)
+        if (placementPage?.page_type === "category") {
+          const cat = categories.find((c) => c.slug === placementPage.category_slug)
+          if (cat) addEdge(`cat_${cat.id}`, `res_${resource.id}`)
+        } else {
+          addEdge(`page_${placement.wiki_page_id}`, `res_${resource.id}`)
+        }
+
+        // Group nodes from group_assignments
+        if (placement.group_assignments) {
+          try {
+            const assignments = JSON.parse(placement.group_assignments) as Array<{ group_num: number; group: string }>
+            const page = pages.find((p) => p.id === placement.wiki_page_id)
+            for (const a of assignments) {
+              const groupId = `grp_${placement.wiki_page_id}_${a.group_num}`
+              if (!seenGroups.has(groupId)) {
+                graphNodes.push({ id: groupId, type: "group", label: `[${a.group_num}] ${a.group}`, category_slug: page?.category_slug ?? undefined })
+                seenGroups.add(groupId)
+                // Connect group to its parent page (or category if on category page)
+                if (placementPage?.page_type === "category") {
+                  const cat = categories.find((c) => c.slug === placementPage.category_slug)
+                  if (cat) addEdge(`cat_${cat.id}`, groupId)
+                } else {
+                  addEdge(`page_${placement.wiki_page_id}`, groupId)
+                }
+              }
+              addEdge(`res_${resource.id}`, groupId)
+            }
+          } catch { /* malformed JSON — skip */ }
+        }
+      }
+    }
+
     return c.json({
       workspace: {
         id: workspace.id,
@@ -63,6 +157,7 @@ export const WikiRoutes = () => {
         kb_initialized: workspace.kb_initialized,
         goals: workspace.goals,
       },
+      graph_data: { nodes: graphNodes, edges: graphEdges },
       stats: {
         total_pages: pages.filter((p) => p.page_type !== "index").length,
         total_categories: categories.length,

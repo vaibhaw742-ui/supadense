@@ -1,0 +1,1 @@
+ALTER TABLE learning_resource_wiki_placements ADD COLUMN group_assignments text;

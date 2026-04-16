@@ -41,6 +41,26 @@ export function useWikiApi() {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface GraphNode {
+  id: string
+  type: "category" | "subcategory" | "resource" | "group"
+  label: string
+  color?: string
+  slug?: string
+  category_slug?: string
+  url?: string
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
 export interface WikiHomeData {
   workspace: {
     id: string
@@ -57,6 +77,7 @@ export interface WikiHomeData {
   }
   categories: WikiCategory[]
   recent_events: WikiEvent[]
+  graph_data: GraphData
 }
 
 export interface WikiCategory {

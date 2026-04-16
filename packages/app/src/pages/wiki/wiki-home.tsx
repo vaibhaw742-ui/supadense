@@ -1,6 +1,7 @@
 import { createResource, For, Show, createSignal } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useWikiApi, type WikiCategory } from "./wiki-api"
+import { WikiGraph } from "./wiki-graph"
 import "./wiki.css"
 
 function CategoryCard(props: { cat: WikiCategory; onNavigate: (slug: string) => void }) {
@@ -118,6 +119,27 @@ export default function WikiHome() {
             )}
           </Show>
         </main>
+
+        {/* ── Graph panel ── */}
+        <Show when={data()}>
+          {(d) => (
+            <aside class="wk-graph-panel">
+              <div class="wk-graph-header">
+                <span class="wk-graph-title">Knowledge Graph</span>
+                <span class="wk-graph-hint">scroll to zoom · drag to pan</span>
+              </div>
+              <div class="wk-graph-body">
+                <WikiGraph data={d().graph_data} onNavigate={go} />
+              </div>
+              <div class="wk-graph-legend">
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
+              </div>
+            </aside>
+          )}
+        </Show>
       </div>
     </div>
   )

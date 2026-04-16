@@ -708,6 +708,118 @@
   clear: both;
 }
 
+/* ── Graph panel ─────────────────────────────────────────────────────────── */
+.wk-graph-panel {
+  width: 50%;
+  flex-shrink: 0;
+  border-left: 1px solid #e5e7eb;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wk-graph-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.wk-graph-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.wk-graph-hint {
+  font-size: 10px;
+  color: #d1d5db;
+}
+
+.wk-graph-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.wk-graph-container {
+  width: 100%;
+  height: 100%;
+}
+
+.wk-graph-tooltip {
+  position: absolute;
+  background: rgba(17, 24, 39, 0.82);
+  color: #f9fafb;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 10;
+  transition: opacity 0.1s;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wk-graph-fit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.wk-graph-fit-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.wk-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 14px;
+  border-top: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.wk-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.wk-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ── Wiki images ─────────────────────────────────────────────────────────── */
 .wiki-img {
   max-width: 100%;
