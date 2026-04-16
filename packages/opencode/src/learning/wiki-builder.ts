@@ -495,7 +495,7 @@ export namespace WikiBuilder {
       lines.push(heading, "")
       if (entries.length > 0) {
         const isGrouped = entries.some((e) => e.group_assignments != null)
-        lines.push(...(isGrouped ? renderGroupedSection(entries) : renderSectionEntries(sectionSlug, entries)))
+        lines.push(...(isGrouped ? renderGroupedSection(sectionSlug, entries) : renderSectionEntries(sectionSlug, entries)))
       } else {
         lines.push("_No content yet._", "")
       }
