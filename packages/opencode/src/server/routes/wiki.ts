@@ -247,7 +247,7 @@ export const WikiRoutes = () => {
 
     // 1. Try the current instance workspace (fast path — header may be present)
     // resolveWorkspace() can throw if Instance context is not set (browser img requests)
-    let current: ReturnType<typeof resolveWorkspace> = null
+    let current: ReturnType<typeof resolveWorkspace> = undefined
     try {
       current = resolveWorkspace()
       if (current) {
