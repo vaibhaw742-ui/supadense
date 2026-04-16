@@ -14,6 +14,94 @@ import { Resource, MediaAsset } from "../../learning/resource"
 
 const MAX_CONTENT_CHARS = 40_000
 
+// ── Airtop extraction ──────────────────────────────────────────────────────
+
+const AIRTOP_AGENT_WEBHOOK =
+  "https://api.airtop.ai/api/hooks/agents/e0103755-2146-43d3-bd25-5410d00b3654/webhooks/984d5de3-2807-43c8-af8a-f441652a11f4"
+
+async function fetchWithAirtop(url: string, apiKey: string): Promise<{
+  content: string
+  imageCandidates: string[]
+  title?: string
+}> {
+  // ── 1. Trigger ─────────────────────────────────────────────────────────
+  const triggerRes = await fetch(AIRTOP_AGENT_WEBHOOK, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ configVars: { url } }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!triggerRes.ok) throw new Error(`Airtop trigger failed: HTTP ${triggerRes.status}`)
+  const { invocationId } = (await triggerRes.json()) as { invocationId: string }
+  if (!invocationId) throw new Error("Airtop did not return an invocationId")
+
+  // ── 2. Poll until completed ────────────────────────────────────────────
+  const pollUrl = `https://api.airtop.ai/api/hooks/agents/e0103755-2146-43d3-bd25-5410d00b3654/invocations/${invocationId}/result`
+  const MAX_ATTEMPTS = 60       // 60 × 5s = 5 min max (Airtop takes ~100s)
+  const POLL_INTERVAL_MS = 5_000
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+
+    const res = await fetch(pollUrl, {
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) continue  // transient error — keep polling
+
+    const data = (await res.json()) as { status?: string; output?: unknown; error?: string }
+
+    console.log(`[Airtop] attempt ${attempt + 1} status=${data.status ?? "(no status field)"}`)
+
+    const statusLower = data.status?.toLowerCase() ?? ""
+    if (statusLower === "failed") throw new Error(`Airtop extraction failed: ${data.error ?? "unknown"}`)
+
+    // Accept "Completed" / "completed" or treat it as done if output.success === true
+    const outputObj = data.output as Record<string, unknown> | undefined
+    const isDone = statusLower === "completed" || outputObj?.success === true
+
+    if (isDone && data.output != null) {
+      // Airtop returns: { success: true, text_md: "...", title: "...", url: "..." }
+      const raw = data.output
+      const markdown = typeof raw === "string"
+        ? raw
+        : outputObj?.text_md as string
+          ?? outputObj?.markdown as string
+          ?? outputObj?.content as string
+          ?? outputObj?.text as string
+          ?? JSON.stringify(raw)
+
+      // Extract image URLs from markdown: ![alt](https://...)
+      const imageCandidates: string[] = []
+      const imgRegex = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g
+      let m: RegExpExecArray | null
+      while ((m = imgRegex.exec(markdown)) !== null) {
+        if (!imageCandidates.includes(m[1])) imageCandidates.push(m[1])
+        if (imageCandidates.length >= 10) break
+      }
+
+      // Prefer title from Airtop output, fall back to first # heading
+      const title = (outputObj?.title as string | undefined)
+        ?? markdown.match(/^#\s+(.+)$/m)?.[1]?.trim()
+
+      return {
+        content: markdown.slice(0, MAX_CONTENT_CHARS),
+        imageCandidates,
+        title,
+      }
+    }
+    // status === "running" — keep polling
+  }
+
+  throw new Error("Airtop extraction timed out after ~3 minutes")
+}
+
 // ── Image download helpers ─────────────────────────────────────────────────
 
 const TRACKING_DOMAINS = ["pixel.", "track.", "beacon.", "doubleclick.", "googlesyndication.", "analytics."]
@@ -149,31 +237,85 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
   description: [
     "Step 1 of the memorize pipeline. Creates a resource record, fetches content, and auto-downloads images.",
     "",
-    "Supported modalities:",
-    "  url      — web page (fetched via HTTP)",
-    "  youtube  — YouTube video (extracts ID, returns metadata)",
-    "  text     — plain text paste",
-    "  pdf      — PDF file path or URL",
-    "  image    — image file path",
+    "⛔ MODALITY RULES — READ CAREFULLY:",
+    "  url      — ANY web page URL (http/https). Fetches page + downloads images automatically.",
+    "  youtube  — YouTube video URL",
     "  linkedin — LinkedIn post URL",
+    "  pdf      — PDF file path or URL",
+    "  text     — ONLY for raw text with NO source URL whatsoever.",
+    "  image    — image file path",
     "",
-    "Returns: resource_id + raw_content for the agent to analyze + asset_ids of downloaded images.",
-    "After this, use kb_resource_place to write analyzed content into wiki sections.",
-    "Finally, call kb_wiki_build to regenerate the .md files.",
+    "When the user gives a URL: ALWAYS use modality:'url', pass the URL as `input`.",
+    "NEVER pre-fetch the page yourself before calling this tool — images will be lost.",
+    "NEVER use modality:'text' when you have a URL.",
+    "",
+    "If you already fetched the content by mistake: still call with modality:'url' and the original URL.",
+    "The tool will re-fetch it and download all images.",
+    "",
+    "Returns: resource_id + content preview + asset_ids of downloaded images.",
   ].join("\n"),
   parameters: z.object({
     workspace_id: z.string().describe("Workspace ID from kb_workspace_init"),
-    modality: z.enum(["url", "youtube", "text", "pdf", "image", "linkedin"]).describe("What kind of resource this is"),
-    input: z.string().describe("The URL (for url/youtube/pdf/linkedin) or raw text content (for text/image)"),
+    modality: z.enum(["url", "youtube", "text", "pdf", "image", "linkedin"]).describe(
+      "What kind of resource. Use 'url' for any http/https link — NEVER use 'text' when you have a URL."
+    ),
+    input: z.string().describe(
+      "For url/youtube/linkedin/pdf: the RAW URL — do NOT paste fetched content here. " +
+      "For text: the actual text content (only when no URL exists)."
+    ),
+    source_url: z.string().optional().describe(
+      "REQUIRED when modality is 'text' but content came from a URL. " +
+      "Provide the original URL so images can be downloaded and the source can be linked."
+    ),
     title: z.string().optional().describe("Optional title override"),
     author: z.string().optional().describe("Optional author/creator name"),
     note: z.string().optional().describe("Optional annotation from the user about this resource"),
   }),
   async execute(params) {
-    const { workspace_id, modality, input, title, author, note } = params
+    const { workspace_id, title, author, note } = params
+    let { modality, input } = params
+    const sourceUrl = params.source_url?.trim()
 
     const workspace = Workspace.getById(workspace_id)
     if (!workspace) throw new Error(`Workspace ${workspace_id} not found. Run kb_workspace_init first.`)
+
+    // ── Auto-upgrade text→url when input looks like a URL ────────────────────
+    // Agents sometimes pass a URL with modality:"text" — detect and fix it.
+    if (modality === "text") {
+      const trimmed = input.trim()
+      if (/^https?:\/\//i.test(trimmed)) {
+        modality = trimmed.includes("youtube.com") || trimmed.includes("youtu.be") ? "youtube"
+          : trimmed.includes("linkedin.com") ? "linkedin"
+          : "url"
+        input = trimmed
+      }
+    }
+
+    // ── Guard: text without source_url when content looks pre-fetched ─────────
+    // If agent passed formatted article content as "text" without source_url,
+    // it likely pre-fetched a URL. Warn and require source_url to get images.
+    if (modality === "text" && !sourceUrl) {
+      // Heuristic: looks like pre-fetched article (has markdown headers, multiple paragraphs, >500 chars)
+      const looksLikeFetchedContent = input.length > 500 &&
+        (/^#{1,3}\s.+/m.test(input) || /\*\*[^*]{5,}\*\*/m.test(input)) &&
+        (input.match(/\n\n/g)?.length ?? 0) >= 3
+      if (looksLikeFetchedContent) {
+        return {
+          title: "source_url required",
+          metadata: { error: "missing_source_url" },
+          output: [
+            "⚠️ This content looks like it was fetched from a URL.",
+            "",
+            "To download images and link the source, please re-call this tool with the original URL:",
+            "",
+            "Option A (preferred): Use modality:'url' and pass the URL as `input` — the tool fetches everything automatically.",
+            "Option B: Keep modality:'text' but add source_url:'<the original URL>' so images can be downloaded.",
+            "",
+            "What was the original URL for this content?",
+          ].join("\n"),
+        }
+      }
+    }
 
     // ── Deduplication ────────────────────────────────────────────────────────
     if (["url", "linkedin", "youtube", "pdf"].includes(modality)) {
@@ -181,7 +323,7 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
       if (existing) {
         return {
           title: `Already memorized: ${existing.title ?? input}`,
-          metadata: { resource_id: existing.id, duplicate: true, url: input },
+          metadata: { resource_id: existing.id, duplicate: true, url: input } as Record<string, unknown>,
           output: [
             `⚠️ This resource has already been memorized.`,
             `resource_id: ${existing.id}`,
@@ -206,42 +348,50 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
       case "url":
       case "linkedin": {
         resolvedUrl = input
-        const response = await fetch(input, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; supadense/1.0)" },
-          signal: AbortSignal.timeout(15_000),
-        })
-        if (!response.ok) throw new Error(`Failed to fetch ${input}: HTTP ${response.status}`)
-        const html = await response.text()
-
-        // Extract image candidates before stripping HTML
-        const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-          ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-        if (ogMatch?.[1]) imageCandidates.push(ogMatch[1])
-        const imgRegex = /<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi
-        let imgMatch: RegExpExecArray | null
-        while ((imgMatch = imgRegex.exec(html)) !== null) {
-          const src = imgMatch[1]
-          if (src.startsWith("data:") || src.toLowerCase().endsWith(".svg")) continue
-          try {
-            const abs = new URL(src, input).href
-            if (!imageCandidates.includes(abs)) imageCandidates.push(abs)
-          } catch { /* malformed */ }
-          if (imageCandidates.length >= 10) break
-        }
-
-        rawContent = html
-          .replace(/<script[\s\S]*?<\/script>/gi, "")
-          .replace(/<style[\s\S]*?<\/style>/gi, "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, MAX_CONTENT_CHARS)
-
-        if (!resolvedTitle) {
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-          if (titleMatch) resolvedTitle = titleMatch[1].trim()
-        }
         metadata = { domain: new URL(input).hostname }
+
+        const airtopKey = process.env.AIRTOP_API_KEY
+        if (airtopKey) {
+          // ── Airtop path: structured markdown extraction ──────────────────
+          const airtop = await fetchWithAirtop(input, airtopKey)
+          rawContent = airtop.content
+          imageCandidates = airtop.imageCandidates
+          if (!resolvedTitle && airtop.title) resolvedTitle = airtop.title
+        } else {
+          // ── Fallback: direct HTML fetch ───────────────────────────────────
+          const response = await fetch(input, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; supadense/1.0)" },
+            signal: AbortSignal.timeout(15_000),
+          })
+          if (!response.ok) throw new Error(`Failed to fetch ${input}: HTTP ${response.status}`)
+          const html = await response.text()
+
+          const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+            ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+          if (ogMatch?.[1]) imageCandidates.push(ogMatch[1])
+          const imgRegex = /<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi
+          let imgMatch: RegExpExecArray | null
+          while ((imgMatch = imgRegex.exec(html)) !== null) {
+            const src = imgMatch[1]
+            if (src.startsWith("data:") || src.toLowerCase().endsWith(".svg")) continue
+            try {
+              const abs = new URL(src, input).href
+              if (!imageCandidates.includes(abs)) imageCandidates.push(abs)
+            } catch { /* malformed */ }
+            if (imageCandidates.length >= 10) break
+          }
+          rawContent = html
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, MAX_CONTENT_CHARS)
+          if (!resolvedTitle) {
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+            if (titleMatch) resolvedTitle = titleMatch[1].trim()
+          }
+        }
         break
       }
 
@@ -257,6 +407,37 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
 
       case "text": {
         rawContent = input.slice(0, MAX_CONTENT_CHARS)
+        // If the caller provided source_url, fetch images from it and record the URL
+        if (sourceUrl && /^https?:\/\//i.test(sourceUrl)) {
+          resolvedUrl = sourceUrl
+          try {
+            const res = await fetch(sourceUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; supadense/1.0)" },
+              signal: AbortSignal.timeout(10_000),
+            })
+            if (res.ok) {
+              const html = await res.text()
+              const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+                ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+              if (ogMatch?.[1]) imageCandidates.push(ogMatch[1])
+              const imgRegex = /<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi
+              let m: RegExpExecArray | null
+              while ((m = imgRegex.exec(html)) !== null) {
+                const src = m[1]
+                if (src.startsWith("data:") || src.toLowerCase().endsWith(".svg")) continue
+                try {
+                  const abs = new URL(src, sourceUrl).href
+                  if (!imageCandidates.includes(abs)) imageCandidates.push(abs)
+                } catch { /* malformed */ }
+                if (imageCandidates.length >= 10) break
+              }
+              if (!resolvedTitle) {
+                const tm = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+                if (tm) resolvedTitle = tm[1].trim()
+              }
+            }
+          } catch { /* non-fatal */ }
+        }
         break
       }
 
@@ -276,10 +457,22 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
     if (note) rawContent = `${rawContent ?? ""}\n\n--- User note ---\n${note}`
 
     // ── Create DB record ─────────────────────────────────────────────────────
+    // raw_content is stored as a file, not in the DB column.
     const resource = Resource.create({
       workspace_id, modality, url: resolvedUrl,
-      title: resolvedTitle, author, raw_content: rawContent, metadata,
+      title: resolvedTitle, author, metadata,
     })
+
+    // ── Write raw content to file ─────────────────────────────────────────────
+    // Stored under <kb_path>/raw/<id>.md — DB holds only the path.
+    // getRawContent() reads the file; falls back to raw_content column for old records.
+    if (rawContent) {
+      const rawDir = path.join(workspace.kb_path, "raw")
+      mkdirSync(rawDir, { recursive: true })
+      const filename = `${resource.id}.md`
+      writeFileSync(path.join(rawDir, filename), rawContent, "utf8")
+      Resource.update(resource.id, { raw_content_path: `raw/${filename}` })
+    }
     Resource.setStatus(resource.id, "processing", "awaiting_analysis")
 
     Workspace.logEvent(workspace_id, {

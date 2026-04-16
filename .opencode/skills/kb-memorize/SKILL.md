@@ -5,21 +5,26 @@ description: Memorize a resource into the knowledge base. Load when the user say
 
 # KB Memorize Skill
 
-Use this skill when the user wants to add a resource to their knowledge base:
-- URLs ("memorize https://...")
-- YouTube videos ("memorize this youtube video: ...")
-- Text pastes ("memorize this: ...")
-- PDF paths or URLs
-- LinkedIn posts
+## ⛔ STOP — READ BEFORE CALLING ANY TOOL
 
-## Pipeline Overview
+**If the user gave you a URL:**
+- Call `kb_resource_create` with `modality: "url"` and pass the raw URL as `input`
+- DO NOT use WebFetch or any fetch tool first
+- DO NOT pre-read or summarize the page
+- DO NOT pass the page content as `input`
+- The tool fetches the page AND downloads images — if you pre-fetch, images are LOST
+
+**If you already fetched the page:** still pass the original URL as `input` with `modality: "url"` — the tool will re-fetch it properly.
+
+---
+
+## Pipeline
 
 ```
 kb_workspace_init → kb_resource_create → kb_pipeline_run → confirm to user
 ```
 
-The extraction, placement, and wiki rebuild all happen in the background via `kb_pipeline_run`.
-You return immediately after step 3 — the user does not need to wait.
+The wiki is updated in the background. You return immediately after step 3.
 
 ---
 
@@ -29,34 +34,39 @@ You return immediately after step 3 — the user does not need to wait.
 kb_workspace_init()
 ```
 
-If `kb_initialized` is `false`, tell the user: "Your KB isn't set up yet. Say 'set up my knowledge base' to start onboarding."
-
-Note the `workspace_id` from the output.
+Note the `workspace_id`. If `kb_initialized` is `false`, tell the user to run onboarding first.
 
 ---
 
-## Step 2: Create Resource + Fetch Content
+## Step 2: Create Resource
 
 Determine the modality:
-- `http://` or `https://` URL → `url` (unless YouTube or LinkedIn)
-- `youtube.com` or `youtu.be` → `youtube`
+- `http://` or `https://` URL → `url` (unless YouTube/LinkedIn)
+- `youtube.com` / `youtu.be` → `youtube`
 - `linkedin.com/posts/` → `linkedin`
-- Pasted text / code → `text`
-- `.pdf` extension or PDF URL → `pdf`
+- Pasted text with NO URL → `text`
+- `.pdf` extension → `pdf`
 
 ```
 kb_resource_create({
   workspace_id: "<id>",
-  modality: "<detected modality>",
-  input: "<URL or text content>",
-  title: "<optional: user-specified title>",
-  note: "<optional: user's annotation>"
+  modality: "url",           ← for any http/https link
+  input: "https://...",      ← the raw URL, NOT fetched content
+  title: "<optional>",
+  note: "<optional user annotation>"
 })
 ```
 
-Note the `resource_id` from the output. Images are downloaded automatically.
+Note the `resource_id`. If `duplicate: true` is returned, tell the user and stop.
 
-If `duplicate: true` is returned, tell the user and stop — do not call kb_pipeline_run.
+**Text paste example (only when user pastes actual text, no URL):**
+```
+kb_resource_create({
+  workspace_id: "<id>",
+  modality: "text",
+  input: "<the pasted text>",
+})
+```
 
 ---
 
@@ -69,49 +79,24 @@ kb_pipeline_run({
 })
 ```
 
-This fires the KBCurator background agent immediately and returns a `task_id`.
-The curator will:
-1. Categorize the resource
-2. Extract content into each relevant schema section
-3. Call kb_resource_place (×N), kb_concept_upsert, kb_wiki_build, kb_event_log
-
-**Do not wait for the pipeline.** Proceed to Step 4 immediately.
+Do not wait — proceed to step 4 immediately.
 
 ---
 
 ## Step 4: Confirm to User
 
-Tell the user:
-- What was memorized (title + URL)
-- That the wiki is being updated in the background
-- The `task_id` so they can track the child session if they want
-
-Example:
-> Memorized: **"From 12 Agents to 1: AI Agent Architecture Decision Guide"**
-> (decodingai.com)
->
-> The KB Curator is processing it in the background (task `01KP...`).
-> Your wiki will be updated automatically — no need to wait.
+Tell the user: what was memorized (title + URL), that the wiki is being updated in the background, and the `task_id`.
 
 ---
 
 ## Handling Duplicates
 
-If `kb_resource_create` returns `duplicate: true`:
-- Tell the user this URL was already memorized (show when)
-- Do NOT call `kb_pipeline_run`
-- Offer to re-process if they want: "Say 'reprocess it' if you want to re-extract content"
+If `kb_resource_create` returns `duplicate: true`: tell the user, do NOT call `kb_pipeline_run`, offer to reprocess.
 
 ---
 
 ## Modality Notes
 
-### YouTube
-- `kb_resource_create` returns the video ID
-- The curator will summarize based on the title/description (confidence: 0.6–0.7)
-
-### PDF
-- Content extraction is not automated — inform the user if content is limited
-
-### Text pastes
-- Treat as `text` modality — curator will organize their own notes into sections
+- **YouTube**: returns video ID, curator summarizes from title/description
+- **PDF**: content extraction not automated — inform user if content is limited
+- **Text**: for user-written notes or pastes with no source URL

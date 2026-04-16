@@ -34,6 +34,94 @@ type WikiPage = typeof LearningWikiPageTable.$inferSelect
 type Category = typeof LearningCategoryTable.$inferSelect
 type Workspace = typeof LearningKbWorkspaceTable.$inferSelect
 
+// ─── Image rendering helper ───────────────────────────────────────────────────
+
+/**
+ * Build the content lines for an ## Images section.
+ * Queries all media assets for any resource that has a placement on this page.
+ */
+function buildImagesSectionLines(pageId: string): string[] {
+  const placements = Database.use((db) =>
+    db.select({ resource_id: LearningResourceWikiPlacementTable.resource_id })
+      .from(LearningResourceWikiPlacementTable)
+      .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, pageId))
+      .all(),
+  )
+  const resourceIds = [...new Set(placements.map((p) => p.resource_id))]
+  if (resourceIds.length === 0) return []
+
+  // Most recent images first
+  const assets = Database.use((db) =>
+    db.select().from(LearningMediaAssetTable)
+      .where(inArray(LearningMediaAssetTable.resource_id, resourceIds))
+      .orderBy(LearningMediaAssetTable.time_created)  // ascending in DB; we reverse below
+      .all(),
+  ).reverse()  // newest first
+  if (assets.length === 0) return []
+
+  const lines: string[] = []
+  for (const asset of assets) {
+    const relPath = asset.local_path.replace(/^wiki\//, "")
+    const alt = asset.alt_text ?? asset.description ?? "Image"
+    lines.push(`![${alt}](${relPath})`, "")
+  }
+  return lines
+}
+
+// ─── Section renderer ────────────────────────────────────────────────────────
+// Groups entries by source and wraps each group in a collapsible <details> block.
+// Label is "Key Concept N" for key-concepts, "Entry N" for everything else.
+
+type PlacementRow = typeof LearningResourceWikiPlacementTable.$inferSelect
+
+function renderSectionEntries(sectionSlug: string, entries: PlacementRow[]): string[] {
+  const lines: string[] = []
+
+  // Group by resource, preserving insertion order
+  const byResource = new Map<string, Placement[]>()
+  for (const e of entries.sort((a, b) => a.placement_position - b.placement_position)) {
+    if (!byResource.has(e.resource_id)) byResource.set(e.resource_id, [])
+    byResource.get(e.resource_id)!.push(e)
+  }
+
+  const labelBase = sectionSlug === "key-concepts" ? "Key Concept" : "Entry"
+  let idx = 1
+
+  for (const [resourceId, group] of byResource) {
+    const resource = Database.use((db) =>
+      db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, resourceId)).get(),
+    )
+
+    let sourceLabel = "Source"
+    try {
+      sourceLabel = resource?.title ?? (resource?.url ? new URL(resource.url).hostname : "Source")
+    } catch { /* malformed URL */ }
+
+    const cite = resource?.url
+      ? `[Source](${resource.url})`
+      : resource?.title
+        ? `_Source: ${resource.title}_`
+        : "_Source: text paste_"
+
+    lines.push(`<details>`)
+    lines.push(`<summary>${labelBase} ${idx} — ${sourceLabel}</summary>`)
+    lines.push("")
+
+    for (const entry of group) {
+      lines.push(entry.extracted_content.trim())
+      lines.push("")
+    }
+
+    lines.push(`> ${cite}`)
+    lines.push("")
+    lines.push(`</details>`)
+    lines.push("")
+    idx++
+  }
+
+  return lines
+}
+
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
 export namespace WikiBuilder {
@@ -250,51 +338,40 @@ export namespace WikiBuilder {
 
     // Placements directly on the category page (when no subcategory was created)
     const categoryPlacements = Placement.byPage(page.id)
-    if (categoryPlacements.length > 0) {
-      const sections = new Map<string, { heading: string; entries: typeof categoryPlacements }>()
-      for (const p of categoryPlacements) {
-        if (!sections.has(p.section_slug)) {
-          sections.set(p.section_slug, { heading: p.section_heading, entries: [] })
-        }
-        sections.get(p.section_slug)!.entries.push(p)
+    const catSections = new Map<string, { heading: string; entries: typeof categoryPlacements }>()
+    for (const p of categoryPlacements) {
+      if (!catSections.has(p.section_slug)) {
+        catSections.set(p.section_slug, { heading: p.section_heading, entries: [] })
       }
+      catSections.get(p.section_slug)!.entries.push(p)
+    }
 
-      const resourceImagesShown = new Set<string>()
+    // Seed from schema so headings always appear, overlay placements
+    for (const s of (page.sections ?? [])) {
+      if (!catSections.has(s.slug)) {
+        catSections.set(s.slug, { heading: s.heading, entries: [] })
+      }
+    }
+    // Ensure images section always exists
+    if (!catSections.has("images")) {
+      catSections.set("images", { heading: "## Images", entries: [] })
+    }
 
-      for (const [, { heading, entries }] of sections) {
+    if (catSections.size > 0) {
+      for (const [sectionSlug, { heading, entries }] of catSections) {
+        if (sectionSlug === "images") {
+          const imgLines = buildImagesSectionLines(page.id)
+          lines.push(heading, "")
+          if (imgLines.length > 0) lines.push(...imgLines)
+          else lines.push("_No images yet._", "")
+          continue
+        }
+
         lines.push(heading, "")
-        for (const entry of entries.sort((a, b) => a.placement_position - b.placement_position)) {
-          lines.push(entry.extracted_content.trim())
-
-          const resource = Database.use((db) =>
-            db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, entry.resource_id)).get(),
-          )
-          if (resource) {
-            const cite = resource.url
-              ? `[Source](${resource.url})`
-              : resource.title
-                ? `_Source: ${resource.title}_`
-                : "_Source: text paste_"
-            lines.push("", `> ${cite}`)
-          }
-
-          if (!resourceImagesShown.has(entry.resource_id)) {
-            const assets = Database.use((db) =>
-              db.select().from(LearningMediaAssetTable)
-                .where(eq(LearningMediaAssetTable.resource_id, entry.resource_id))
-                .all()
-            )
-            if (assets.length > 0) {
-              resourceImagesShown.add(entry.resource_id)
-              for (const asset of assets) {
-                const relPath = asset.local_path.replace(/^wiki\//, "")
-                const alt = asset.alt_text ?? asset.description ?? "Image"
-                lines.push("", `![${alt}](${relPath})`)
-              }
-            }
-          }
-
-          lines.push("")
+        if (entries.length > 0) {
+          lines.push(...renderSectionEntries(sectionSlug, entries))
+        } else {
+          lines.push("_No content yet._", "")
         }
       }
     }
@@ -330,8 +407,13 @@ export namespace WikiBuilder {
       lines.push(page.description, "")
     }
 
-    // Group placements by section
+    // Seed sections from schema definition (always render headings, even if empty)
     const sections = new Map<string, { heading: string; entries: typeof placements }>()
+    for (const s of (page.sections ?? [])) {
+      sections.set(s.slug, { heading: s.heading, entries: [] })
+    }
+
+    // Overlay placements into their sections (add ad-hoc sections not in schema too)
     for (const p of placements) {
       if (!sections.has(p.section_slug)) {
         sections.set(p.section_slug, { heading: p.section_heading, entries: [] })
@@ -339,50 +421,25 @@ export namespace WikiBuilder {
       sections.get(p.section_slug)!.entries.push(p)
     }
 
-    if (sections.size === 0) {
-      lines.push("_No content yet. Memorize resources to populate this page._", "")
-    } else {
-      // Track which resources have already had their images embedded (show once per resource)
-      const resourceImagesShown = new Set<string>()
-
-      for (const [, { heading, entries }] of sections) {
+    for (const [sectionSlug, { heading, entries }] of sections) {
+      if (sectionSlug === "images") {
+        const imgLines = buildImagesSectionLines(page.id)
         lines.push(heading, "")
-        for (const entry of entries.sort((a, b) => a.placement_position - b.placement_position)) {
-          lines.push(entry.extracted_content.trim())
-
-          // Citation
-          const resource = Database.use((db) =>
-            db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, entry.resource_id)).get(),
-          )
-          if (resource) {
-            const cite = resource.url
-              ? `[Source](${resource.url})`
-              : resource.title
-                ? `_Source: ${resource.title}_`
-                : "_Source: text paste_"
-            lines.push("", `> ${cite}`)
-          }
-
-          // Embed images once per resource (on first placement encountered)
-          if (!resourceImagesShown.has(entry.resource_id)) {
-            const assets = Database.use((db) =>
-              db.select().from(LearningMediaAssetTable)
-                .where(eq(LearningMediaAssetTable.resource_id, entry.resource_id))
-                .all()
-            )
-            if (assets.length > 0) {
-              resourceImagesShown.add(entry.resource_id)
-              for (const asset of assets) {
-                const relPath = asset.local_path.replace(/^wiki\//, "")
-                const alt = asset.alt_text ?? asset.description ?? "Image"
-                lines.push("", `![${alt}](${relPath})`)
-              }
-            }
-          }
-
-          lines.push("")
-        }
+        if (imgLines.length > 0) lines.push(...imgLines)
+        else lines.push("_No images yet._", "")
+        continue
       }
+
+      lines.push(heading, "")
+      if (entries.length > 0) {
+        lines.push(...renderSectionEntries(sectionSlug, entries))
+      } else {
+        lines.push("_No content yet._", "")
+      }
+    }
+
+    if (sections.size === 0) {
+      lines.push("_No sections defined. Add sections via kb_category_manage._", "")
     }
 
     // Concepts on this page

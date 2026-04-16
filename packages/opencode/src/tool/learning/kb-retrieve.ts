@@ -12,6 +12,7 @@ import { Tool } from "../tool"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
 import { Retrieval } from "../../learning/retrieval"
+import { Server } from "../../server/server"
 
 export const KbRetrieveTool = Tool.define("kb_retrieve", {
   description: [
@@ -62,6 +63,23 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
 
     const { locations, concepts, sources } = Retrieval.searchWithContext(workspaceId, params.query, params.max_results ?? 8)
 
+    // Build base URL — always localhost from the browser's perspective.
+    // Server may bind to 0.0.0.0 inside Docker, but the browser hits localhost.
+    const serverPort = Server.url ? Server.url.port || "4096" : "4096"
+    const serverOrigin = `http://localhost:${serverPort}`
+
+    // Collect all images across results, deduplicated by local_path
+    const seenImagePaths = new Set<string>()
+    const allImages = locations.flatMap((r) => r.images).filter((img) => {
+      if (seenImagePaths.has(img.local_path)) return false
+      seenImagePaths.add(img.local_path)
+      return true
+    }).map((img) => ({
+      ...img,
+      // Convert "wiki/assets/abc/foo.jpg" → "http://localhost:4096/wiki/assets/abc/foo.jpg"
+      url: `${serverOrigin}/${img.local_path}`,
+    }))
+
     const conceptsText = concepts.length > 0
       ? [
           "",
@@ -92,6 +110,19 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
       ? ["", "## Wiki Locations", Retrieval.format(locations)].join("\n")
       : "\nNo matching wiki sections found."
 
+    const imagesText = allImages.length > 0
+      ? [
+          "",
+          "## Related Images",
+          `> ⚠️ INSTRUCTION: Copy the image markdown lines below VERBATIM into your response — do NOT describe them in text. Just paste the \`![alt](url)\` lines directly so they render as images.`,
+          "",
+          ...allImages.map((img, i) => {
+            const alt = img.caption ?? img.alt_text ?? `Image ${i + 1}`
+            return `![${alt}](${img.url})`
+          }),
+        ].join("\n\n")
+      : ""
+
     return {
       title: `KB search: "${params.query}"`,
       metadata: {
@@ -99,17 +130,20 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
         result_count: locations.length,
         concept_count: concepts.length,
         source_count: sources.length,
+        image_count: allImages.length,
         results: locations.map((r) => ({
           file_path: r.file_path,
           abs_path: r.abs_path,
           section_heading: r.section_heading,
           match_type: r.match_type,
           relevance: r.relevance,
+          images: r.images,
         })),
         concepts,
         sources,
+        images: allImages,
       } as M,
-      output: [locationsText, conceptsText, sourcesText].join("\n"),
+      output: [locationsText, conceptsText, sourcesText, imagesText].join("\n"),
     }
   },
 })

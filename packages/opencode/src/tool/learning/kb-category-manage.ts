@@ -20,22 +20,26 @@ import {
   LearningWikiPageTable,
   LearningResourceWikiPlacementTable,
 } from "../../learning/schema.sql"
-import { KbSchema, DEFAULT_SUBCATEGORIES } from "../../learning/kb-schema"
+import { KbSchema, DEFAULT_SUBCATEGORIES, DEFAULT_SECTIONS } from "../../learning/kb-schema"
 
 export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   description: [
     "Add or remove categories and subcategories in the knowledge base.",
     "",
     "Actions:",
-    "  add_category     — create a new top-level category and its wiki page",
-    "  remove_category  — delete a category and ALL its pages, placements, and files",
-    "  add_subcategory  — add a subcategory page under an existing category",
+    "  add_category       — create a new top-level category and its wiki page",
+    "  remove_category    — delete a category and ALL its pages, placements, and files",
+    "  add_subcategory    — add a subcategory page under an existing category",
     "  remove_subcategory — delete a subcategory page and its placements",
+    "  add_section        — add a section to a category or subcategory page",
+    "  remove_section     — remove a section from a category or subcategory page",
+    "  update_section     — update a section's heading and/or description",
     "",
-    "After any change, wiki files on disk are automatically rebuilt.",
+    "For section actions: omit subcategory_slug to target the category page itself.",
+    "After any change, wiki files and schema.json are automatically rebuilt.",
   ].join("\n"),
   parameters: z.object({
-    action: z.enum(["add_category", "remove_category", "add_subcategory", "remove_subcategory"]),
+    action: z.enum(["add_category", "remove_category", "add_subcategory", "remove_subcategory", "add_section", "remove_section", "update_section"]),
 
     // For add_category / remove_category
     category_slug: z.string().describe("Kebab-case slug, e.g. 'systems-design'"),
@@ -47,6 +51,12 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     // For add_subcategory / remove_subcategory
     subcategory_slug: z.string().optional().describe("Kebab-case slug, e.g. 'key-concepts' (required for subcategory actions)"),
     subcategory_name: z.string().optional().describe("Display name, e.g. 'Key Concepts' (required for add_subcategory)"),
+
+    // For add_section / remove_section
+    // target: category page if subcategory_slug is omitted, subcategory page if provided
+    section_slug: z.string().optional().describe("Section slug, e.g. 'key-concepts' (required for section actions)"),
+    section_heading: z.string().optional().describe("Markdown heading, e.g. '## Key Concepts' (required for add_section)"),
+    section_description: z.string().optional().describe("Extraction guidance for the curator (required for add_section)"),
   }),
 
   async execute(params, ctx) {
@@ -112,7 +122,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
           title: params.category_name!,
           description: params.category_description,
           file_path: `wiki/${params.category_slug}.md`,
-          sections: [],
+          sections: DEFAULT_SECTIONS,
           resource_count: 0,
           word_count: 0,
           time_created: now,
@@ -284,13 +294,38 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
           slug: params.subcategory_slug!,
           title: `${category.name} — ${params.subcategory_name}`,
           file_path: filePath,
-          sections: [],
+          sections: DEFAULT_SECTIONS,
           resource_count: 0,
           word_count: 0,
           time_created: now,
           time_updated: now,
         }).run(),
       )
+
+      // Register the subcategory as a section on the parent category page
+      if (parentPage) {
+        const currentSections = parentPage.sections ?? []
+        const alreadyRegistered = currentSections.some((s) => s.slug === params.subcategory_slug)
+        if (!alreadyRegistered) {
+          Database.use((db) =>
+            db.update(LearningWikiPageTable)
+              .set({
+                sections: [
+                  ...currentSections,
+                  {
+                    slug: params.subcategory_slug!,
+                    heading: `## ${params.subcategory_name}`,
+                    description: `Content from the ${params.subcategory_name} subcategory.`,
+                    updated_at: now,
+                  },
+                ],
+                time_updated: now,
+              })
+              .where(eq(LearningWikiPageTable.id, parentPage.id))
+              .run(),
+          )
+        }
+      }
 
       KbSchema.bumpVersion(workspaceId)
       KbSchema.renderToFile(workspaceId)
@@ -358,12 +393,215 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         summary: `Removed subcategory: ${page.title}`,
         payload: { category_slug: params.category_slug, subcategory_slug: params.subcategory_slug },
       })
+      WikiBuilder.buildAll(workspaceId)
       WikiBuilder.buildLogFile(workspace)
 
       return {
         title: `Subcategory removed: ${page.title}`,
         metadata: { file_path: page.file_path } as M,
         output: `Removed subcategory '${page.title}' and deleted ${page.file_path}.`,
+      }
+    }
+
+    // ── add_section ───────────────────────────────────────────────────────────
+    if (params.action === "add_section") {
+      if (!params.section_slug) throw new Error("section_slug is required for add_section")
+      if (!params.section_heading) throw new Error("section_heading is required for add_section")
+      if (!params.section_description) throw new Error("section_description is required for add_section")
+
+      // Resolve target page: subcategory page if subcategory_slug given, else category page
+      const targetPage = Database.use((db) =>
+        db.select().from(LearningWikiPageTable)
+          .where(and(
+            eq(LearningWikiPageTable.workspace_id, workspaceId),
+            eq(LearningWikiPageTable.category_slug, params.category_slug),
+            params.subcategory_slug
+              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
+              : eq(LearningWikiPageTable.page_type, "category"),
+          )).get(),
+      )
+      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+
+      const currentSections = targetPage.sections ?? []
+      if (currentSections.some((s) => s.slug === params.section_slug)) {
+        throw new Error(`Section '${params.section_slug}' already exists on this page.`)
+      }
+
+      const newSection = {
+        slug: params.section_slug,
+        heading: params.section_heading,
+        description: params.section_description,
+        updated_at: now,
+      }
+
+      Database.use((db) =>
+        db.update(LearningWikiPageTable)
+          .set({ sections: [...currentSections, newSection], time_updated: now })
+          .where(eq(LearningWikiPageTable.id, targetPage.id))
+          .run(),
+      )
+
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
+      WikiBuilder.buildAll(workspaceId)
+
+      Workspace.logEvent(workspaceId, {
+        event_type: "section_added",
+        summary: `Added section '${params.section_heading}' to ${targetPage.file_path}`,
+        payload: { section_slug: params.section_slug, file_path: targetPage.file_path },
+      })
+
+      return {
+        title: `Section added: ${params.section_heading}`,
+        metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
+        output: [
+          `Added section '${params.section_heading}' to ${targetPage.file_path}.`,
+          `schema.json updated, wiki file rebuilt.`,
+          `Note: section will appear in the wiki once content is placed into it.`,
+        ].join("\n"),
+      }
+    }
+
+    // ── remove_section ────────────────────────────────────────────────────────
+    if (params.action === "remove_section") {
+      if (!params.section_slug) throw new Error("section_slug is required for remove_section")
+
+      const targetPage = Database.use((db) =>
+        db.select().from(LearningWikiPageTable)
+          .where(and(
+            eq(LearningWikiPageTable.workspace_id, workspaceId),
+            eq(LearningWikiPageTable.category_slug, params.category_slug),
+            params.subcategory_slug
+              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
+              : eq(LearningWikiPageTable.page_type, "category"),
+          )).get(),
+      )
+      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+
+      const currentSections = targetPage.sections ?? []
+      const section = currentSections.find((s) => s.slug === params.section_slug)
+      // section may not be in the DB array if it was created dynamically via placements — proceed anyway
+
+      // Remove from page's sections array if present
+      if (section) {
+        Database.use((db) =>
+          db.update(LearningWikiPageTable)
+            .set({
+              sections: currentSections.filter((s) => s.slug !== params.section_slug),
+              time_updated: now,
+            })
+            .where(eq(LearningWikiPageTable.id, targetPage.id))
+            .run(),
+        )
+      }
+
+      // Delete all placements for this section so the wiki file stops rendering it
+      Database.use((db) =>
+        db.delete(LearningResourceWikiPlacementTable)
+          .where(and(
+            eq(LearningResourceWikiPlacementTable.wiki_page_id, targetPage.id),
+            eq(LearningResourceWikiPlacementTable.section_slug, params.section_slug!),
+          ))
+          .run(),
+      )
+
+      // Always update schema.json and rebuild wiki
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
+      WikiBuilder.buildAll(workspaceId)
+
+      const sectionLabel = section?.heading ?? params.section_slug!
+
+      Workspace.logEvent(workspaceId, {
+        event_type: "section_removed",
+        summary: `Removed section '${sectionLabel}' from ${targetPage.file_path}`,
+        payload: { section_slug: params.section_slug, file_path: targetPage.file_path },
+      })
+
+      return {
+        title: `Section removed: ${sectionLabel}`,
+        metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
+        output: [
+          `Removed section '${sectionLabel}' from ${targetPage.file_path}.`,
+          `schema.json updated, wiki file rebuilt.`,
+        ].join("\n"),
+      }
+    }
+
+    // ── update_section ────────────────────────────────────────────────────────
+    if (params.action === "update_section") {
+      if (!params.section_slug) throw new Error("section_slug is required for update_section")
+      if (!params.section_heading && !params.section_description)
+        throw new Error("Provide at least one of: section_heading, section_description")
+
+      const targetPage = Database.use((db) =>
+        db.select().from(LearningWikiPageTable)
+          .where(and(
+            eq(LearningWikiPageTable.workspace_id, workspaceId),
+            eq(LearningWikiPageTable.category_slug, params.category_slug),
+            params.subcategory_slug
+              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
+              : eq(LearningWikiPageTable.page_type, "category"),
+          )).get(),
+      )
+      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+
+      const currentSections = targetPage.sections ?? []
+      const idx = currentSections.findIndex((s) => s.slug === params.section_slug)
+      if (idx === -1) throw new Error(`Section '${params.section_slug}' not found on this page.`)
+
+      const updated = {
+        ...currentSections[idx],
+        ...(params.section_heading ? { heading: params.section_heading } : {}),
+        ...(params.section_description ? { description: params.section_description } : {}),
+        updated_at: now,
+      }
+      const newSections = [...currentSections]
+      newSections[idx] = updated
+
+      Database.use((db) =>
+        db.update(LearningWikiPageTable)
+          .set({ sections: newSections, time_updated: now })
+          .where(eq(LearningWikiPageTable.id, targetPage.id))
+          .run(),
+      )
+
+      // If heading changed, update it on all existing placements so the wiki renders correctly
+      let placementsUpdated = 0
+      if (params.section_heading && params.section_heading !== currentSections[idx].heading) {
+        const result = Database.use((db) =>
+          db.update(LearningResourceWikiPlacementTable)
+            .set({ section_heading: params.section_heading! })
+            .where(and(
+              eq(LearningResourceWikiPlacementTable.wiki_page_id, targetPage.id),
+              eq(LearningResourceWikiPlacementTable.section_slug, params.section_slug!),
+            ))
+            .returning()
+            .all(),
+        )
+        placementsUpdated = result.length
+      }
+
+      KbSchema.bumpVersion(workspaceId)
+      KbSchema.renderToFile(workspaceId)
+      WikiBuilder.buildAll(workspaceId)
+
+      Workspace.logEvent(workspaceId, {
+        event_type: "section_updated",
+        summary: `Updated section '${updated.heading}' in ${targetPage.file_path}`,
+        payload: { section_slug: params.section_slug, file_path: targetPage.file_path, placements_updated: placementsUpdated },
+      })
+
+      return {
+        title: `Section updated: ${updated.heading}`,
+        metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
+        output: [
+          `Updated section '${params.section_slug}' in ${targetPage.file_path}:`,
+          `  heading: ${updated.heading}`,
+          `  description: ${updated.description}`,
+          placementsUpdated > 0 ? `  ${placementsUpdated} placement(s) updated with new heading.` : "",
+          `schema.json updated, wiki file rebuilt.`,
+        ].filter(Boolean).join("\n"),
       }
     }
 

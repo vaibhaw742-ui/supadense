@@ -6,6 +6,8 @@
  * supadense.md, and log.md.
  */
 import z from "zod"
+import { mkdirSync } from "fs"
+import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
 import { WikiBuilder } from "../../learning/wiki-builder"
@@ -51,7 +53,7 @@ export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
   async execute(params, ctx) {
     await ctx.ask({
       permission: "edit",
-      patterns: ["wiki/**", "schema.json", "supadense.md", "log.md"],
+      patterns: ["wiki/**", "raw/", "schema.json", "supadense.md", "log.md"],
       always: ["*"],
       metadata: {
         filepath: params.workspace_id,
@@ -74,6 +76,10 @@ export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
     // Ensure schema metadata row exists and render schema.json
     KbSchema.ensure(params.workspace_id)
     KbSchema.renderToFile(params.workspace_id)
+
+    // Scaffold directory structure
+    mkdirSync(path.join(workspace.kb_path, "wiki", "assets"), { recursive: true })
+    mkdirSync(path.join(workspace.kb_path, "raw"), { recursive: true })
 
     // Build all wiki files from DB state
     WikiBuilder.buildAll(params.workspace_id)
@@ -98,7 +104,7 @@ export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
         "Wiki pages:",
         ...pages.map((p) => `  • ${p.file_path} [${p.page_type}]`),
         "",
-        "All files written to disk: schema.json, supadense.md, log.md, wiki/",
+        "All files written to disk: schema.json, supadense.md, log.md, wiki/, raw/",
       ].join("\n"),
     }
   },

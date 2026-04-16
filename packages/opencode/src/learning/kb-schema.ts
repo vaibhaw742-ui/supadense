@@ -41,6 +41,7 @@ export interface SchemaCategory {
   name: string
   depth: string
   icon?: string
+  sections: SchemaSection[]
   subcategories: SchemaSubcategory[]
 }
 
@@ -49,6 +50,36 @@ export interface SchemaContent {
   generated_at: string
   categories: SchemaCategory[]
 }
+
+// ─── Default sections ────────────────────────────────────────────────────────
+// Applied to every new category and subcategory page automatically.
+
+export const DEFAULT_SECTIONS: SchemaSection[] = [
+  {
+    slug: "key-concepts",
+    heading: "## Key Concepts",
+    description:
+      "Core concepts, definitions, and terminology introduced by this resource. Use bullet points: **Term** — definition.",
+  },
+  {
+    slug: "architecture-overview",
+    heading: "## Architecture Overview",
+    description:
+      "System design, architecture patterns, and structural components described in this resource.",
+  },
+  {
+    slug: "images",
+    heading: "## Images",
+    description:
+      "Diagrams, screenshots, charts, and visual references extracted from this resource.",
+  },
+  {
+    slug: "sources",
+    heading: "## Sources",
+    description:
+      "Papers, links, tools, and external references cited or recommended by this resource.",
+  },
+]
 
 // ─── Default subcategory structure ───────────────────────────────────────────
 // Applied to every category during onboarding. Can be evolved per-workspace
@@ -173,7 +204,7 @@ export namespace KbSchema {
 
   /**
    * Assemble the full schema content from the DB tables.
-   * Reads learning_categories + learning_wiki_pages (subcategory pages with sections).
+   * Reads learning_categories + learning_wiki_pages (category + subcategory pages with sections).
    */
   export function buildContent(workspaceId: string): SchemaContent {
     const schema = get(workspaceId)
@@ -184,36 +215,51 @@ export namespace KbSchema {
         .where(eq(LearningCategoryTable.workspace_id, workspaceId))
         .all(),
     )
-    const subcatPages = Database.use((db) =>
+    const allPages = Database.use((db) =>
       db
         .select()
         .from(LearningWikiPageTable)
-        .where(and(eq(LearningWikiPageTable.workspace_id, workspaceId), eq(LearningWikiPageTable.page_type, "subcategory")))
+        .where(
+          and(
+            eq(LearningWikiPageTable.workspace_id, workspaceId),
+            // include both category and subcategory pages
+          ),
+        )
         .all(),
     )
+    const catPages = allPages.filter((p) => p.page_type === "category")
+    const subcatPages = allPages.filter((p) => p.page_type === "subcategory")
 
     return {
       version: schema?.version ?? 1,
       generated_at: new Date().toISOString(),
       categories: categories
         .sort((a, b) => a.position - b.position)
-        .map((cat) => ({
-          slug: cat.slug,
-          name: cat.name,
-          depth: cat.depth,
-          icon: cat.icon ?? undefined,
-          subcategories: subcatPages
-            .filter((p) => p.category_slug === cat.slug)
-            .map((p) => ({
-              slug: p.subcategory_slug!,
-              name: p.title.split(" — ")[1] ?? p.subcategory_slug!,
-              sections: (p.sections ?? []).map((s) => ({
-                slug: s.slug,
-                heading: s.heading,
-                description: s.description ?? "",
-              })),
+        .map((cat) => {
+          const catPage = catPages.find((p) => p.category_slug === cat.slug)
+          return {
+            slug: cat.slug,
+            name: cat.name,
+            depth: cat.depth,
+            icon: cat.icon ?? undefined,
+            sections: (catPage?.sections ?? []).map((s) => ({
+              slug: s.slug,
+              heading: s.heading,
+              description: s.description ?? "",
             })),
-        })),
+            subcategories: subcatPages
+              .filter((p) => p.category_slug === cat.slug)
+              .map((p) => ({
+                slug: p.subcategory_slug!,
+                name: p.title.split(" — ")[1] ?? p.subcategory_slug!,
+                sections: (p.sections ?? []).map((s) => ({
+                  slug: s.slug,
+                  heading: s.heading,
+                  description: s.description ?? "",
+                })),
+              })),
+          }
+        }),
     }
   }
 

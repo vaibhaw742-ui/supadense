@@ -83,6 +83,17 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
 
     const pageId = page.id
 
+    // Enforce schema: only allow sections already defined on this page
+    const definedSections = page.sections ?? []
+    if (!definedSections.some((s) => s.slug === params.section_slug)) {
+      const allowed = definedSections.map((s) => `"${s.slug}"`).join(", ")
+      throw new Error(
+        `Section "${params.section_slug}" is not defined on page "${page.file_path}". ` +
+        `Allowed sections: ${allowed || "(none defined yet)"}. ` +
+        `Ask the user to add the section first via kb_category_manage(action: "add_section").`,
+      )
+    }
+
     // Idempotency: skip if already placed
     if (Placement.exists(params.resource_id, pageId, params.section_slug)) {
       return {

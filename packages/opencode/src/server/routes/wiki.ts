@@ -17,14 +17,21 @@ import {
   LearningKbWorkspaceTable,
 } from "../../learning/schema.sql"
 
+/** Resolve the KB workspace for the current request context.
+ *  Tries project_id first, then falls back to kb_path = Instance.directory.
+ */
+function resolveWorkspace() {
+  const project = Instance.project
+  return Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
+}
+
 export const WikiRoutes = () => {
   const app = new Hono()
 
   // ── Home ────────────────────────────────────────────────────────────────────
   // Returns workspace stats, all categories with their pages, and recent events.
   app.get("/home", async (c) => {
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const workspace = resolveWorkspace()
     if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
 
     const categories = Workspace.getCategories(workspace.id)
@@ -96,8 +103,7 @@ export const WikiRoutes = () => {
 
   // ── Pages list ───────────────────────────────────────────────────────────────
   app.get("/pages", async (c) => {
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const workspace = resolveWorkspace()
     if (!workspace) return c.json([])
 
     const pages = Workspace.getWikiPages(workspace.id)
@@ -118,8 +124,7 @@ export const WikiRoutes = () => {
   // ── Single page ──────────────────────────────────────────────────────────────
   // :slug can be a category slug ("agents") or combined ("agents--key-concepts")
   app.get("/page/:slug", async (c) => {
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const workspace = resolveWorkspace()
     if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
 
     const slug = c.req.param("slug")
@@ -188,8 +193,7 @@ export const WikiRoutes = () => {
 
   // ── Concepts ─────────────────────────────────────────────────────────────────
   app.get("/concepts", async (c) => {
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const workspace = resolveWorkspace()
     if (!workspace) return c.json([])
 
     const concepts = Database.use((db) =>
@@ -209,8 +213,7 @@ export const WikiRoutes = () => {
 
   // ── Search ───────────────────────────────────────────────────────────────────
   app.get("/search", async (c) => {
-    const project = Instance.project
-    const workspace = Workspace.get(project.id)
+    const workspace = resolveWorkspace()
     if (!workspace) return c.json({ locations: [], concepts: [], sources: [] })
 
     const q = c.req.query("q") ?? ""
@@ -221,31 +224,49 @@ export const WikiRoutes = () => {
   })
 
   // ── Assets ───────────────────────────────────────────────────────────────────
+  // NOTE: Browser <img> requests carry no custom headers, so we cannot use the
+  // x-opencode-directory header here. Instead: try the current instance workspace
+  // first, then scan all workspaces for a matching file.
   app.get("/assets/*", async (c) => {
-    const dirHeader = c.req.header("x-opencode-directory") ?? ""
-    // Find workspace by project path matching the directory header
-    const workspace = Database.use((db) =>
-      db.select().from(LearningKbWorkspaceTable)
-        .where(eq(LearningKbWorkspaceTable.kb_path, dirHeader))
-        .get()
+    // c.req.param("*") can be undefined in some Hono versions; extract from path instead.
+    // c.req.path returns the FULL path (e.g. "/wiki/assets/01KP5MJ7/file.png") — strip up to "assets/"
+    const relativePath = c.req.path.replace(/^.*\/assets\//, "")
+
+    // Helper: attempt to serve from a given kb_path
+    async function tryServe(kbPath: string): Promise<Response | null> {
+      const assetsRoot = path.resolve(path.join(kbPath, "wiki", "assets"))
+      const fullPath = path.resolve(path.join(assetsRoot, relativePath))
+      if (!fullPath.startsWith(assetsRoot)) return null
+      if (!existsSync(fullPath)) return null
+      const file = Bun.file(fullPath)
+      const mime = file.type || "application/octet-stream"
+      return new Response(await file.arrayBuffer(), {
+        headers: { "Content-Type": mime, "Cache-Control": "public, max-age=86400" },
+      })
+    }
+
+    // 1. Try the current instance workspace (fast path — header may be present)
+    // resolveWorkspace() can throw if Instance context is not set (browser img requests)
+    let current: ReturnType<typeof resolveWorkspace> = null
+    try {
+      current = resolveWorkspace()
+      if (current) {
+        const res = await tryServe(current.kb_path)
+        if (res) return res
+      }
+    } catch { /* no instance context — fall through to scan all */ }
+
+    // 2. Fall back: scan all workspaces (covers browser img requests with no header)
+    const allWorkspaces = Database.use((db) =>
+      db.select().from(LearningKbWorkspaceTable).all()
     )
-    if (!workspace) return c.text("Not found", 404)
+    for (const ws of allWorkspaces) {
+      if (current && ws.id === current.id) continue // already tried
+      const res = await tryServe(ws.kb_path)
+      if (res) return res
+    }
 
-    const relativePath = c.req.param("*") as string
-    const assetsRoot = path.resolve(path.join(workspace.kb_path, "wiki", "assets"))
-    const fullPath = path.resolve(path.join(assetsRoot, relativePath))
-
-    if (!fullPath.startsWith(assetsRoot)) return c.text("Forbidden", 403)
-    if (!existsSync(fullPath)) return c.text("Not found", 404)
-
-    const file = Bun.file(fullPath)
-    const mime = file.type || "application/octet-stream"
-    return new Response(await file.arrayBuffer(), {
-      headers: {
-        "Content-Type": mime,
-        "Cache-Control": "public, max-age=86400",
-      },
-    })
+    return c.text("Not found", 404)
   })
 
   return app

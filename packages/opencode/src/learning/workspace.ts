@@ -12,7 +12,7 @@ import {
   LearningWikiPageTable,
   LearningKbEventTable,
 } from "./schema.sql"
-import { type SchemaSubcategory } from "./kb-schema"
+import { type SchemaSubcategory, DEFAULT_SECTIONS } from "./kb-schema"
 
 export type Workspace = typeof LearningKbWorkspaceTable.$inferSelect
 export type Category = typeof LearningCategoryTable.$inferSelect
@@ -235,6 +235,17 @@ export namespace Workspace {
         }).run(),
       )
 
+      // Category page: default sections + one entry per subcategory
+      const catPageSections = [
+        ...DEFAULT_SECTIONS,
+        ...profile.subcategories.map((sub) => ({
+          slug: sub.slug,
+          heading: `## ${sub.name}`,
+          description: `Content from the ${sub.name} subcategory.`,
+          updated_at: now,
+        })),
+      ]
+
       const catPageId = ulid()
       Database.use((db) =>
         db.insert(LearningWikiPageTable).values({
@@ -247,7 +258,7 @@ export namespace Workspace {
           title: cat.name,
           description: cat.description,
           file_path: `wiki/${cat.slug}.md`,
-          sections: [],
+          sections: catPageSections,
           resource_count: 0,
           word_count: 0,
           time_created: now,
@@ -255,7 +266,7 @@ export namespace Workspace {
         }).run(),
       )
 
-      // Create subcategory pages with their sections seeded
+      // Create subcategory pages — each gets DEFAULT_SECTIONS
       for (const sub of profile.subcategories) {
         Database.use((db) =>
           db.insert(LearningWikiPageTable).values({
@@ -269,7 +280,7 @@ export namespace Workspace {
             slug: sub.slug,
             title: `${cat.name} — ${sub.name}`,
             file_path: `wiki/${cat.slug}--${sub.slug}.md`,
-            sections: sub.sections.map((s) => ({ slug: s.slug, heading: s.heading, description: s.description })),
+            sections: DEFAULT_SECTIONS,
             resource_count: 0,
             word_count: 0,
             time_created: now,

@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+# Ensure bun is available (for macOS/zsh environments)
+export PATH="/Users/vaibhawkhemka/.bun/bin:/opt/homebrew/bin:$PATH"
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '

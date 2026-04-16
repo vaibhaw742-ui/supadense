@@ -5,44 +5,40 @@ description: Rebuild wiki files from DB state. Load when the user says 'rebuild 
 
 # KB Wiki Build Skill
 
-Use this skill when:
-- User asks to rebuild / refresh their wiki
-- Multiple resources were memorized but wiki files weren't rebuilt
-- User wants to regenerate supadense.md after profile changes
-- You want to regenerate all files after a batch update
+## Default: Rebuild Everything
 
-## Rebuild a Single Page
+When the user says "rebuild wiki", "refresh wiki", "update wiki", or similar — **always do a full rebuild**:
 
-When you know the page ID:
-```
-kb_wiki_build({ page_id: "<wiki_page_id>" })
-```
-
-## Rebuild a Category
-
-When a category received new content:
-```
-kb_wiki_build({ category_id: "<category_id>" })
-```
-This rebuilds the category page AND all its subcategory pages.
-
-## Rebuild Everything
-
-Full rebuild — use after significant changes:
 ```
 kb_workspace_init()  // get workspace_id
 kb_wiki_build({ workspace_id: "<workspace_id>" })
 ```
-This rebuilds all wiki pages, supadense.md, AND log.md.
+
+This rebuilds ALL wiki pages, supadense.md, and log.md in one shot.
+Never use page_id or category_id when the user asks to rebuild — they expect everything updated.
+
+## Rebuild a Single Category (targeted)
+
+Only when explicitly requested for one specific category:
+```
+kb_wiki_build({ category_id: "<category_id>" })
+```
+
+## Rebuild a Single Page (targeted)
+
+Only when the curator places content on one specific page and rebuilds that page only:
+```
+kb_wiki_build({ page_id: "<wiki_page_id>" })
+```
 
 ## When to Rebuild
 
-- After every `kb_resource_place` call (or batch of calls)
+- User says "rebuild", "refresh", "update" → full rebuild with workspace_id
+- After every `kb_resource_place` call in the curator pipeline → page_id is fine there
 - After `kb_onboard_complete` (already done automatically)
-- When the user asks to "refresh" or "rebuild"
 - Never needed before `kb_retrieve` (retrieval reads from DB, not files)
 
 ## Output
 
-The tool returns a list of files that were written to disk.
-Confirm to the user: "Rebuilt X files: wiki/agents--key-concepts.md, ..."
+The tool returns the list of files written to disk.
+Confirm to the user: "Rebuilt X files across all categories."

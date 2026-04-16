@@ -9,8 +9,11 @@
  *   2. Placement content substring match
  *   3. Wiki page title / description match
  *   4. Category name match
+ *   5. Raw content file search (raw/*.txt fallback)
  */
 import { eq, and, like, or } from "drizzle-orm"
+import { readFileSync, existsSync } from "fs"
+import path from "path"
 import { Database } from "../storage/db"
 import {
   LearningWikiPageTable,
@@ -19,10 +22,21 @@ import {
   LearningConceptWikiPlacementTable,
   LearningResourceWikiPlacementTable,
   LearningResourceTable,
+  LearningMediaAssetTable,
   LearningKbWorkspaceTable,
 } from "./schema.sql"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface RetrievalImage {
+  /** Relative path from kb_path: "wiki/assets/abc/img.jpg" */
+  local_path: string
+  /** Full abs path */
+  abs_path: string
+  alt_text: string | null
+  caption: string | null
+  is_diagram: boolean
+}
 
 export interface RetrievalResult {
   /** Relative path from kb_path: "wiki/agents--key-concepts.md" */
@@ -34,9 +48,11 @@ export interface RetrievalResult {
   /** Clean one-line description of what's there */
   summary: string
   /** How this result was found */
-  match_type: "concept" | "content" | "page" | "category"
+  match_type: "concept" | "content" | "page" | "category" | "raw"
   /** 0.0–1.0 relevance hint */
   relevance: number
+  /** Images associated with this result (from placement media_asset_ids) */
+  images: RetrievalImage[]
 }
 
 export interface ConceptResult {
@@ -63,7 +79,7 @@ export namespace Retrieval {
    * Main entry: find the best locations in the wiki for a query string.
    * Returns up to `limit` results sorted by relevance.
    */
-  export function search(workspaceId: string, query: string, limit = 5): RetrievalResult[] {
+  export function search(workspaceId: string, query: string, limit = 8): RetrievalResult[] {
     const workspace = Database.use((db) =>
       db.select().from(LearningKbWorkspaceTable).where(eq(LearningKbWorkspaceTable.id, workspaceId)).get(),
     )
@@ -118,6 +134,7 @@ export namespace Retrieval {
           summary: `Concept "${concept.name}"${concept.definition ? `: ${concept.definition}` : ""} — found in ${page.title}`,
           match_type: "concept",
           relevance: nameMatch ? 1.0 : slugMatch ? 0.9 : 0.7,
+          images: [],
         })
       }
     }
@@ -156,6 +173,24 @@ export namespace Retrieval {
       if (seen.has(key)) continue
       seen.add(key)
 
+      // Resolve media assets attached to this placement
+      const assetIds: string[] = (placement.media_asset_ids as string[] | null) ?? []
+      const images: RetrievalImage[] = assetIds.length > 0
+        ? assetIds.flatMap((id) => {
+            const asset = Database.use((db) =>
+              db.select().from(LearningMediaAssetTable).where(eq(LearningMediaAssetTable.id, id)).get(),
+            )
+            if (!asset) return []
+            return [{
+              local_path: asset.local_path,
+              abs_path: path.join(kbPath, asset.local_path),
+              alt_text: asset.alt_text ?? null,
+              caption: asset.caption ?? null,
+              is_diagram: asset.is_diagram ?? false,
+            }]
+          })
+        : []
+
       const snippet = placement.extracted_content.slice(0, 100).trim()
       results.push({
         file_path: page.file_path,
@@ -164,6 +199,7 @@ export namespace Retrieval {
         summary: `Content match in "${page.title}" / ${placement.section_heading}: "${snippet}…"`,
         match_type: "content",
         relevance: matchedWords.length / words.length,
+        images,
       })
     }
 
@@ -191,6 +227,7 @@ export namespace Retrieval {
         summary: `Page match: "${page.title}"${page.description ? ` — ${page.description.slice(0, 80)}` : ""}`,
         match_type: "page",
         relevance: titleMatch ? 0.8 : 0.5,
+        images: [],
       })
     }
 
@@ -216,6 +253,69 @@ export namespace Retrieval {
         summary: `Category: "${cat.name}"${cat.description ? ` — ${cat.description.slice(0, 80)}` : ""}`,
         match_type: "category",
         relevance: 0.6,
+        images: [],
+      })
+    }
+
+    // ── 5. Raw content file search ────────────────────────────────────────────
+    const resources = Database.use((db) =>
+      db
+        .select()
+        .from(LearningResourceTable)
+        .where(eq(LearningResourceTable.workspace_id, workspaceId))
+        .all(),
+    )
+    for (const resource of resources) {
+      const filePath = resource.raw_content_path ?? null
+      const key = `${filePath ?? `raw/${resource.id}`}:_`
+      if (seen.has(key)) continue
+
+      let rawText = ""
+      if (resource.raw_content_path) {
+        const fullPath = path.join(kbPath, resource.raw_content_path)
+        if (existsSync(fullPath)) {
+          // Cap at 100 KB to avoid reading enormous files into memory
+          const buf = readFileSync(fullPath, "utf8")
+          rawText = buf.slice(0, 100_000).toLowerCase()
+        }
+      } else if (resource.raw_content) {
+        rawText = resource.raw_content.slice(0, 100_000).toLowerCase()
+      }
+      if (!rawText) continue
+
+      const matchedWords = words.filter((w) => rawText.includes(w))
+      if (matchedWords.length === 0) continue
+
+      seen.add(key)
+
+      // Find a snippet around the first matched word
+      const firstWord = matchedWords[0]
+      const idx = rawText.indexOf(firstWord)
+      const start = Math.max(0, idx - 40)
+      const snippet = rawText.slice(start, start + 120).replace(/\s+/g, " ").trim()
+
+      // Include all images downloaded for this resource
+      const rawAssets = Database.use((db) =>
+        db.select().from(LearningMediaAssetTable)
+          .where(eq(LearningMediaAssetTable.resource_id, resource.id))
+          .all(),
+      )
+      const rawImages: RetrievalImage[] = rawAssets.map((a) => ({
+        local_path: a.local_path,
+        abs_path: path.join(kbPath, a.local_path),
+        alt_text: a.alt_text ?? null,
+        caption: a.caption ?? null,
+        is_diagram: a.is_diagram ?? false,
+      }))
+
+      results.push({
+        file_path: filePath ?? `raw/${resource.id}`,
+        abs_path: path.join(kbPath, filePath ?? `raw/${resource.id}`),
+        section_heading: null,
+        summary: `Raw source: "${resource.title ?? resource.url ?? resource.id}"${resource.author ? ` by ${resource.author}` : ""} — "…${snippet}…"`,
+        match_type: "raw",
+        relevance: 0.4 + 0.1 * (matchedWords.length / words.length),
+        images: rawImages,
       })
     }
 
@@ -308,11 +408,14 @@ export namespace Retrieval {
     return results
       .map((r, i) => {
         const heading = r.section_heading ? `\n   Section: ${r.section_heading}` : ""
+        const imgLine = r.images.length > 0
+          ? `\n   Images (${r.images.length}): ${r.images.map((img) => img.abs_path).join(", ")}`
+          : ""
         return [
           `${i + 1}. **${r.file_path}**${heading}`,
           `   ${r.summary}`,
           `   Match: ${r.match_type} | Relevance: ${Math.round(r.relevance * 100)}%`,
-          `   Path: ${r.abs_path}`,
+          `   Path: ${r.abs_path}${imgLine}`,
         ].join("\n")
       })
       .join("\n\n")

@@ -24,6 +24,7 @@ import {
   KbResourceExtractImagesTool,
   KbPipelineRunTool,
   KbWorkspaceDeleteTool,
+  KbPipelineStatusTool,
 } from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -194,6 +195,7 @@ export namespace ToolRegistry {
             kb_resource_extract_images: Tool.init(KbResourceExtractImagesTool),
             kb_pipeline_run: Tool.init(kbPipelineRun),
             kb_workspace_delete: Tool.init(KbWorkspaceDeleteTool),
+            kb_pipeline_status: Tool.init(KbPipelineStatusTool),
           })
 
           return {
@@ -228,6 +230,7 @@ export namespace ToolRegistry {
               tool.kb_category_manage,
               tool.kb_pipeline_run,
               tool.kb_workspace_delete,
+              tool.kb_pipeline_status,
             ],
             task: tool.task,
             read: tool.read,

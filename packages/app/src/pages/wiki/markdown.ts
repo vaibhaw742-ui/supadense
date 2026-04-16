@@ -11,6 +11,17 @@ export function renderMarkdown(md: string): string {
   while (i < lines.length) {
     const line = lines[i]
 
+    // Raw HTML passthrough — <details>, <summary>, legacy <div class="wiki-img-grid">
+    if (
+      line.startsWith("<details") || line === "</details>" ||
+      line.startsWith("<summary") || line.startsWith("</summary>") ||
+      line.startsWith('<div class="wiki-img-grid"') || line === "</div>"
+    ) {
+      out.push(line)
+      i++
+      continue
+    }
+
     // Fenced code block
     if (line.startsWith("```")) {
       const lang = line.slice(3).trim()

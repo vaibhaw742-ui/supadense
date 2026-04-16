@@ -47,7 +47,6 @@ export default function WikiHome() {
           }}
         />
         <nav class="wk-nav">
-          <span class="wk-nav-item" onClick={() => navigate(`/${params.dir}/session`)}>← Back to session</span>
           <span class="wk-nav-item">Chat</span>
           <span class="wk-nav-item">Digest</span>
           <div class="wk-avatar">VK</div>
@@ -100,6 +99,21 @@ export default function WikiHome() {
                     {(cat) => <CategoryCard cat={cat} onNavigate={go} />}
                   </For>
                 </div>
+
+                <Show when={d().recent_events.length > 0}>
+                  <div class="wk-section-label" style={{ "margin-top": "28px" }}>Recent activity</div>
+                  <ul class="wk-activity-list">
+                    <For each={d().recent_events}>
+                      {(ev) => (
+                        <li class="wk-activity-item">
+                          <span class="wk-activity-dot" data-type={ev.event_type} />
+                          <span class="wk-activity-summary">{ev.summary}</span>
+                          <span class="wk-activity-date">{formatDate(ev.time_created)}</span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
               </>
             )}
           </Show>

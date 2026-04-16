@@ -102,7 +102,7 @@
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .wk-sidebar {
-  width: 156px;
+  width: 130px;
   flex-shrink: 0;
   background: #f8f9fa;
   border-right: 1px solid #e5e7eb;
@@ -168,7 +168,7 @@
 .wk-main {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 24px 16px;
   background: #fff;
 }
 
@@ -197,6 +197,71 @@
   font-weight: 600;
   color: #374151;
   margin-bottom: 12px;
+}
+
+/* ── Recent activity list ────────────────────────────────────────────────── */
+.wk-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.wk-activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+}
+
+.wk-activity-item:last-child {
+  border-bottom: none;
+}
+
+.wk-activity-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ca3af;
+  margin-top: 3px;
+}
+
+.wk-activity-dot[data-type="resource_added"],
+.wk-activity-dot[data-type="memorize"] {
+  background: #3b82f6;
+}
+
+.wk-activity-dot[data-type="onboarding"] {
+  background: #10b981;
+}
+
+.wk-activity-dot[data-type="category_added"],
+.wk-activity-dot[data-type="subcategory_added"] {
+  background: #8b5cf6;
+}
+
+.wk-activity-dot[data-type="section_added"],
+.wk-activity-dot[data-type="section_removed"],
+.wk-activity-dot[data-type="section_updated"] {
+  background: #f59e0b;
+}
+
+.wk-activity-summary {
+  flex: 1;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.wk-activity-date {
+  flex-shrink: 0;
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 /* ── Category grid ───────────────────────────────────────────────────────── */
@@ -383,6 +448,59 @@
   margin: 10px 0;
 }
 
+/* ── Collapsible source blocks (<details>) ────────────────────────────────── */
+.wk-prose details {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin: 8px 0;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.wk-prose details[open] {
+  background: #fff;
+}
+
+.wk-prose details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  user-select: none;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+}
+
+.wk-prose details[open] > summary {
+  border-bottom-color: #e5e7eb;
+  color: #111827;
+}
+
+.wk-prose details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wk-prose details > summary::before {
+  content: "▶";
+  font-size: 10px;
+  color: #9ca3af;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.wk-prose details[open] > summary::before {
+  transform: rotate(90deg);
+  color: #6b7280;
+}
+
+.wk-prose details > :not(summary) {
+  padding: 12px 16px 4px;
+}
+
 .wk-prose pre {
   background: #f3f4f6;
   border-radius: 5px;
@@ -509,7 +627,78 @@
 
 /* ── Page content wrapper ────────────────────────────────────────────────── */
 .wk-page-content {
-  max-width: 760px;
+  max-width: 100%;
+}
+
+/* ── Section tabs ─────────────────────────────────────────────────────────── */
+.wk-section-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  border-bottom: 1px solid #e5e7eb;
+  margin: 20px 0 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.wk-section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.wk-section-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px 11px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: #6b7280;
+  font-size: 13.5px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.wk-section-tab:hover {
+  color: #111827;
+}
+
+.wk-section-tab--active {
+  color: #111827;
+  font-weight: 500;
+  border-bottom-color: #111827;
+}
+
+.wk-tab-icon {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.wk-section-tab--active .wk-tab-icon {
+  opacity: 1;
+}
+
+/* ── Tab pane content ─────────────────────────────────────────────────────── */
+.wk-tab-pane {
+  padding-top: 24px;
+}
+
+.wk-empty-section {
+  font-size: 13px;
+  color: #9ca3af;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* ── Preamble (description before tabs) ──────────────────────────────────── */
+.wk-preamble {
+  margin-top: 8px;
+  color: #4b5563;
 }
 
 /* Clearfix */

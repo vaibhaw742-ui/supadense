@@ -116,7 +116,8 @@ export const LearningResourceTable = sqliteTable(
     title: text(),
     author: text(),
     modality: text().notNull(), // "url"|"pdf"|"youtube"|"text"|"image"|"linkedin"
-    raw_content: text(), // full scraped/extracted text
+    raw_content: text(), // legacy: full text stored in DB (kept for backward compat)
+    raw_content_path: text(), // path to raw content file relative to kb_path, e.g. "raw/01KP....txt"
     summary: text(), // LLM-generated 3-5 sentence summary
     quality_score: real().notNull().default(0),
     relevance_score: real().notNull().default(0),

@@ -2,8 +2,51 @@ import { createResource, createMemo, createSignal, For, Show } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useWikiApi } from "./wiki-api"
 import { useServer } from "@/context/server"
-import { renderMarkdown, extractHeadings } from "./markdown"
+import { renderMarkdown } from "./markdown"
 import "./wiki.css"
+
+// ── Section parsing ──────────────────────────────────────────────────────────
+
+interface WikiSection {
+  heading: string
+  content: string
+}
+
+function parseSections(md: string): WikiSection[] {
+  const lines = md.split("\n")
+  const sections: WikiSection[] = []
+  let heading = ""
+  let buf: string[] = []
+
+  for (const line of lines) {
+    const h2 = line.match(/^## (.+)$/)
+    if (h2) {
+      if (heading) sections.push({ heading, content: buf.join("\n").trim() })
+      heading = h2[1]
+      buf = []
+    } else if (heading) {
+      buf.push(line)
+    }
+  }
+  if (heading) sections.push({ heading, content: buf.join("\n").trim() })
+  return sections
+}
+
+// Icon map for common section names
+function sectionIcon(heading: string): string {
+  const h = heading.toLowerCase()
+  if (h.includes("concept") || h.includes("key")) return "✦"
+  if (h.includes("architect") || h.includes("overview") || h.includes("design")) return "◈"
+  if (h.includes("image") || h.includes("visual") || h.includes("diagram")) return "⊡"
+  if (h.includes("source") || h.includes("link") || h.includes("reference")) return "⊕"
+  if (h.includes("example") || h.includes("use case")) return "◎"
+  if (h.includes("paper") || h.includes("research")) return "◧"
+  if (h.includes("tool") || h.includes("framework") || h.includes("library")) return "⬡"
+  if (h.includes("people") || h.includes("author") || h.includes("creator")) return "◉"
+  return "◦"
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function WikiPage() {
   const api = useWikiApi()
@@ -11,6 +54,7 @@ export default function WikiPage() {
   const params = useParams<{ dir: string; slug: string }>()
   const navigate = useNavigate()
   const [search, setSearch] = createSignal("")
+  const [activeTab, setActiveTab] = createSignal(0)
 
   const wikiBase = () => {
     const http = server.current?.http
@@ -19,21 +63,39 @@ export default function WikiPage() {
     return `${base}/wiki`
   }
 
-  const [data] = createResource(() => params.slug, (slug) => api.page(slug))
-
-  const headings = createMemo(() => {
-    const content = data()?.content ?? ""
-    return extractHeadings(content)
+  const [data] = createResource(() => params.slug, (slug) => {
+    setActiveTab(0) // reset to first tab on page change
+    return api.page(slug)
   })
 
-  const renderedContent = createMemo(() => {
+  // Rewrite asset image paths before parsing/rendering
+  const rewrittenContent = createMemo(() => {
     const content = data()?.content ?? ""
-    // Rewrite relative asset paths to absolute server URLs
-    const rewritten = content.replace(
-      /!\[([^\]]*)\]\((assets\/[^)]+)\)/g,
-      (_, alt, assetPath) => `![${alt}](${wikiBase()}/${assetPath})`
-    )
-    return renderMarkdown(rewritten)
+    return content
+      .replace(
+        /!\[([^\]]*)\]\((\/wiki\/assets\/[^)]+)\)/g,
+        (_, alt, p) => `![${alt}](${wikiBase()}${p})`
+      )
+      .replace(
+        /!\[([^\]]*)\]\((assets\/[^)]+)\)/g,
+        (_, alt, p) => `![${alt}](${wikiBase()}/${p})`
+      )
+  })
+
+  const sections = createMemo(() => parseSections(rewrittenContent()))
+
+  // Content that appears before the first ## (title blurb, description)
+  const preamble = createMemo(() => {
+    const content = rewrittenContent()
+    const firstH2 = content.indexOf("\n## ")
+    if (firstH2 === -1) return ""
+    // Strip h1 and blockquote managed-by line, keep description
+    return content
+      .slice(0, firstH2)
+      .split("\n")
+      .filter((l) => !l.startsWith("# ") && !l.startsWith("> This file"))
+      .join("\n")
+      .trim()
   })
 
   const navigateTo = (slug: string) => navigate(`/${params.dir}/wiki/${slug}`)
@@ -57,7 +119,6 @@ export default function WikiPage() {
           }}
         />
         <nav class="wk-nav">
-          <span class="wk-nav-item" onClick={() => navigate(`/${params.dir}/session`)}>← Back to session</span>
           <span class="wk-nav-item">Chat</span>
           <span class="wk-nav-item">Digest</span>
           <div class="wk-avatar">VK</div>
@@ -74,26 +135,26 @@ export default function WikiPage() {
           <Show when={data()}>
             {(d) => (
               <>
-                <Show when={headings().length > 0}>
-                  <div class="wk-sb-label" style={{ "margin-top": "14px" }}>ON THIS PAGE</div>
-                  <For each={headings()}>
-                    {(h) => (
-                      <a
-                        class={`wk-sb-link${h.level === 3 ? " wk-sb-link-sub" : ""}`}
-                        href={`#${h.id}`}
-                      >
-                        {h.text}
-                      </a>
-                    )}
-                  </For>
-                </Show>
-
                 <div class="wk-sb-label" style={{ "margin-top": "14px" }}>STATS</div>
                 <div class="wk-sb-stat">{d().page.resource_count} sources</div>
                 <Show when={d().category}>
                   {(cat) => <div class="wk-sb-stat">depth: {cat().depth}</div>}
                 </Show>
                 <div class="wk-sb-stat">Updated {formatDate(d().page.time_updated)}</div>
+
+                <Show when={d().subcategories.length > 0}>
+                  <div class="wk-sb-label" style={{ "margin-top": "14px" }}>SECTIONS</div>
+                  <For each={d().subcategories}>
+                    {(sub) => (
+                      <a
+                        class="wk-sb-link"
+                        onClick={() => navigateTo(`${d().page.category_slug}--${sub.subcategory_slug}`)}
+                      >
+                        {sub.subcategory_slug?.replace(/-/g, " ")}
+                      </a>
+                    )}
+                  </For>
+                </Show>
               </>
             )}
           </Show>
@@ -131,12 +192,10 @@ export default function WikiPage() {
                   </Show>
                 </div>
 
-                {/* Page title */}
+                {/* Page title + meta */}
                 <h1 class="wk-page-title">{d().page.title}</h1>
                 <div class="wk-page-meta">
-                  <span>
-                    {d().page.resource_count} source{d().page.resource_count !== 1 ? "s" : ""}
-                  </span>
+                  <span>{d().page.resource_count} source{d().page.resource_count !== 1 ? "s" : ""}</span>
                   <span>·</span>
                   <span>Updated {formatDate(d().page.time_updated)}</span>
                   <Show when={d().category}>
@@ -149,47 +208,48 @@ export default function WikiPage() {
                   </Show>
                 </div>
 
-                {/* Floating TOC */}
-                <Show when={headings().length > 1}>
-                  <div class="wk-toc">
-                    <div class="wk-toc-title">Contents</div>
-                    <ol class="wk-toc-list">
-                      <For each={headings()}>
-                        {(h, i) => (
-                          <li class={h.level === 3 ? "wk-toc-sub" : ""}>
-                            <a href={`#${h.id}`} class="wk-toc-link">
-                              {i() + 1}. {h.text}
-                            </a>
-                          </li>
-                        )}
-                      </For>
-                    </ol>
-                  </div>
+                {/* Preamble (description before first section) */}
+                <Show when={preamble()}>
+                  <div class="wk-prose wk-preamble" innerHTML={renderMarkdown(preamble())} />
                 </Show>
 
-                {/* Markdown content */}
-                <div class="wk-prose" innerHTML={renderedContent()} />
-
-                {/* Concepts */}
-                <Show when={d().concepts.length > 0}>
-                  <div class="wk-concepts-section">
-                    <div class="wk-section-heading">Key Concepts</div>
-                    <div class="wk-concepts-grid">
-                      <For each={d().concepts.slice(0, 12)}>
-                        {(c) => (
-                          <div class="wk-concept-card">
-                            <span class="wk-concept-name">{c.name}</span>
-                            <Show when={c.definition}>
-                              <p class="wk-concept-def">{c.definition}</p>
-                            </Show>
-                          </div>
-                        )}
-                      </For>
-                    </div>
+                {/* ── Section tabs ── */}
+                <Show when={sections().length > 0}>
+                  <div class="wk-section-tabs">
+                    <For each={sections()}>
+                      {(sec, i) => (
+                        <button
+                          class={`wk-section-tab${activeTab() === i() ? " wk-section-tab--active" : ""}`}
+                          onClick={() => setActiveTab(i())}
+                        >
+                          <span class="wk-tab-icon">{sectionIcon(sec.heading)}</span>
+                          {sec.heading}
+                        </button>
+                      )}
+                    </For>
                   </div>
+
+                  {/* Active tab content */}
+                  <Show when={sections()[activeTab()]}>
+                    {(sec) => (
+                      <div class="wk-tab-pane">
+                        <Show
+                          when={sec().content.trim()}
+                          fallback={<p class="wk-empty-section">No content yet for this section.</p>}
+                        >
+                          <div class="wk-prose" innerHTML={renderMarkdown(sec().content)} />
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
                 </Show>
 
-                {/* Subcategories */}
+                {/* Fallback: no sections — render full content */}
+                <Show when={sections().length === 0 && rewrittenContent()}>
+                  <div class="wk-prose" innerHTML={renderMarkdown(rewrittenContent())} />
+                </Show>
+
+                {/* Subcategories (for category pages with sub-pages) */}
                 <Show when={d().subcategories.length > 0}>
                   <div class="wk-subcat-section">
                     <div class="wk-section-heading">Subcategories</div>

@@ -49,6 +49,19 @@ After reading the relevant sections:
 3. Cite the wiki pages: "According to your KB (wiki/agents--key-concepts.md)..."
 4. Note any gaps: "Your KB doesn't cover X yet — you could memorize [suggestion]"
 
+### Images — CRITICAL RULE
+
+If `kb_retrieve` returns a `## Related Images` section:
+- **You MUST paste the `![alt](url)` lines verbatim into your response.**
+- The URL starts with `http://localhost:4096/wiki/assets/...`
+- Do NOT write "Image 1 shows..." — paste the raw `![alt](url)` markdown directly.
+- If you describe images in text instead of rendering them, you are doing it wrong.
+
+Correct example:
+```
+![Decision Framework](http://localhost:4096/wiki/assets/abc/img.png)
+```
+
 ## Step 4: Offer Next Steps
 
 After answering:

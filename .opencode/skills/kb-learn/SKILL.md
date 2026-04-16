@@ -63,3 +63,15 @@ After answering, always offer:
 - If KB is empty: say so explicitly, answer from general knowledge, offer to memorize
 - Never pretend content is in the KB if `kb_retrieve` returned nothing
 - Cite wiki pages by path: "According to `wiki/agents.md`..."
+
+## Images — CRITICAL RULE
+
+If `kb_retrieve` returns a `## Related Images` section:
+- **You MUST paste the `![alt](url)` lines verbatim into your response.**
+- The URL starts with `http://localhost:4096/wiki/assets/...`
+- Do NOT write "Image 1 shows..." or describe the image — paste the raw markdown line.
+- Example of what your response must contain:
+  ```
+  ![Decision Framework](http://localhost:4096/wiki/assets/abc/img.png)
+  ```
+- If you describe images instead of rendering them, you are doing it wrong.

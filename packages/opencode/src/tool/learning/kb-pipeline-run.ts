@@ -36,8 +36,9 @@ function buildCuratorPrompt(
   if (!resource || !workspace) return ""
 
   const MAX_CONTENT = 12_000
-  const content = (resource.raw_content ?? "").slice(0, MAX_CONTENT)
-  const truncated = (resource.raw_content?.length ?? 0) > MAX_CONTENT
+  const rawText = Resource.getRawContent(resource, workspace.kb_path)
+  const content = rawText.slice(0, MAX_CONTENT)
+  const truncated = rawText.length > MAX_CONTENT
 
   const categoryPages = pages.filter((p) => p.page_type === "category")
   const subcatPages = pages.filter((p) => p.page_type === "subcategory")
@@ -45,6 +46,7 @@ function buildCuratorPrompt(
   const lines: string[] = [
     "## Resource to Process",
     "",
+    `**Resource ID:** \`${resource.id}\` ← use this as \`resource_id\` in every kb_resource_place call`,
     `**Title:** ${resource.title ?? "(untitled)"}`,
     resource.url ? `**URL:** ${resource.url}` : "",
     `**Modality:** ${resource.modality}`,
@@ -76,36 +78,59 @@ function buildCuratorPrompt(
     "",
     "## Section Extraction Guide",
     "",
-    "For each subcategory page, extract content into the sections below.",
-    "The **Guidance** tells you what to look for — only extract if the resource has relevant content.",
+    "Extract content into the sections listed below — only when the resource has genuinely relevant content for that section.",
+    "The **Guidance** tells you what to look for. Skip a section if the resource has nothing valuable to add.",
     "",
+    // Category pages with direct sections (common when no subcategories exist)
+    ...schema.categories.flatMap((cat) => {
+      const catPage = categoryPages.find((p) => p.category_slug === cat.slug)
+      if (!catPage || cat.sections.length === 0) return []
+      return [
+        `### ${cat.name} — category page`,
+        `(wiki_page_id: \`${catPage.id}\`, file: ${catPage.file_path})`,
+        "",
+        ...cat.sections.flatMap((sec) => [
+          `**${sec.heading}** (\`section_slug: "${sec.slug}"\`)`,
+          `> ${sec.description}`,
+          "",
+        ]),
+      ]
+    }),
+    // Subcategory pages
     ...schema.categories.flatMap((cat) =>
       cat.subcategories.flatMap((sub) => {
         const matchingPages = subcatPages.filter((p) => p.subcategory_slug === sub.slug)
         if (matchingPages.length === 0) return []
-        return [
-          `### ${sub.name} pages (subcategory: \`${sub.slug}\`)`,
+        return matchingPages.flatMap((p) => [
+          `### ${cat.name} → ${sub.name} — subcategory page`,
+          `(wiki_page_id: \`${p.id}\`, file: ${p.file_path})`,
           "",
           ...sub.sections.flatMap((sec) => [
             `**${sec.heading}** (\`section_slug: "${sec.slug}"\`)`,
             `> ${sec.description}`,
             "",
           ]),
-        ]
+        ])
       }),
     ),
     "---",
     "",
     "## Your Task",
     "",
-    "1. Determine which **category** this resource belongs to.",
+    `1. Determine which **category** this resource belongs to.`,
     "2. For each relevant wiki page in that category, extract content into the appropriate sections.",
-    "3. Call `kb_resource_place` once per section that has relevant content.",
+    `3. Call \`kb_resource_place\` once per section that has relevant content. Always pass resource_id: \`${resource.id}\` and workspace_id: \`${workspace.id}\`.`,
     "4. Call `kb_concept_upsert` for any new domain-specific concepts introduced.",
     "5. Call `kb_wiki_build` with the affected page_ids to regenerate .md files.",
     "6. Call `kb_event_log` with a summary of what was placed.",
     "",
     "Aim for 3–6 placements. Skip sections where this resource has nothing valuable to add.",
+    "",
+    "**CRITICAL RULE — schema is read-only during extraction:**",
+    "Only place content into sections that already appear in the Section Extraction Guide above.",
+    "NEVER invent new section slugs. If no listed section fits, skip the resource for that page.",
+    "Do NOT call kb_category_manage. Do NOT create, rename, or remove sections, categories, or subcategories.",
+    "The schema may only be changed by the user — not during automated extraction.",
   ]
 
   return lines.filter(Boolean).join("\n")
@@ -242,7 +267,7 @@ export const KbPipelineRunTool = Tool.defineEffect(
         workspace_id: z.string().describe("Workspace ID from kb_workspace_init"),
       }),
       async execute(params, ctx) {
-        return Effect.runPromise(run(params, ctx))
+        return Effect.runPromise(run(params as { resource_id: string; workspace_id: string }, ctx))
       },
     }
   }),
