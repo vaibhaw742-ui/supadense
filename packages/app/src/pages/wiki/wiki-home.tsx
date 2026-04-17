@@ -91,7 +91,7 @@ export default function WikiHome() {
               <>
                 <h1 class="wk-title">Welcome to Supadense Wiki</h1>
                 <p class="wk-subtitle">
-                  Your personal learning encyclopedia — {d().stats.total_pages} articles across {d().stats.total_categories} categories.
+                  Your Knowledge base for Tech
                 </p>
 
                 <div class="wk-section-label">Browse by category</div>

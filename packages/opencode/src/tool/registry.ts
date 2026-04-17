@@ -26,6 +26,7 @@ import {
   KbWorkspaceDeleteTool,
   KbPipelineStatusTool,
   KbSectionGroupTool,
+  KbRemoveResourceTool,
 } from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -198,6 +199,7 @@ export namespace ToolRegistry {
             kb_workspace_delete: Tool.init(KbWorkspaceDeleteTool),
             kb_pipeline_status: Tool.init(KbPipelineStatusTool),
             kb_section_group: Tool.init(KbSectionGroupTool),
+            kb_remove_resource: Tool.init(KbRemoveResourceTool),
           })
 
           return {
@@ -234,6 +236,7 @@ export namespace ToolRegistry {
               tool.kb_workspace_delete,
               tool.kb_pipeline_status,
               tool.kb_section_group,
+              tool.kb_remove_resource,
             ],
             task: tool.task,
             read: tool.read,

@@ -155,7 +155,7 @@ export function WikiGraph(props: Props) {
       .selectAll<SVGLineElement, SimLink>("line")
       .data(links)
       .join("line")
-      .attr("stroke", "#e2e8f0")
+      .attr("stroke", "#d6cfc0")
       .attr("stroke-width", 1)
       .attr("stroke-opacity", 0.9)
 
@@ -184,7 +184,7 @@ export function WikiGraph(props: Props) {
     nodeSel.append("circle")
       .attr("r",            (d) => nodeRadius(d.type))
       .attr("fill",         (d) => nodeColor(d, categoryColorMap))
-      .attr("stroke",       "#fff")
+      .attr("stroke",       "#fffbeb")
       .attr("stroke-width", 1.5)
 
     // Labels — category, subcategory, group only (resources too small)
@@ -194,8 +194,8 @@ export function WikiGraph(props: Props) {
       .attr("text-anchor", "middle")
       .attr("dy", (d) => nodeRadius(d.type) + 11)
       .attr("font-size", (d) => d.type === "category" ? 10 : 8)
-      .attr("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
-      .attr("fill", "#374151")
+      .attr("font-family", "'Inter', -apple-system, BlinkMacSystemFont, sans-serif")
+      .attr("fill", "#78716c")
       .attr("pointer-events", "none")
 
     // ── Tooltip ───────────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ export function WikiGraph(props: Props) {
     nodeSel
       .on("mouseover", function (event, d) {
         d3.select(this).select("circle")
-          .attr("stroke", "#1f2937")
+          .attr("stroke", "#0d9488")
           .attr("stroke-width", 2.5)
 
         // Collect connected node IDs
@@ -230,7 +230,7 @@ export function WikiGraph(props: Props) {
           .attr("stroke", (l) => {
             const s = (l.source as SimNode).id
             const t = (l.target as SimNode).id
-            return s === d.id || t === d.id ? "#94a3b8" : "#e2e8f0"
+            return s === d.id || t === d.id ? "#0d9488" : "#d6cfc0"
           })
           .attr("stroke-width", (l) => {
             const s = (l.source as SimNode).id
@@ -251,12 +251,12 @@ export function WikiGraph(props: Props) {
       })
       .on("mouseout", function () {
         d3.select(this).select("circle")
-          .attr("stroke", "#fff")
+          .attr("stroke", "#fffbeb")
           .attr("stroke-width", 1.5)
         nodeSel.select("circle").attr("opacity", 1)
         linkSel
           .attr("stroke-opacity", 0.9)
-          .attr("stroke", "#e2e8f0")
+          .attr("stroke", "#d6cfc0")
           .attr("stroke-width", 1)
         tooltip.style("opacity", "0")
       })
