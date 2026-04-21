@@ -74,57 +74,66 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
       )
     }
 
-    // ── 2. Collect affected wiki pages (before cascade wipes placements) ───────
-    const placements = Database.use((db) =>
-      db.select().from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.resource_id, resource.id))
-        .all(),
-    )
-
-    const affectedPageIds = [...new Set(placements.map((p) => p.wiki_page_id))]
-
-    // Collect unique category IDs for those pages
+    // ── 2–5. Collect data and delete everything inside a single transaction ───
+    // Must be a transaction so null-outs and the resource delete are atomic.
+    // Also collect placement/asset data INSIDE the transaction before cascades fire.
+    let placements: (typeof LearningResourceWikiPlacementTable.$inferSelect)[] = []
+    let mediaAssets: (typeof LearningMediaAssetTable.$inferSelect)[] = []
     const affectedCategoryIds = new Set<string>()
-    for (const pageId of affectedPageIds) {
-      const page = Database.use((db) =>
-        db.select().from(LearningWikiPageTable)
+
+    Database.transaction((tx) => {
+      // Collect placements (needed for wiki rebuild after delete)
+      placements = tx.select().from(LearningResourceWikiPlacementTable)
+        .where(eq(LearningResourceWikiPlacementTable.resource_id, resource.id))
+        .all()
+
+      const affectedPageIds = [...new Set(placements.map((p) => p.wiki_page_id))]
+      for (const pageId of affectedPageIds) {
+        const page = tx.select().from(LearningWikiPageTable)
           .where(eq(LearningWikiPageTable.id, pageId))
-          .get(),
-      )
-      if (page?.category_id) affectedCategoryIds.add(page.category_id)
-    }
+          .get()
+        if (page?.category_id) affectedCategoryIds.add(page.category_id)
+      }
 
-    // ── 3. Collect media asset file paths (before cascade wipes asset rows) ───
-    const mediaAssets = Database.use((db) =>
-      db.select().from(LearningMediaAssetTable)
+      // Collect media asset paths (needed for disk cleanup after delete)
+      mediaAssets = tx.select().from(LearningMediaAssetTable)
         .where(eq(LearningMediaAssetTable.resource_id, resource.id))
-        .all(),
-    )
+        .all()
 
-    // ── 4. Null-out soft (non-cascaded) references ────────────────────────────
-    Database.use((db) => {
-      db.update(LearningConceptWikiPlacementTable)
+      // Null-out all soft (non-cascaded) FK references before deleting
+      tx.update(LearningConceptWikiPlacementTable)
         .set({ introduced_by_resource_id: null })
         .where(eq(LearningConceptWikiPlacementTable.introduced_by_resource_id, resource.id))
         .run()
 
-      db.update(LearningGapTable)
+      tx.update(LearningGapTable)
         .set({ detected_from_resource_id: null })
         .where(eq(LearningGapTable.detected_from_resource_id, resource.id))
         .run()
 
-      db.update(LearningRoadmapItemTable)
+      tx.update(LearningRoadmapItemTable)
         .set({ resource_id: null })
         .where(eq(LearningRoadmapItemTable.resource_id, resource.id))
         .run()
-    })
 
-    // ── 5. Delete the resource row (cascades: placements, media rows, skill results) ──
-    Database.use((db) =>
-      db.delete(LearningResourceTable)
+      tx.update(LearningKbEventTable)
+        .set({ resource_id: null })
+        .where(eq(LearningKbEventTable.resource_id, resource.id))
+        .run()
+
+      // Delete the resource — cascades handle placements, media asset rows, skill results
+      tx.delete(LearningResourceTable)
         .where(eq(LearningResourceTable.id, resource.id))
-        .run(),
-    )
+        .run()
+
+      // Verify the row is gone
+      const stillExists = tx.select().from(LearningResourceTable)
+        .where(eq(LearningResourceTable.id, resource.id))
+        .get()
+      if (stillExists) {
+        throw new Error(`Resource row still exists after delete — possible unhandled FK constraint. resource_id=${resource.id}`)
+      }
+    })
 
     // ── 6. Delete files from disk ─────────────────────────────────────────────
     const deletedFiles: string[] = []

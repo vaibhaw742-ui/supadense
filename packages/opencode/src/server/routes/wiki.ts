@@ -3,7 +3,7 @@
  * Served under /wiki/* in the instance router.
  */
 import { Hono } from "hono"
-import { readFileSync, existsSync } from "fs"
+import { readFileSync, existsSync, readdirSync } from "fs"
 import path from "path"
 import { eq, desc, inArray } from "drizzle-orm"
 import { Instance } from "../../project/instance"
@@ -16,6 +16,7 @@ import {
   LearningConceptTable,
   LearningKbWorkspaceTable,
   LearningResourceWikiPlacementTable,
+  LearningMediaAssetTable,
 } from "../../learning/schema.sql"
 
 /** Resolve the KB workspace for the current request context.
@@ -24,6 +25,50 @@ import {
 function resolveWorkspace() {
   const project = Instance.project
   return Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
+}
+
+/**
+ * Returns a map of pageId → distinct resource count, computed from placements.
+ * Avoids the stale denormalized resource_count column on wiki pages.
+ */
+function distinctResourceCounts(pageIds: string[]): Map<string, number> {
+  if (pageIds.length === 0) return new Map()
+  const placements = Database.use((db) =>
+    db
+      .select({
+        wiki_page_id: LearningResourceWikiPlacementTable.wiki_page_id,
+        resource_id: LearningResourceWikiPlacementTable.resource_id,
+      })
+      .from(LearningResourceWikiPlacementTable)
+      .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, pageIds))
+      .all(),
+  )
+  const sets = new Map<string, Set<string>>()
+  for (const { wiki_page_id, resource_id } of placements) {
+    if (!sets.has(wiki_page_id)) sets.set(wiki_page_id, new Set())
+    sets.get(wiki_page_id)!.add(resource_id)
+  }
+  const result = new Map<string, number>()
+  for (const [pageId, ids] of sets) result.set(pageId, ids.size)
+  return result
+}
+
+function parseFrontmatter(content: string): Record<string, string> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!match) return {}
+  const fm: Record<string, string> = {}
+  for (const line of match[1].split("\n")) {
+    const colonIdx = line.indexOf(":")
+    if (colonIdx === -1) continue
+    const key = line.slice(0, colonIdx).trim()
+    const val = line.slice(colonIdx + 1).trim()
+    if (key) fm[key] = val
+  }
+  return fm
+}
+
+function stripFrontmatter(content: string): string {
+  return content.replace(/^---\n[\s\S]*?\n---\n?/, "")
 }
 
 export const WikiRoutes = () => {
@@ -37,6 +82,9 @@ export const WikiRoutes = () => {
 
     const categories = Workspace.getCategories(workspace.id)
     const pages = Workspace.getWikiPages(workspace.id)
+
+    const nonIndexPageIds = pages.filter((p) => p.page_type !== "index").map((p) => p.id)
+    const pageResourceCounts = distinctResourceCounts(nonIndexPageIds)
 
     const resourceCount = Database.use((db) =>
       db.select().from(LearningResourceTable).where(eq(LearningResourceTable.workspace_id, workspace.id)).all(),
@@ -172,9 +220,20 @@ export const WikiRoutes = () => {
         depth: cat.depth,
         icon: cat.icon,
         color: cat.color,
-        resource_count: pages
-          .filter((p) => p.category_id === cat.id)
-          .reduce((sum, p) => sum + p.resource_count, 0),
+        resource_count: (() => {
+          const ids = new Set<string>()
+          const catPageIds = pages.filter((p) => p.category_id === cat.id).map((p) => p.id)
+          // union all resource IDs across the category's pages for a true distinct count
+          const catPlacements = Database.use((db) =>
+            catPageIds.length === 0 ? [] :
+            db.select({ resource_id: LearningResourceWikiPlacementTable.resource_id })
+              .from(LearningResourceWikiPlacementTable)
+              .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, catPageIds))
+              .all()
+          )
+          for (const { resource_id } of catPlacements) ids.add(resource_id)
+          return ids.size
+        })(),
         pages: pages
           .filter((p) => p.category_id === cat.id)
           .map((p) => ({
@@ -183,7 +242,7 @@ export const WikiRoutes = () => {
             title: p.title,
             page_type: p.page_type,
             file_path: p.file_path,
-            resource_count: p.resource_count,
+            resource_count: pageResourceCounts.get(p.id) ?? 0,
             subcategory_slug: p.subcategory_slug,
           })),
       })),
@@ -202,6 +261,8 @@ export const WikiRoutes = () => {
     if (!workspace) return c.json([])
 
     const pages = Workspace.getWikiPages(workspace.id)
+    const pageIds = pages.map((p) => p.id)
+    const counts = distinctResourceCounts(pageIds)
     return c.json(
       pages.map((p) => ({
         id: p.id,
@@ -211,7 +272,7 @@ export const WikiRoutes = () => {
         file_path: p.file_path,
         category_slug: p.category_slug,
         subcategory_slug: p.subcategory_slug,
-        resource_count: p.resource_count,
+        resource_count: counts.get(p.id) ?? 0,
       })),
     )
   })
@@ -245,6 +306,56 @@ export const WikiRoutes = () => {
       db.select().from(LearningConceptTable).where(eq(LearningConceptTable.workspace_id, workspace.id)).all(),
     )
 
+    const pageCounts = distinctResourceCounts([page.id])
+    const subcatIds = subcategories.map((s) => s.id)
+    const subcatCounts = distinctResourceCounts(subcatIds)
+
+    // Fetch distinct resources for this page — sorted by placement date (latest first)
+    const placements = Database.use((db) =>
+      db.select().from(LearningResourceWikiPlacementTable)
+        .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, page.id))
+        .orderBy(desc(LearningResourceWikiPlacementTable.placed_at))
+        .all(),
+    )
+    const allResources = Database.use((db) =>
+      db.select().from(LearningResourceTable)
+        .where(eq(LearningResourceTable.workspace_id, workspace.id))
+        .all(),
+    )
+    const seenResourceIds = new Set<string>()
+    const pageResources: { id: string; title: string | null; url: string | null; modality: string; section_heading: string | null; placed_at: number }[] = []
+    for (const p of placements) {
+      if (seenResourceIds.has(p.resource_id)) continue
+      seenResourceIds.add(p.resource_id)
+      const r = allResources.find((r) => r.id === p.resource_id)
+      if (!r) continue
+      pageResources.push({
+        id: r.id,
+        title: r.title ?? null,
+        url: r.url ?? null,
+        modality: r.modality,
+        section_heading: p.section_heading ?? null,
+        placed_at: p.placed_at,
+      })
+    }
+
+    // Fetch images for all resources on this page — sorted by creation date (latest first)
+    const resourceIds = [...seenResourceIds]
+    const pageImages = resourceIds.length === 0 ? [] : Database.use((db) =>
+      db.select().from(LearningMediaAssetTable)
+        .where(inArray(LearningMediaAssetTable.resource_id, resourceIds))
+        .orderBy(desc(LearningMediaAssetTable.time_created))
+        .all(),
+    ).map((a) => ({
+      id: a.id,
+      src_path: a.local_path.replace(/^wiki\//, ""),
+      caption: a.caption ?? null,
+      description: a.description ?? null,
+      alt_text: a.alt_text ?? null,
+      asset_type: a.asset_type,
+      time_created: a.time_created,
+    }))
+
     return c.json({
       page: {
         id: page.id,
@@ -253,7 +364,7 @@ export const WikiRoutes = () => {
         description: page.description,
         page_type: page.page_type,
         file_path: page.file_path,
-        resource_count: page.resource_count,
+        resource_count: pageCounts.get(page.id) ?? 0,
         word_count: page.word_count,
         category_slug: page.category_slug,
         subcategory_slug: page.subcategory_slug,
@@ -275,7 +386,7 @@ export const WikiRoutes = () => {
         title: s.title,
         file_path: s.file_path,
         subcategory_slug: s.subcategory_slug,
-        resource_count: s.resource_count,
+        resource_count: subcatCounts.get(s.id) ?? 0,
       })),
       concepts: concepts.slice(0, 30).map((c) => ({
         name: c.name,
@@ -283,6 +394,8 @@ export const WikiRoutes = () => {
         definition: c.definition,
         related_slugs: c.related_slugs,
       })),
+      resources: pageResources,
+      images: pageImages,
     })
   })
 
@@ -322,6 +435,35 @@ export const WikiRoutes = () => {
   // NOTE: Browser <img> requests carry no custom headers, so we cannot use the
   // x-opencode-directory header here. Instead: try the current instance workspace
   // first, then scan all workspaces for a matching file.
+  // ── Roadmap list ────────────────────────────────────────────────────────────
+  app.get("/roadmap", async (c) => {
+    const ws = resolveWorkspace()
+    if (!ws) return c.json({ docs: [] })
+    const roadmapDir = path.join(ws.kb_path, "wiki", "roadmap")
+    if (!existsSync(roadmapDir)) return c.json({ docs: [] })
+    const files = readdirSync(roadmapDir).filter((f) => f.endsWith(".md"))
+    const docs = files.map((file) => {
+      const content = readFileSync(path.join(roadmapDir, file), "utf-8")
+      const fm = parseFrontmatter(content)
+      const slug = file.replace(/\.md$/, "")
+      return { slug, title: fm.title ?? slug, type: fm.type ?? "roadmap", created: fm.created ?? null }
+    })
+    return c.json({ docs })
+  })
+
+  // ── Single roadmap doc ───────────────────────────────────────────────────────
+  app.get("/roadmap/:slug", async (c) => {
+    const slug = c.req.param("slug")
+    const ws = resolveWorkspace()
+    if (!ws) return c.text("Not found", 404)
+    const filePath = path.join(ws.kb_path, "wiki", "roadmap", `${slug}.md`)
+    if (!existsSync(filePath)) return c.text("Not found", 404)
+    const content = readFileSync(filePath, "utf-8")
+    const fm = parseFrontmatter(content)
+    const body = stripFrontmatter(content)
+    return c.json({ slug, title: fm.title ?? slug, type: fm.type ?? "roadmap", created: fm.created ?? null, content: body })
+  })
+
   app.get("/assets/*", async (c) => {
     // c.req.param("*") can be undefined in some Hono versions; extract from path instead.
     // c.req.path returns the FULL path (e.g. "/wiki/assets/01KP5MJ7/file.png") — strip up to "assets/"

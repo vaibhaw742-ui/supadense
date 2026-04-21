@@ -35,6 +35,8 @@ export function useWikiApi() {
     concepts: () => get<WikiConcept[]>("/wiki/concepts"),
     search: (q: string) => get<WikiSearchResult>(`/wiki/search?q=${encodeURIComponent(q)}`),
     pages: () => get<WikiPageSummary[]>("/wiki/pages"),
+    roadmapList: () => get<{ docs: WikiRoadmapDoc[] }>("/wiki/roadmap"),
+    roadmapDoc: (slug: string) => get<WikiRoadmapDocFull>(`/wiki/roadmap/${slug}`),
     dirSlug: () => params.dir,
   }
 }
@@ -103,6 +105,25 @@ export interface WikiPageSummary {
   category_slug?: string | null
 }
 
+export interface WikiImage {
+  id: string
+  src_path: string
+  caption: string | null
+  description: string | null
+  alt_text: string | null
+  asset_type: string
+  time_created: number
+}
+
+export interface WikiResource {
+  id: string
+  title: string | null
+  url: string | null
+  modality: string
+  section_heading: string | null
+  placed_at: number
+}
+
 export interface WikiPageData {
   page: {
     id: string
@@ -134,6 +155,8 @@ export interface WikiPageData {
     resource_count: number
   }[]
   concepts: WikiConcept[]
+  resources: WikiResource[]
+  images: WikiImage[]
 }
 
 export interface WikiConcept {
@@ -149,6 +172,17 @@ export interface WikiEvent {
   event_type: string
   summary: string
   time_created: number
+}
+
+export interface WikiRoadmapDoc {
+  slug: string
+  title: string
+  type: "roadmap" | "blog"
+  created: string | null
+}
+
+export interface WikiRoadmapDocFull extends WikiRoadmapDoc {
+  content: string
 }
 
 export interface WikiSearchResult {

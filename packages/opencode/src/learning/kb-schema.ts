@@ -61,24 +61,6 @@ export const DEFAULT_SECTIONS: SchemaSection[] = [
     description:
       "Core concepts, definitions, and terminology introduced by this resource. Use bullet points: **Term** — definition.",
   },
-  {
-    slug: "architecture-overview",
-    heading: "## Architecture Overview",
-    description:
-      "System design, architecture patterns, and structural components described in this resource.",
-  },
-  {
-    slug: "images",
-    heading: "## Images",
-    description:
-      "Diagrams, screenshots, charts, and visual references extracted from this resource.",
-  },
-  {
-    slug: "sources",
-    heading: "## Sources",
-    description:
-      "Papers, links, tools, and external references cited or recommended by this resource.",
-  },
 ]
 
 // ─── Default subcategory structure ───────────────────────────────────────────

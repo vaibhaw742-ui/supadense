@@ -413,20 +413,9 @@ export namespace WikiBuilder {
         catSections.set(s.slug, { heading: s.heading, entries: [] })
       }
     }
-    // Ensure images section always exists
-    if (!catSections.has("images")) {
-      catSections.set("images", { heading: "## Images", entries: [] })
-    }
-
     if (catSections.size > 0) {
       for (const [sectionSlug, { heading, entries }] of catSections) {
-        if (sectionSlug === "images") {
-          const imgLines = buildImagesSectionLines(page.id)
-          lines.push(heading, "")
-          if (imgLines.length > 0) lines.push(...imgLines)
-          else lines.push("_No images yet._", "")
-          continue
-        }
+        if (sectionSlug === "images" || sectionSlug === "sources" || sectionSlug === "architecture-overview") continue
 
         lines.push(heading, "")
         if (entries.length > 0) {
@@ -484,13 +473,7 @@ export namespace WikiBuilder {
     }
 
     for (const [sectionSlug, { heading, entries }] of sections) {
-      if (sectionSlug === "images") {
-        const imgLines = buildImagesSectionLines(page.id)
-        lines.push(heading, "")
-        if (imgLines.length > 0) lines.push(...imgLines)
-        else lines.push("_No images yet._", "")
-        continue
-      }
+      if (sectionSlug === "images" || sectionSlug === "sources" || sectionSlug === "architecture-overview") continue
 
       lines.push(heading, "")
       if (entries.length > 0) {
@@ -523,25 +506,6 @@ export namespace WikiBuilder {
       lines.push(crossRefs)
     }
 
-    // Resources sidebar
-    if (placements.length > 0) {
-      const resourceIds = [...new Set(placements.map((p) => p.resource_id))]
-      const resources = resourceIds
-        .map((id) =>
-          Database.use((db) =>
-            db.select().from(LearningResourceTable).where(eq(LearningResourceTable.id, id)).get(),
-          ),
-        )
-        .filter(Boolean)
-
-      lines.push("## Sources", "")
-      for (const r of resources) {
-        if (!r) continue
-        const link = r.url ? `[${r.title ?? r.url}](${r.url})` : r.title ?? "_text paste_"
-        lines.push(`- ${link}`)
-      }
-      lines.push("")
-    }
 
     lines.push(
       "---",

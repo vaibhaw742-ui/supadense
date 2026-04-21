@@ -1,24 +1,37 @@
 /* ── Fonts ───────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* ── Design tokens ────────────────────────────────────────────────────────── */
+/* ── Design tokens (Notion-inspired warm neutral palette) ────────────────── */
 :root {
-  --wk-bg:           #ffffff;
-  --wk-bg-sidebar:   #fffbeb;
-  --wk-bg-subtle:    #f9f5ee;
-  --wk-bg-inset:     #f3ede2;
-  --wk-border:       #e8e0d0;
-  --wk-border-muted: #f0ead8;
-  --wk-text:         #1c1917;
-  --wk-text-muted:   #57534e;
-  --wk-text-faint:   #a8a29e;
-  --wk-accent:       #0d9488;
-  --wk-accent-hover: #0f766e;
-  --wk-green:        #16a34a;
-  --wk-red:          #dc2626;
-  --wk-amber:        #d97706;
-  --wk-purple:       #7c3aed;
-  --wk-yellow-tint:  #fefce8;
+  /* Backgrounds */
+  --wk-bg:              #ffffff;
+  --wk-bg-sidebar:      #f7f7f5;
+  --wk-bg-hover:        #efefed;
+  --wk-bg-active:       #e9e9e7;
+  --wk-bg-subtle:       #f1f1ef;
+  --wk-bg-inset:        #eae9e6;
+
+  /* Borders */
+  --wk-border:          rgba(55, 53, 47, 0.09);
+  --wk-border-muted:    rgba(55, 53, 47, 0.05);
+
+  /* Text */
+  --wk-text:            #37352f;
+  --wk-text-muted:      #787774;
+  --wk-text-faint:      #b0aca6;
+
+  /* Accent (kept for links, highlights) */
+  --wk-accent:          #2d6a4f;
+  --wk-accent-hover:    #1b4332;
+  --wk-accent-light:    rgba(45, 106, 79, 0.08);
+
+  /* Semantic */
+  --wk-green:           #2d6a4f;
+  --wk-red:             #e03e3e;
+  --wk-amber:           #d97706;
+  --wk-blue:            #0f7488;
+  --wk-purple:          #6940a5;
+  --wk-yellow-tint:     #fbf3db;
 }
 
 /* ── Wiki root layout ─────────────────────────────────────────────────────── */
@@ -27,20 +40,22 @@
   flex-direction: column;
   width: 100vw;
   height: 100vh;
-  background: var(--wk-bg);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--wk-bg-sidebar);
+  font-family: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow: hidden;
   color: var(--wk-text);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
 .wk-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
   height: 44px;
-  padding: 0 20px;
+  padding: 0 16px;
   background: var(--wk-bg);
   border-bottom: 1px solid var(--wk-border);
   flex-shrink: 0;
@@ -48,33 +63,34 @@
 
 .wk-logo {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-accent);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  margin-right: 6px;
-  letter-spacing: -0.02em;
+  margin-right: 4px;
+  letter-spacing: -0.01em;
 }
 
 .wk-search {
-  width: 220px;
+  width: 200px;
   height: 28px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--wk-border);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 4px;
+  font-size: 13px;
   color: var(--wk-text);
   background: var(--wk-bg-subtle);
   outline: none;
+  font-family: inherit;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .wk-search:focus {
-  border-color: var(--wk-accent);
+  border-color: rgba(55, 53, 47, 0.3);
   background: var(--wk-bg);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+  box-shadow: 0 0 0 2px rgba(55, 53, 47, 0.08);
 }
 
 .wk-search::placeholder {
@@ -85,33 +101,32 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
 }
 
 .wk-nav-item {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wk-text-muted);
   cursor: pointer;
   user-select: none;
-  padding: 4px 10px;
-  border-radius: 5px;
-  transition: color 0.12s, background 0.12s;
+  padding: 5px 9px;
+  border-radius: 4px;
+  transition: color 0.1s, background 0.1s;
 }
 
 .wk-nav-item:hover {
   color: var(--wk-text);
-  background: var(--wk-bg-subtle);
+  background: var(--wk-bg-hover);
 }
 
 .wk-nav-active {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--wk-text);
 }
 
 .wk-avatar {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: var(--wk-accent);
   color: #fff;
   font-size: 10px;
@@ -122,7 +137,7 @@
   cursor: pointer;
   user-select: none;
   letter-spacing: 0.02em;
-  margin-left: 8px;
+  margin-left: 6px;
 }
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
@@ -130,79 +145,309 @@
   display: flex;
   flex: 1;
   overflow: hidden;
+  height: 100%;
+  gap: 8px;
+  padding: 8px;
+  align-items: flex-start;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIDEBAR — card
+   ═══════════════════════════════════════════════════════════════════════════ */
 .wk-sidebar {
-  width: 140px;
+  width: 280px;
   flex-shrink: 0;
-  background: var(--wk-bg-sidebar);
-  border-right: 1px solid var(--wk-border);
-  overflow-y: auto;
-  padding: 16px 0;
+  background: var(--wk-bg);
+  border: 1px solid var(--wk-border);
+  border-radius: 12px;
+  padding: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  scrollbar-width: none;
+  transition: width 0.2s ease, padding 0.2s ease;
 }
 
-.wk-sb-label {
+.wk-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scrollable nav area */
+.wk-sb-nav {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.wk-sb-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* Profile section pinned at the bottom of the sidebar */
+.wk-sb-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  flex-shrink: 0;
+}
+
+.wk-sb-profile-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--wk-accent);
+  color: #fff;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--wk-text-faint);
-  padding: 0 14px;
-  margin: 0 0 5px;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
 }
 
-.wk-sb-link {
-  display: block;
-  font-size: 12px;
-  color: var(--wk-accent);
-  padding: 4px 14px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: color 0.1s, background 0.1s;
+.wk-sb-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wk-sb-profile-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wk-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.wk-sb-profile-sub {
+  font-size: 11px;
+  color: var(--wk-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Section label (Recents, Categories, Stats) */
+.wk-sb-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--wk-text-muted);
+  padding: 16px 12px 4px;
+  margin: 0;
+  letter-spacing: 0;
+  text-transform: none;
+  user-select: none;
+}
+
+/* Collapsible section label */
+.wk-sb-label--toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding-right: 12px;
+  border-radius: 4px;
+  transition: color 0.1s;
+}
+
+.wk-sb-label--toggle:hover {
+  color: var(--wk-text);
+}
+
+.wk-sb-label-arrow {
+  font-size: 10px;
+  color: var(--wk-text-faint);
+}
+
+/* Nav link row — generous padding, full-width hover */
+.wk-sb-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--wk-text);
+  padding: 5px 12px;
+  margin: 1px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 30px;
+  line-height: 1;
+}
+
 .wk-sb-link:hover {
-  color: var(--wk-accent-hover);
-  background: rgba(13, 148, 136, 0.06);
+  background: var(--wk-bg-hover);
+  color: var(--wk-text);
 }
 
 .wk-sb-link-active {
-  color: var(--wk-accent-hover);
-  font-weight: 600;
+  background: var(--wk-bg-active);
+  color: var(--wk-text);
+  font-weight: 500;
+}
+
+.wk-sb-link-active:hover {
+  background: var(--wk-bg-active);
 }
 
 .wk-sb-link-sub {
   padding-left: 22px;
+  font-size: 12px;
   color: var(--wk-text-muted);
-  font-size: 11px;
+  min-height: 28px;
 }
 
 .wk-sb-link-back {
-  color: var(--wk-text-faint);
-  margin-top: 2px;
+  color: var(--wk-text-muted);
+  font-size: 12px;
 }
 
 .wk-sb-link-back:hover {
-  color: var(--wk-text-muted);
-  background: rgba(13, 148, 136, 0.06);
+  color: var(--wk-text);
+  background: var(--wk-bg-hover);
 }
 
+/* Stat rows inside sidebar */
 .wk-sb-stat {
-  font-size: 11px;
-  color: var(--wk-text-faint);
+  font-size: 12px;
+  color: var(--wk-text-muted);
   padding: 2px 14px;
 }
 
-/* ── Main area ───────────────────────────────────────────────────────────── */
+/* ── Graph panel collapsed — shrinks to toggle strip ────────────────────── */
+.wk-graph-panel--collapsed {
+  width: 38px !important;
+}
+
+.wk-graph-panel--collapsed .wk-graph-header {
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 8px 0;
+}
+
+/* ── Sidebar top row (logo + collapse button) ────────────────────────────── */
+.wk-sb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32px 8px 12px 12px;
+  flex-shrink: 0;
+}
+
+.wk-sb-logo {
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wk-sb-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--wk-text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+}
+
+.wk-sb-collapse-btn:hover {
+  background: var(--wk-bg-active);
+  color: var(--wk-text);
+}
+
+/* When collapsed, sidebar shows only the wk-sb-top strip */
+.wk-sidebar--collapsed {
+  width: 36px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.wk-sidebar--collapsed .wk-sb-top {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* ── Graph panel toggle (in header) ──────────────────────────────────────── */
+.wk-panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--wk-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+}
+
+.wk-panel-toggle:hover {
+  background: var(--wk-bg-hover);
+  color: var(--wk-text);
+}
+
+/* ── Content area — transparent row, children are individual cards ────────── */
+.wk-content-area {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-width: 0;
+  gap: 8px;
+}
+
+/* ── Main area — its own card ─────────────────────────────────────────────── */
 .wk-main {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 28px;
+  overflow-x: auto;
+  padding: 32px 40px;
   background: var(--wk-bg);
+  border: 1px solid var(--wk-border);
+  border-radius: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Center all direct content blocks within a consistent max-width */
+.wk-main > *,
+.wk-main .wk-title,
+.wk-main .wk-subtitle,
+.wk-main .wk-section-label,
+.wk-main .wk-grid,
+.wk-main .wk-activity-list,
+.wk-main .wk-loading,
+.wk-main .wk-page-content {
+  width: 100%;
+  max-width: 1000px;
 }
 
 .wk-loading {
@@ -213,28 +458,27 @@
 
 /* ── Home content ─────────────────────────────────────────────────────────── */
 .wk-title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
   margin: 0 0 6px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .wk-subtitle {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--wk-text-muted);
-  margin: 0 0 24px;
+  margin: 0 0 28px;
   line-height: 1.5;
 }
 
 .wk-section-label {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--wk-text-faint);
-  margin-bottom: 12px;
+  font-weight: 500;
+  color: var(--wk-text-muted);
+  margin-bottom: 10px;
+  letter-spacing: 0;
 }
 
 /* ── Recent activity list ────────────────────────────────────────────────── */
@@ -242,19 +486,17 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
 .wk-activity-item {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 9px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--wk-border-muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .wk-activity-item:last-child {
@@ -263,8 +505,8 @@
 
 .wk-activity-dot {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--wk-text-faint);
   margin-top: 3px;
@@ -272,7 +514,7 @@
 
 .wk-activity-dot[data-type="resource_added"],
 .wk-activity-dot[data-type="memorize"] {
-  background: var(--wk-accent);
+  background: var(--wk-blue);
 }
 
 .wk-activity-dot[data-type="onboarding"] {
@@ -299,36 +541,34 @@
 .wk-activity-date {
   flex-shrink: 0;
   color: var(--wk-text-faint);
-  font-size: 11.5px;
+  font-size: 11px;
 }
 
 /* ── Category grid ───────────────────────────────────────────────────────── */
 .wk-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  max-width: 680px;
+  gap: 8px;
 }
 
 /* ── Category card ───────────────────────────────────────────────────────── */
 .wk-card {
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 14px 16px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 
 .wk-card:hover {
-  border-color: var(--wk-accent);
-  background: rgba(13, 148, 136, 0.03);
-  box-shadow: 0 1px 6px rgba(13, 148, 136, 0.1);
+  background: var(--wk-bg-hover);
+  box-shadow: 0 1px 3px rgba(55, 53, 47, 0.06);
 }
 
 .wk-card-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
   margin-bottom: 5px;
@@ -344,37 +584,40 @@
 .wk-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
-  color: var(--wk-text-faint);
-  margin-bottom: 12px;
+  color: var(--wk-text-muted);
+  margin-bottom: 14px;
 }
 
 .wk-breadcrumb-link {
-  color: var(--wk-accent);
+  color: var(--wk-text-muted);
   cursor: pointer;
+  transition: color 0.1s;
 }
 
 .wk-breadcrumb-link:hover {
-  color: var(--wk-accent-hover);
+  color: var(--wk-text);
   text-decoration: underline;
 }
 
 .wk-breadcrumb-sep {
-  color: var(--wk-border);
+  color: var(--wk-text-faint);
 }
 
 .wk-breadcrumb-current {
-  color: var(--wk-text-muted);
+  color: var(--wk-text);
+  font-weight: 500;
 }
 
 .wk-page-title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
-  margin: 0 0 10px;
-  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .wk-page-meta {
@@ -383,7 +626,7 @@
   gap: 10px;
   font-size: 12px;
   color: var(--wk-text-faint);
-  margin-bottom: 22px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
@@ -391,10 +634,10 @@
 .wk-toc {
   float: right;
   clear: right;
-  margin: 0 0 16px 24px;
-  background: var(--wk-bg-sidebar);
+  margin: 0 0 16px 28px;
+  background: var(--wk-bg-subtle);
   border: 1px solid var(--wk-border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 12px 14px;
   min-width: 160px;
   max-width: 210px;
@@ -402,12 +645,11 @@
 }
 
 .wk-toc-title {
-  font-weight: 700;
-  color: var(--wk-text-faint);
+  font-weight: 500;
+  color: var(--wk-text-muted);
   margin-bottom: 8px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .wk-toc-list {
@@ -416,19 +658,18 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .wk-toc-link {
-  color: var(--wk-accent);
+  color: var(--wk-text-muted);
   text-decoration: none;
   font-size: 12px;
   transition: color 0.1s;
 }
 
 .wk-toc-link:hover {
-  color: var(--wk-accent-hover);
-  text-decoration: underline;
+  color: var(--wk-text);
 }
 
 .wk-toc-sub {
@@ -438,22 +679,21 @@
 /* ── Prose ───────────────────────────────────────────────────────────────── */
 .wk-prose {
   line-height: 1.75;
-  color: var(--wk-text-muted);
+  color: var(--wk-text);
   font-size: 14px;
-  max-width: 720px;
 }
 
 .wk-prose h1, .wk-prose .wk-h1 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
-  margin: 24px 0 10px;
-  letter-spacing: -0.01em;
+  margin: 28px 0 10px;
+  letter-spacing: -0.02em;
 }
 
 .wk-prose h2, .wk-prose .wk-h2 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
@@ -463,22 +703,24 @@
 }
 
 .wk-prose h3, .wk-prose .wk-h3 {
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
-  margin: 18px 0 6px;
+  margin: 20px 0 6px;
 }
 
 .wk-prose p {
   margin: 8px 0;
+  color: var(--wk-text);
 }
 
 .wk-prose ul, .wk-prose ol {
   margin: 8px 0 8px 18px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  color: var(--wk-text);
 }
 
 .wk-prose ul {
@@ -492,7 +734,7 @@
 .wk-prose blockquote {
   border-left: 3px solid var(--wk-border);
   padding-left: 14px;
-  color: var(--wk-text-faint);
+  color: var(--wk-text-muted);
   font-style: italic;
   margin: 12px 0;
 }
@@ -500,35 +742,33 @@
 /* ── Collapsible source blocks (<details>) ────────────────────────────────── */
 .wk-prose details {
   border: 1px solid var(--wk-border);
-  border-radius: 7px;
+  border-radius: 5px;
   margin: 8px 0;
-  background: var(--wk-bg-sidebar);
+  background: var(--wk-bg-subtle);
   overflow: hidden;
 }
 
 .wk-prose details[open] {
   background: var(--wk-bg);
-  border-color: rgba(13, 148, 136, 0.3);
 }
 
 .wk-prose details > summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 9px 14px;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--wk-text-muted);
+  font-weight: 500;
+  color: var(--wk-text);
   user-select: none;
   list-style: none;
   border-bottom: 1px solid transparent;
-  transition: color 0.12s;
+  transition: background 0.1s;
 }
 
 .wk-prose details[open] > summary {
   border-bottom-color: var(--wk-border);
-  color: var(--wk-text);
 }
 
 .wk-prose details > summary::-webkit-details-marker {
@@ -537,7 +777,7 @@
 
 .wk-prose details > summary::before {
   content: "▶";
-  font-size: 9px;
+  font-size: 8px;
   color: var(--wk-text-faint);
   transition: transform 0.15s;
   flex-shrink: 0;
@@ -545,7 +785,7 @@
 
 .wk-prose details[open] > summary::before {
   transform: rotate(90deg);
-  color: var(--wk-accent);
+  color: var(--wk-text-muted);
 }
 
 .wk-prose details > :not(summary) {
@@ -555,7 +795,7 @@
 .wk-prose pre {
   background: var(--wk-bg-inset);
   border: 1px solid var(--wk-border);
-  border-radius: 6px;
+  border-radius: 4px;
   padding: 12px 14px;
   overflow-x: auto;
   margin: 10px 0;
@@ -564,13 +804,13 @@
 }
 
 .wk-prose code {
-  background: var(--wk-yellow-tint);
+  background: var(--wk-bg-inset);
   border: 1px solid var(--wk-border);
-  border-radius: 4px;
+  border-radius: 3px;
   padding: 1px 5px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
-  color: #92400e;
+  color: #c0392b;
 }
 
 .wk-prose pre code {
@@ -583,17 +823,18 @@
 .wk-prose a {
   color: var(--wk-accent);
   text-decoration: none;
+  border-bottom: 1px solid rgba(45, 106, 79, 0.3);
 }
 
 .wk-prose a:hover {
   color: var(--wk-accent-hover);
-  text-decoration: underline;
+  border-bottom-color: var(--wk-accent-hover);
 }
 
 .wk-prose hr {
   border: none;
   border-top: 1px solid var(--wk-border);
-  margin: 20px 0;
+  margin: 22px 0;
 }
 
 /* ── Concepts section ────────────────────────────────────────────────────── */
@@ -604,13 +845,12 @@
 
 .wk-section-heading {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--wk-text-faint);
+  font-weight: 500;
+  color: var(--wk-text-muted);
   margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--wk-border);
+  letter-spacing: 0;
 }
 
 .wk-concepts-grid {
@@ -621,27 +861,27 @@
 }
 
 .wk-concept-card {
-  background: var(--wk-yellow-tint);
+  background: var(--wk-bg-subtle);
   border: 1px solid var(--wk-border);
-  border-radius: 7px;
+  border-radius: 5px;
   padding: 10px 12px;
-  transition: border-color 0.12s;
+  transition: background 0.1s;
 }
 
 .wk-concept-card:hover {
-  border-color: var(--wk-accent);
+  background: var(--wk-bg-hover);
 }
 
 .wk-concept-name {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--wk-accent);
   display: block;
   margin-bottom: 4px;
 }
 
 .wk-concept-def {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--wk-text-muted);
   line-height: 1.45;
 }
@@ -655,7 +895,7 @@
 .wk-subcat-list {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   margin-top: 8px;
 }
 
@@ -663,22 +903,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 14px;
-  background: var(--wk-bg-sidebar);
+  padding: 8px 12px;
+  background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 7px;
+  border-radius: 5px;
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
+  transition: background 0.1s;
 }
 
 .wk-subcat-item:hover {
-  background: rgba(13, 148, 136, 0.05);
-  border-color: var(--wk-accent);
+  background: var(--wk-bg-hover);
 }
 
 .wk-subcat-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--wk-text);
 }
 
@@ -710,34 +949,36 @@
 .wk-section-tab {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px 16px 11px;
+  gap: 6px;
+  padding: 8px 14px 10px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  color: var(--wk-text-faint);
+  color: var(--wk-text-muted);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.1s, border-color 0.1s;
   user-select: none;
+  border-radius: 0;
 }
 
 .wk-section-tab:hover {
-  color: var(--wk-text-muted);
+  color: var(--wk-text);
+  background: var(--wk-bg-hover);
 }
 
 .wk-section-tab--active {
   color: var(--wk-text);
   font-weight: 500;
-  border-bottom-color: var(--wk-accent);
+  border-bottom-color: var(--wk-text);
 }
 
 .wk-tab-icon {
   font-size: 13px;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .wk-section-tab--active .wk-tab-icon {
@@ -769,46 +1010,78 @@
   clear: both;
 }
 
-/* ── Graph panel ─────────────────────────────────────────────────────────── */
-.wk-graph-panel {
-  width: 50%;
+/* ── Resize divider between main and right panel ─────────────────────────── */
+.wk-resize-divider {
+  width: 8px;
   flex-shrink: 0;
-  border-left: 1px solid var(--wk-border);
-  background: var(--wk-bg-sidebar);
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+.wk-resize-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 80%;
+  border-radius: 1px;
+  background: var(--wk-border);
+  transition: background 0.15s;
+}
+
+.wk-resize-divider:hover::after,
+.wk-resize-divider:active::after {
+  background: var(--wk-accent);
+  width: 2px;
+  left: 1.5px;
+  height: 85%;
+}
+
+/* ── Graph panel — right card ────────────────────────────────────────────── */
+.wk-graph-panel {
+  flex-shrink: 0;
+  background: var(--wk-bg);
+  border: 1px solid var(--wk-border);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 35%;
+  max-width: 55%;
 }
 
 .wk-graph-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--wk-border);
+  padding: 32px 28px 12px;
   flex-shrink: 0;
-  background: var(--wk-bg-sidebar);
+  background: var(--wk-bg);
 }
 
 .wk-graph-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--wk-text-faint);
+  font-size: 26px;
+  font-weight: 400;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--wk-text);
+  line-height: 1.2;
 }
 
 .wk-graph-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--wk-text-faint);
-  opacity: 0.7;
 }
 
 .wk-graph-body {
   flex: 1;
   overflow: hidden;
   position: relative;
-  background: var(--wk-bg-sidebar);
+  background: var(--wk-bg);
 }
 
 .wk-graph-container {
@@ -818,12 +1091,13 @@
 
 .wk-graph-tooltip {
   position: absolute;
-  background: var(--wk-text);
-  color: #fff;
+  background: var(--wk-bg-active);
+  border: 1px solid var(--wk-border);
+  color: var(--wk-text);
   font-size: 11px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: inherit;
   padding: 5px 9px;
-  border-radius: 5px;
+  border-radius: 4px;
   pointer-events: none;
   white-space: nowrap;
   z-index: 10;
@@ -831,7 +1105,7 @@
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(55, 53, 47, 0.12);
 }
 
 .wk-graph-fit-btn {
@@ -841,24 +1115,23 @@
   z-index: 5;
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 5px;
+  border-radius: 4px;
   width: 26px;
   height: 26px;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--wk-text-faint);
+  color: var(--wk-text-muted);
   padding: 0;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.1s, color 0.1s;
 }
 
 .wk-graph-fit-btn:hover {
-  background: var(--wk-yellow-tint);
-  border-color: var(--wk-accent);
-  color: var(--wk-accent);
+  background: var(--wk-bg-hover);
+  color: var(--wk-text);
 }
 
 .wk-graph-legend {
@@ -866,8 +1139,7 @@
   flex-wrap: wrap;
   gap: 8px 14px;
   padding: 8px 14px;
-  border-top: 1px solid var(--wk-border);
-  background: var(--wk-bg-sidebar);
+  background: var(--wk-bg);
   flex-shrink: 0;
 }
 
@@ -875,21 +1147,275 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--wk-text-faint);
 }
 
 .wk-legend-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* ── Resource panel (wiki-page right column) ─────────────────────────────── */
+.wk-resource-panel {
+  flex-shrink: 0;
+  background: var(--wk-bg);
+  border: 1px solid var(--wk-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 25%;
+  max-width: 50%;
+}
+
+.wk-resource-panel-header {
+  display: flex;
+  flex-direction: column;
+  padding: 32px 24px 0;
+  flex-shrink: 0;
+  background: var(--wk-bg);
+  gap: 12px;
+}
+
+/* Tab strip inside resource panel */
+.wk-rp-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--wk-border);
+  margin: 0 -24px;
+  padding: 0 16px;
+}
+
+.wk-rp-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--wk-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.1s, border-color 0.1s;
+  user-select: none;
+}
+
+.wk-rp-tab:hover {
+  color: var(--wk-text);
+}
+
+.wk-rp-tab--active {
+  color: var(--wk-text);
+  font-weight: 500;
+  border-bottom-color: var(--wk-text);
+}
+
+.wk-rp-tab-count {
+  font-size: 11px;
+  background: var(--wk-bg-active);
+  border-radius: 8px;
+  padding: 1px 5px;
+  color: var(--wk-text-muted);
+  font-weight: 400;
+}
+
+.wk-rp-sort-btn {
+  font-size: 11px;
+  color: var(--wk-text-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: color 0.1s, background 0.1s;
+  align-self: center;
+  margin-bottom: 1px;
+}
+
+.wk-rp-sort-btn:hover {
+  color: var(--wk-text);
+  background: var(--wk-bg-hover);
+}
+
+.wk-rp-empty {
+  font-size: 13px;
+  color: var(--wk-text-faint);
+  font-style: italic;
+  padding: 16px 24px;
+}
+
+.wk-resource-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: none;
+}
+
+.wk-resource-list::-webkit-scrollbar {
+  display: none;
+}
+
+.wk-resource-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: default;
+  transition: background 0.1s;
+}
+
+.wk-resource-item:hover {
+  background: var(--wk-bg-hover);
+}
+
+.wk-resource-icon {
+  font-size: 13px;
+  color: var(--wk-text-faint);
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 14px;
+  text-align: center;
+}
+
+.wk-resource-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wk-resource-title {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--wk-text);
+  text-decoration: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+a.wk-resource-title:hover {
+  color: var(--wk-accent);
+  text-decoration: underline;
+  border-bottom: none;
+}
+
+.wk-resource-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wk-resource-domain {
+  font-size: 11px;
+  color: var(--wk-text-faint);
+}
+
+.wk-resource-date {
+  font-size: 11px;
+  color: var(--wk-text-faint);
+  margin-top: 1px;
+}
+
+.wk-resource-section-tag {
+  font-size: 11px;
+  color: var(--wk-text-muted);
+  background: var(--wk-bg-subtle);
+  border: 1px solid var(--wk-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* ── Image masonry in resource panel ─────────────────────────────────────── */
+.wk-image-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: none;
+}
+
+.wk-image-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.wk-image-card {
+  width: 100%;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--wk-border);
+  background: var(--wk-bg-subtle);
+  transition: box-shadow 0.15s;
+}
+
+.wk-image-card:hover {
+  box-shadow: 0 2px 10px rgba(55, 53, 47, 0.12);
+}
+
+.wk-image-thumb {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  background: var(--wk-bg-inset);
+}
+
+.wk-image-caption-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px 7px;
+  border-top: 1px solid var(--wk-border);
+}
+
+.wk-image-caption {
+  font-size: 11px;
+  color: var(--wk-text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  flex: 1;
+}
+
+.wk-image-date {
+  font-size: 11px;
+  color: var(--wk-text-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 /* ── Wiki images ─────────────────────────────────────────────────────────── */
 .wiki-img {
   max-width: 100%;
-  border-radius: 7px;
+  border-radius: 5px;
   margin: 12px 0;
   display: block;
   border: 1px solid var(--wk-border);

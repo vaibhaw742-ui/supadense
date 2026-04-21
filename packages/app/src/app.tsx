@@ -51,6 +51,8 @@ const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
 const WikiPage = lazy(() => import("@/pages/wiki/wiki-page"))
+const WikiRoadmapList = lazy(() => import("@/pages/wiki/wiki-roadmap"))
+const WikiRoadmapPage = lazy(() => import("@/pages/wiki/wiki-roadmap-page"))
 const Loading = () => <div class="size-full" />
 
 if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
@@ -315,6 +317,8 @@ export function AppInterface(props: {
                   <Route path="/session/:id?" component={SessionRoute} />
                 </Route>
                 <Route path="/:dir/wiki" component={WikiHome} />
+                <Route path="/:dir/wiki/roadmap" component={WikiRoadmapList} />
+                <Route path="/:dir/wiki/roadmap/:slug" component={WikiRoadmapPage} />
                 <Route path="/:dir/wiki/:slug" component={WikiPage} />
               </Dynamic>
             </GlobalSyncProvider>
