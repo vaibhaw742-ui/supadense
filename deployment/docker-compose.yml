@@ -24,11 +24,8 @@ services:
 
       # Mount Desktop so any folder on it can be opened as a project
       - /Users/vaibhawkhemka/Desktop:/workspaces/Desktop
-    environment:
-      # Suppress the "server is unsecured" warning in dev
-      # Set a real password in production: OPENCODE_SERVER_PASSWORD=yourpassword
-      - OPENCODE_SERVER_PASSWORD=
-      - AIRTOP_API_KEY=${AIRTOP_API_KEY:-}
+    env_file:
+      - .env
     restart: unless-stopped
 
   # ── Frontend: Vite dev server ───────────────────────────────────────────────

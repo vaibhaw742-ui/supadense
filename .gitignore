@@ -4,6 +4,7 @@ node_modules
 .sst
 .env
 .env.prod
+deployment/.env
 deployment/.env.prod
 .idea
 .vscode
