@@ -28,7 +28,7 @@ services:
       # Suppress the "server is unsecured" warning in dev
       # Set a real password in production: OPENCODE_SERVER_PASSWORD=yourpassword
       - OPENCODE_SERVER_PASSWORD=
-      - AIRTOP_API_KEY=7353454782501c8d.6JmK7RZ5zw6ScLEEn1yYnWysbIiqYAUnGY7i6OJgKV
+      - AIRTOP_API_KEY=${AIRTOP_API_KEY:-}
     restart: unless-stopped
 
   # ── Frontend: Vite dev server ───────────────────────────────────────────────
