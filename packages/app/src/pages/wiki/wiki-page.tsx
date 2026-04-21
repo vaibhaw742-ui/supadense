@@ -382,9 +382,7 @@ export default function WikiPage() {
 
               {/* Images tab */}
               <Show when={rightTab() === "images"}>
-                <div class="wk-image-grid" fallback={
-                  <p class="wk-rp-empty">No images for this page.</p>
-                }>
+                <div class="wk-image-grid">
                   <For each={sortedImages()} fallback={
                     <p class="wk-rp-empty">No images for this page.</p>
                   }>
