@@ -250,7 +250,7 @@ export default function WikiHome() {
             {/* Tree fills all available space and scrolls */}
             <div class="wk-sb-nav">
               <Show when={data()}>
-                {() => (
+                {(_d) => (
                   <>
                     <div class="wk-sb-label" style={{ "margin-top": "4px" }}>Categories</div>
                     <div class="wk-tree">
