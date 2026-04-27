@@ -1,23 +1,6 @@
 import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { Timestamps } from "../storage/schema.sql"
 
-// ─── KB Schema ───────────────────────────────────────────────────────────────
-// Per-workspace schema metadata. One row per workspace.
-// The full structure (categories → subcategories → sections) lives in:
-//   learning_categories + learning_wiki_pages.sections
-// This table tracks the schema version and the path to the generated schema.json.
-
-export const LearningKbSchemaTable = sqliteTable("learning_kb_schema", {
-  id: text().primaryKey(),
-  workspace_id: text()
-    .notNull()
-    .unique()
-    .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
-  schema_path: text().notNull().default("schema.json"), // relative to kb_path
-  version: integer().notNull().default(1), // bumped on every structural change
-  ...Timestamps,
-})
-
 // ─── KB Workspaces ───────────────────────────────────────────────────────────
 // One row per project folder. Root anchor for everything in the learning schema.
 // Every other table filters by workspace_id from here.
@@ -25,10 +8,11 @@ export const LearningKbSchemaTable = sqliteTable("learning_kb_schema", {
 
 export const LearningKbWorkspaceTable = sqliteTable("learning_kb_workspaces", {
   id: text().primaryKey(),
-  project_id: text().notNull().unique(), // matches opencode project id
+  project_id: text().notNull().unique(),
   kb_path: text().notNull(), // absolute path to project folder on disk
   kb_initialized: integer({ mode: "boolean" }).notNull().default(false),
   learning_intent: text(), // "Build production-grade AI agent systems"
+  years_of_experience: integer(), // years of engineering experience
   goals: text({ mode: "json" }).$type<string[]>().notNull().default([]),
   gaps: text({ mode: "json" }).$type<string[]>().notNull().default([]),
   depth_prefs: text({ mode: "json" }).$type<Record<string, string>>().notNull().default({}),
@@ -50,6 +34,7 @@ export const LearningCategoryTable = sqliteTable(
     workspace_id: text()
       .notNull()
       .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
+    parent_category_id: text(), // null = root category, set = nested subcategory
     slug: text().notNull(), // "agents", "rag", "engineering"
     name: text().notNull(), // "Agents", "RAG", "Engineering"
     description: text(),
@@ -78,6 +63,7 @@ export const LearningWikiPageTable = sqliteTable(
       .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
     category_id: text().references(() => LearningCategoryTable.id, { onDelete: "cascade" }),
     parent_page_id: text(), // self-ref: NULL for index/category, points to category page for subcategory
+    type: text().notNull().default("section"), // "overview" (auto-created with folder) | "section" (user-created)
     page_type: text().notNull(), // "index" | "category" | "subcategory"
     category_slug: text(), // "agents" — clean, no separator
     subcategory_slug: text(), // "key-concepts" — NULL for index/category pages
@@ -144,7 +130,7 @@ export const LearningResourceTable = sqliteTable(
 
 // ─── Media Assets ─────────────────────────────────────────────────────────────
 // Images, diagrams, charts extracted from resources.
-// Saved locally in wiki/assets/. Each row = one image file on disk.
+// Saved locally in assets/. Each row = one image file on disk.
 
 export const LearningMediaAssetTable = sqliteTable(
   "learning_media_assets",
@@ -158,7 +144,7 @@ export const LearningMediaAssetTable = sqliteTable(
       .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
     asset_type: text().notNull(), // "image"|"diagram"|"chart"|"thumbnail"|"video_frame"
     source_url: text(), // original URL in source resource
-    local_path: text().notNull(), // "wiki/assets/a1b2c3.png" relative to kb_path
+    local_path: text().notNull(), // "assets/a1b2c3.png" relative to kb_path
     caption: text(),
     description: text(), // LLM-generated description of what image shows
     alt_text: text(),

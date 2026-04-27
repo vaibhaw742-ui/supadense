@@ -7,6 +7,7 @@ import { readFileSync, existsSync, readdirSync } from "fs"
 import path from "path"
 import { eq, desc, inArray } from "drizzle-orm"
 import { Instance } from "../../project/instance"
+import { ProjectTable } from "../../project/project.sql"
 import { Workspace } from "../../learning/workspace"
 import { Retrieval } from "../../learning/retrieval"
 import { Database } from "../../storage/db"
@@ -18,13 +19,50 @@ import {
   LearningResourceWikiPlacementTable,
   LearningMediaAssetTable,
 } from "../../learning/schema.sql"
+import { Auth } from "../../auth"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { generateText } from "ai"
+
+async function generateKbDescription(
+  type: "category" | "section",
+  name: string,
+  context?: string,
+): Promise<string> {
+  try {
+    const auth = await Auth.get("anthropic")
+    const apiKey = (auth && "key" in auth) ? auth.key : undefined
+    if (!apiKey) return ""
+
+    const anthropic = createAnthropic({ apiKey })
+    const prompt = type === "category"
+      ? `Write a 1-2 sentence description for a knowledge base category called "${name}"${context ? ` (inside "${context}")` : ""}. Be specific and technical. Return only the description, no quotes, no extra text.`
+      : `Write a 1-2 sentence description for a knowledge base section called "${name}" inside the category "${context ?? "general"}". Be specific and technical. Return only the description, no quotes, no extra text.`
+
+    const { text } = await generateText({
+      model: anthropic("claude-haiku-4-5-20251001"),
+      prompt,
+      maxTokens: 80,
+    })
+    return text.trim()
+  } catch {
+    return ""
+  }
+}
 
 /** Resolve the KB workspace for the current request context.
  *  Tries project_id first, then falls back to kb_path = Instance.directory.
+ *  Also ensures the watcher is started and existing wiki files are synced to DB.
  */
+const wikiInitializedWorkspaces = new Set<string>()
+
 function resolveWorkspace() {
   const project = Instance.project
-  return Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
+  const workspace = Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
+  if (workspace && !wikiInitializedWorkspaces.has(workspace.id)) {
+    wikiInitializedWorkspaces.add(workspace.id)
+    Workspace.scaffoldFiles(workspace)
+  }
+  return workspace
 }
 
 /**
@@ -220,6 +258,7 @@ export const WikiRoutes = () => {
         depth: cat.depth,
         icon: cat.icon,
         color: cat.color,
+        parent_category_id: cat.parent_category_id ?? null,
         resource_count: (() => {
           const ids = new Set<string>()
           const catPageIds = pages.filter((p) => p.category_id === cat.id).map((p) => p.id)
@@ -291,7 +330,9 @@ export const WikiRoutes = () => {
       pages.find((p) => p.file_path === `wiki/${slug}.md`) ??
       pages.find(
         (p) => p.category_slug && p.subcategory_slug && `${p.category_slug}--${p.subcategory_slug}` === slug,
-      )
+      ) ??
+      pages.find((p) => p.category_slug === slug && p.type === "overview") ??
+      pages.find((p) => p.category_slug === slug && p.page_type === "category")
 
     if (!page) return c.json({ error: "Page not found" }, 404)
 
@@ -310,10 +351,16 @@ export const WikiRoutes = () => {
     const subcatIds = subcategories.map((s) => s.id)
     const subcatCounts = distinctResourceCounts(subcatIds)
 
+    // For overview pages, aggregate resources from all section pages in the same category folder.
+    // Overview pages have no direct placements — content lives on their sibling section pages.
+    const placementPageIds = page.type === "overview" && page.category_id
+      ? pages.filter((p) => p.category_id === page.category_id && p.type !== "overview").map((p) => p.id)
+      : [page.id]
+
     // Fetch distinct resources for this page — sorted by placement date (latest first)
-    const placements = Database.use((db) =>
+    const placements = placementPageIds.length === 0 ? [] : Database.use((db) =>
       db.select().from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, page.id))
+        .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, placementPageIds))
         .orderBy(desc(LearningResourceWikiPlacementTable.placed_at))
         .all(),
     )
@@ -356,12 +403,31 @@ export const WikiRoutes = () => {
       time_created: a.time_created,
     }))
 
+    // All pages in the same category folder, used to build file-based tabs
+    const categoryPages = page.category_id
+      ? pages
+          .filter((p) => p.category_id === page.category_id)
+          .sort((a, b) => {
+            if (a.type === "overview") return -1
+            if (b.type === "overview") return 1
+            return a.title.localeCompare(b.title)
+          })
+      : []
+    const categoryTabs = categoryPages.map((p) => ({
+      nav_slug: p.type === "overview"
+        ? (p.category_slug ?? p.slug)
+        : `${p.category_slug}--${p.subcategory_slug}`,
+      title: p.type === "overview" ? "Overview" : p.title,
+      type: p.type as string,
+    }))
+
     return c.json({
       page: {
         id: page.id,
         slug: page.slug,
         title: page.title,
         description: page.description,
+        type: page.type,
         page_type: page.page_type,
         file_path: page.file_path,
         resource_count: pageCounts.get(page.id) ?? 0,
@@ -379,7 +445,13 @@ export const WikiRoutes = () => {
             icon: category.icon,
           }
         : null,
+      parent_category: (() => {
+        if (!category?.parent_category_id) return null
+        const parent = categories.find((c) => c.id === category.parent_category_id)
+        return parent ? { id: parent.id, slug: parent.slug, name: parent.name } : null
+      })(),
       content,
+      category_tabs: categoryTabs,
       subcategories: subcategories.map((s) => ({
         id: s.id,
         slug: s.slug,
@@ -397,6 +469,122 @@ export const WikiRoutes = () => {
       resources: pageResources,
       images: pageImages,
     })
+  })
+
+  // ── KB File Tree ─────────────────────────────────────────────────────────────
+  app.get("/tree", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ tree: [], kb_path: "" })
+    return c.json({ tree: Workspace.getTree(workspace.id), kb_path: workspace.kb_path })
+  })
+
+  // ── Create Category ───────────────────────────────────────────────────────────
+  app.post("/category", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: { name?: string; parent_category_id?: string }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+
+    const name = body.name?.trim()
+    if (!name) return c.json({ error: "name is required" }, 400)
+
+    const parentName = body.parent_category_id
+      ? Workspace.getCategories(workspace.id).find((c) => c.id === body.parent_category_id)?.name
+      : undefined
+    const description = await generateKbDescription("category", name, parentName)
+
+    try {
+      const result = Workspace.createCategory(workspace.id, name, body.parent_category_id, description || undefined)
+      return c.json({ category: result.category, overview_page: result.overviewPage })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to create category" }, 500)
+    }
+  })
+
+  // ── Create Section ────────────────────────────────────────────────────────────
+  app.post("/section", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: { name?: string; category_id?: string }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+
+    const name = body.name?.trim()
+    if (!name) return c.json({ error: "name is required" }, 400)
+    if (!body.category_id) return c.json({ error: "category_id is required" }, 400)
+
+    const categoryName = Workspace.getCategories(workspace.id).find((cat) => cat.id === body.category_id)?.name
+    const description = await generateKbDescription("section", name, categoryName)
+
+    try {
+      const page = Workspace.createSection(workspace.id, name, body.category_id, description || undefined)
+      return c.json({ page })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to create section" }, 500)
+    }
+  })
+
+  // ── Delete Category ───────────────────────────────────────────────────────────
+  app.delete("/category/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    try {
+      Workspace.deleteCategory(workspace.id, c.req.param("id"))
+      return c.json({ ok: true })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to delete category" }, 500)
+    }
+  })
+
+  // ── Rename Category ───────────────────────────────────────────────────────────
+  app.patch("/category/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: { name?: string }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+
+    const name = body.name?.trim()
+    if (!name) return c.json({ error: "name is required" }, 400)
+
+    try {
+      Workspace.renameCategory(workspace.id, c.req.param("id"), name)
+      return c.json({ ok: true })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to rename category" }, 500)
+    }
+  })
+
+  // ── Delete Section ────────────────────────────────────────────────────────────
+  app.delete("/section/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    try {
+      Workspace.deleteSection(workspace.id, c.req.param("id"))
+      return c.json({ ok: true })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to delete section" }, 500)
+    }
+  })
+
+  // ── Rename Section ────────────────────────────────────────────────────────────
+  app.patch("/section/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: { name?: string }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+
+    const name = body.name?.trim()
+    if (!name) return c.json({ error: "name is required" }, 400)
+
+    try {
+      Workspace.renameSection(workspace.id, c.req.param("id"), name)
+      return c.json({ ok: true })
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed to rename section" }, 500)
+    }
   })
 
   // ── Concepts ─────────────────────────────────────────────────────────────────
@@ -454,9 +642,12 @@ export const WikiRoutes = () => {
   // ── Single roadmap doc ───────────────────────────────────────────────────────
   app.get("/roadmap/:slug", async (c) => {
     const slug = c.req.param("slug")
+    if (!/^[a-zA-Z0-9_-]+$/.test(slug)) return c.text("Not found", 404)
     const ws = resolveWorkspace()
     if (!ws) return c.text("Not found", 404)
-    const filePath = path.join(ws.kb_path, "wiki", "roadmap", `${slug}.md`)
+    const roadmapRoot = path.resolve(path.join(ws.kb_path, "wiki", "roadmap"))
+    const filePath = path.resolve(path.join(roadmapRoot, `${slug}.md`))
+    if (!filePath.startsWith(roadmapRoot)) return c.text("Not found", 404)
     if (!existsSync(filePath)) return c.text("Not found", 404)
     const content = readFileSync(filePath, "utf-8")
     const fm = parseFrontmatter(content)
@@ -471,7 +662,7 @@ export const WikiRoutes = () => {
 
     // Helper: attempt to serve from a given kb_path
     async function tryServe(kbPath: string): Promise<Response | null> {
-      const assetsRoot = path.resolve(path.join(kbPath, "wiki", "assets"))
+      const assetsRoot = path.resolve(path.join(kbPath, "assets"))
       const fullPath = path.resolve(path.join(assetsRoot, relativePath))
       if (!fullPath.startsWith(assetsRoot)) return null
       if (!existsSync(fullPath)) return null
@@ -493,14 +684,28 @@ export const WikiRoutes = () => {
       }
     } catch { /* no instance context — fall through to scan all */ }
 
-    // 2. Fall back: scan all workspaces (covers browser img requests with no header)
-    const allWorkspaces = Database.use((db) =>
-      db.select().from(LearningKbWorkspaceTable).all()
-    )
-    for (const ws of allWorkspaces) {
-      if (current && ws.id === current.id) continue // already tried
-      const res = await tryServe(ws.kb_path)
-      if (res) return res
+    // 2. Fall back: scan workspaces scoped to the current user (covers browser img requests)
+    // Determine current userId from Instance context if available, else null (no cross-user scan)
+    let userId: string | null = null
+    try {
+      userId = Instance.current.userId ?? null
+    } catch { /* no instance context */ }
+
+    if (userId) {
+      // Join through project to restrict to this user's KB workspaces only
+      const userWorkspaces = Database.use((db) =>
+        db
+          .select({ id: LearningKbWorkspaceTable.id, kb_path: LearningKbWorkspaceTable.kb_path })
+          .from(LearningKbWorkspaceTable)
+          .innerJoin(ProjectTable, eq(LearningKbWorkspaceTable.project_id, ProjectTable.id))
+          .where(eq(ProjectTable.user_id, userId!))
+          .all(),
+      )
+      for (const ws of userWorkspaces) {
+        if (current && ws.id === current.id) continue
+        const res = await tryServe(ws.kb_path)
+        if (res) return res
+      }
     }
 
     return c.text("Not found", 404)

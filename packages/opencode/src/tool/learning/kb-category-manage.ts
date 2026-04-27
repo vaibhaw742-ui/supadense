@@ -20,7 +20,7 @@ import {
   LearningWikiPageTable,
   LearningResourceWikiPlacementTable,
 } from "../../learning/schema.sql"
-import { KbSchema, DEFAULT_SUBCATEGORIES, DEFAULT_SECTIONS } from "../../learning/kb-schema"
+import { DEFAULT_SUBCATEGORIES, DEFAULT_SECTIONS } from "../../learning/kb-schema"
 
 export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   description: [
@@ -36,7 +36,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     "  update_section     — update a section's heading and/or description",
     "",
     "For section actions: omit subcategory_slug to target the category page itself.",
-    "After any change, wiki files and schema.json are automatically rebuilt.",
+    "After any change, wiki files are automatically rebuilt.",
   ].join("\n"),
   parameters: z.object({
     action: z.enum(["add_category", "remove_category", "add_subcategory", "remove_subcategory", "add_section", "remove_section", "update_section"]),
@@ -130,9 +130,8 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
-      // Apply subcategories from schema (or defaults if not yet set up)
-      const schemaContent = KbSchema.buildContent(workspaceId)
-      const existingSubcats = schemaContent.categories[0]?.subcategories ?? DEFAULT_SUBCATEGORIES
+      // Apply default subcategories
+      const existingSubcats = DEFAULT_SUBCATEGORIES
       for (const sub of existingSubcats) {
         Database.use((db) =>
           db.insert(LearningWikiPageTable).values({
@@ -155,9 +154,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         )
       }
 
-      KbSchema.ensure(workspaceId)
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
       WikiBuilder.buildSupadenseMd(workspace)
 
@@ -230,8 +226,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         if (existsSync(fullPath)) unlinkSync(fullPath)
       }
 
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
       WikiBuilder.buildSupadenseMd(workspace)
 
@@ -327,8 +321,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }
       }
 
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
 
       Workspace.logEvent(workspaceId, {
@@ -385,9 +377,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       const fullPath = `${workspace.kb_path}/${page.file_path}`
       if (existsSync(fullPath)) unlinkSync(fullPath)
 
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
-
       Workspace.logEvent(workspaceId, {
         event_type: "subcategory_removed",
         summary: `Removed subcategory: ${page.title}`,
@@ -407,20 +396,22 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     if (params.action === "add_section") {
       if (!params.section_slug) throw new Error("section_slug is required for add_section")
       if (!params.section_heading) throw new Error("section_heading is required for add_section")
-      if (!params.section_description) throw new Error("section_description is required for add_section")
 
-      // Resolve target page: subcategory page if subcategory_slug given, else category page
-      const targetPage = Database.use((db) =>
-        db.select().from(LearningWikiPageTable)
-          .where(and(
-            eq(LearningWikiPageTable.workspace_id, workspaceId),
-            eq(LearningWikiPageTable.category_slug, params.category_slug),
-            params.subcategory_slug
-              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
-              : eq(LearningWikiPageTable.page_type, "category"),
-          )).get(),
-      )
-      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+      // Resolve target page: section page if subcategory_slug given, else the category overview
+      const allPages = Workspace.getWikiPages(workspaceId)
+      const targetPage = params.subcategory_slug
+        ? allPages.find((p) =>
+            p.category_slug === params.category_slug &&
+            p.subcategory_slug === params.subcategory_slug,
+          ) ??
+          // also try: subcategory_slug IS the category_slug (sub-category overview)
+          allPages.find((p) =>
+            p.category_slug === params.subcategory_slug && !p.subcategory_slug,
+          )
+        : allPages.find((p) =>
+            p.category_slug === params.category_slug && !p.subcategory_slug,
+          )
+      if (!targetPage) throw new Error(`Page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check the nav_slug list from kb_workspace_init.`)
 
       const currentSections = targetPage.sections ?? []
       if (currentSections.some((s) => s.slug === params.section_slug)) {
@@ -430,7 +421,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       const newSection = {
         slug: params.section_slug,
         heading: params.section_heading,
-        description: params.section_description,
+        description: params.section_description ?? `Content about ${params.section_slug.replace(/-/g, " ")}.`,
         updated_at: now,
       }
 
@@ -441,8 +432,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
           .run(),
       )
 
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
 
       Workspace.logEvent(workspaceId, {
@@ -456,7 +445,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
         output: [
           `Added section '${params.section_heading}' to ${targetPage.file_path}.`,
-          `schema.json updated, wiki file rebuilt.`,
           `Note: section will appear in the wiki once content is placed into it.`,
         ].join("\n"),
       }
@@ -466,17 +454,12 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     if (params.action === "remove_section") {
       if (!params.section_slug) throw new Error("section_slug is required for remove_section")
 
-      const targetPage = Database.use((db) =>
-        db.select().from(LearningWikiPageTable)
-          .where(and(
-            eq(LearningWikiPageTable.workspace_id, workspaceId),
-            eq(LearningWikiPageTable.category_slug, params.category_slug),
-            params.subcategory_slug
-              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
-              : eq(LearningWikiPageTable.page_type, "category"),
-          )).get(),
-      )
-      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+      const allPages2 = Workspace.getWikiPages(workspaceId)
+      const targetPage = params.subcategory_slug
+        ? allPages2.find((p) => p.category_slug === params.category_slug && p.subcategory_slug === params.subcategory_slug) ??
+          allPages2.find((p) => p.category_slug === params.subcategory_slug && !p.subcategory_slug)
+        : allPages2.find((p) => p.category_slug === params.category_slug && !p.subcategory_slug)
+      if (!targetPage) throw new Error(`Page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check kb_workspace_init.`)
 
       const currentSections = targetPage.sections ?? []
       const section = currentSections.find((s) => s.slug === params.section_slug)
@@ -505,9 +488,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
           .run(),
       )
 
-      // Always update schema.json and rebuild wiki
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
 
       const sectionLabel = section?.heading ?? params.section_slug!
@@ -523,7 +503,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
         output: [
           `Removed section '${sectionLabel}' from ${targetPage.file_path}.`,
-          `schema.json updated, wiki file rebuilt.`,
         ].join("\n"),
       }
     }
@@ -534,17 +513,12 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       if (!params.section_heading && !params.section_description)
         throw new Error("Provide at least one of: section_heading, section_description")
 
-      const targetPage = Database.use((db) =>
-        db.select().from(LearningWikiPageTable)
-          .where(and(
-            eq(LearningWikiPageTable.workspace_id, workspaceId),
-            eq(LearningWikiPageTable.category_slug, params.category_slug),
-            params.subcategory_slug
-              ? eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug)
-              : eq(LearningWikiPageTable.page_type, "category"),
-          )).get(),
-      )
-      if (!targetPage) throw new Error(`Page not found for ${params.category_slug}${params.subcategory_slug ? `/${params.subcategory_slug}` : ""}`)
+      const allPages3 = Workspace.getWikiPages(workspaceId)
+      const targetPage = params.subcategory_slug
+        ? allPages3.find((p) => p.category_slug === params.category_slug && p.subcategory_slug === params.subcategory_slug) ??
+          allPages3.find((p) => p.category_slug === params.subcategory_slug && !p.subcategory_slug)
+        : allPages3.find((p) => p.category_slug === params.category_slug && !p.subcategory_slug)
+      if (!targetPage) throw new Error(`Page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check kb_workspace_init.`)
 
       const currentSections = targetPage.sections ?? []
       const idx = currentSections.findIndex((s) => s.slug === params.section_slug)
@@ -582,8 +556,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         placementsUpdated = result.length
       }
 
-      KbSchema.bumpVersion(workspaceId)
-      KbSchema.renderToFile(workspaceId)
       WikiBuilder.buildAll(workspaceId)
 
       Workspace.logEvent(workspaceId, {
@@ -600,7 +572,6 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
           `  heading: ${updated.heading}`,
           `  description: ${updated.description}`,
           placementsUpdated > 0 ? `  ${placementsUpdated} placement(s) updated with new heading.` : "",
-          `schema.json updated, wiki file rebuilt.`,
         ].filter(Boolean).join("\n"),
       }
     }

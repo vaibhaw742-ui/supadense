@@ -4,7 +4,6 @@ export { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } fro
 export { SessionShareTable } from "../share/share.sql"
 export { WorkspaceTable } from "../control-plane/workspace.sql"
 export {
-  LearningKbSchemaTable,
   LearningKbWorkspaceTable,
   LearningCategoryTable,
   LearningWikiPageTable,

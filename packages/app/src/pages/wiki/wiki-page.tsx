@@ -3,44 +3,9 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { useWikiApi } from "./wiki-api"
 import { useServer } from "@/context/server"
 import { renderMarkdown } from "./markdown"
+import { decode64 } from "@/utils/base64"
+import { getAuthToken } from "@/utils/server"
 import "./wiki.css"
-
-interface WikiSection {
-  heading: string
-  content: string
-}
-
-function parseSections(md: string): WikiSection[] {
-  const lines = md.split("\n")
-  const sections: WikiSection[] = []
-  let heading = ""
-  let buf: string[] = []
-  for (const line of lines) {
-    const h2 = line.match(/^## (.+)$/)
-    if (h2) {
-      if (heading) sections.push({ heading, content: buf.join("\n").trim() })
-      heading = h2[1]
-      buf = []
-    } else if (heading) {
-      buf.push(line)
-    }
-  }
-  if (heading) sections.push({ heading, content: buf.join("\n").trim() })
-  return sections
-}
-
-function sectionIcon(heading: string): string {
-  const h = heading.toLowerCase()
-  if (h.includes("concept") || h.includes("key")) return "✦"
-  if (h.includes("architect") || h.includes("overview") || h.includes("design")) return "◈"
-  if (h.includes("image") || h.includes("visual") || h.includes("diagram")) return "⊡"
-  if (h.includes("source") || h.includes("link") || h.includes("reference")) return "⊕"
-  if (h.includes("example") || h.includes("use case")) return "◎"
-  if (h.includes("paper") || h.includes("research")) return "◧"
-  if (h.includes("tool") || h.includes("framework") || h.includes("library")) return "⬡"
-  if (h.includes("people") || h.includes("author") || h.includes("creator")) return "◉"
-  return "◦"
-}
 
 function resourceIcon(modality: string): string {
   const m = modality.toLowerCase()
@@ -65,12 +30,13 @@ export default function WikiPage() {
   const server = useServer()
   const params = useParams<{ dir: string; slug: string }>()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = createSignal(0)
   const [sidebarOpen, setSidebarOpen] = createSignal(true)
   const [resourcePanelWidth, setResourcePanelWidth] = createSignal(38)
   const [rightTab, setRightTab] = createSignal<"sources" | "images">("sources")
   const [sortOrder, setSortOrder] = createSignal<"new" | "old">("new")
   let contentAreaRef: HTMLDivElement | undefined
+
+  const directory = () => decode64(params.dir) ?? ""
 
   const wikiBase = () => {
     const http = server.current?.http
@@ -79,30 +45,60 @@ export default function WikiPage() {
     return `${base}/wiki`
   }
 
-  const [data] = createResource(() => params.slug, (slug) => {
-    setActiveTab(0)
-    return api.page(slug)
-  })
+  const assetParams = () => {
+    const dir = directory()
+    const token = getAuthToken()
+    const parts: string[] = []
+    if (dir) parts.push(`directory=${encodeURIComponent(dir)}`)
+    if (token) parts.push(`auth_token=${encodeURIComponent(token)}`)
+    return parts.length ? `?${parts.join("&")}` : ""
+  }
+
+  const assetUrl = (path: string) => `${wikiBase()}/${path}${assetParams()}`
+
+  const [data] = createResource(() => params.slug, (slug) => api.page(slug))
 
   const rewrittenContent = createMemo(() => {
     const content = data()?.content ?? ""
+    const qs = assetParams()
     return content
-      .replace(/!\[([^\]]*)\]\((\/wiki\/assets\/[^)]+)\)/g, (_, alt, p) => `![${alt}](${wikiBase()}${p})`)
-      .replace(/!\[([^\]]*)\]\((assets\/[^)]+)\)/g, (_, alt, p) => `![${alt}](${wikiBase()}/${p})`)
-  })
-
-  const sections = createMemo(() => parseSections(rewrittenContent()))
-
-  const preamble = createMemo(() => {
-    const content = rewrittenContent()
-    const firstH2 = content.indexOf("\n## ")
-    if (firstH2 === -1) return ""
-    return content.slice(0, firstH2).split("\n")
-      .filter((l) => !l.startsWith("# ") && !l.startsWith("> This file"))
-      .join("\n").trim()
+      .replace(/!\[([^\]]*)\]\((\/wiki\/assets\/[^)]+)\)/g, (_, alt, p) => `![${alt}](${wikiBase()}${p}${qs})`)
+      .replace(/!\[([^\]]*)\]\((assets\/[^)]+)\)/g, (_, alt, p) => `![${alt}](${wikiBase()}/${p}${qs})`)
   })
 
   const navigateTo = (slug: string) => navigate(`/${params.dir}/wiki/${slug}`)
+
+  const handleProseClick = (e: MouseEvent, currentCategorySlug: string) => {
+    const anchor = (e.target as HTMLElement).closest("a")
+    if (!anchor) return
+    const href = anchor.getAttribute("href")
+    if (!href) return
+    if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Strip leading ./ and split into parts
+    const clean = href.replace(/^\.\//, "").replace(/\.md$/, "")
+    const parts = clean.split("/").filter(Boolean)
+
+    if (parts.length === 0) return
+
+    if (parts.length === 1) {
+      // ./key-concepts.md  →  agents--key-concepts
+      // ./overview.md      →  agents
+      parts[0] === "overview"
+        ? navigateTo(currentCategorySlug)
+        : navigateTo(`${currentCategorySlug}--${parts[0]}`)
+    } else if (parts[parts.length - 1] === "overview") {
+      // ./rag/overview.md  →  rag
+      navigateTo(parts[parts.length - 2])
+    } else {
+      // ./rag/retrieval.md  →  rag--retrieval
+      navigateTo(`${parts[parts.length - 2]}--${parts[parts.length - 1]}`)
+    }
+  }
+
   const formatDate = (ts: number) =>
     new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
   const formatShortDate = (ts: number) =>
@@ -180,15 +176,15 @@ export default function WikiPage() {
                     </Show>
                     <div class="wk-sb-stat">Updated {formatDate(d().page.time_updated)}</div>
 
-                    <Show when={d().subcategories.length > 0}>
-                      <div class="wk-sb-label" style={{ "margin-top": "8px" }}>Sections</div>
-                      <For each={d().subcategories}>
-                        {(sub) => (
+                    <Show when={d().category_tabs.length >= 1}>
+                      <div class="wk-sb-label" style={{ "margin-top": "8px" }}>Pages</div>
+                      <For each={d().category_tabs}>
+                        {(tab) => (
                           <a
-                            class="wk-sb-link"
-                            onClick={() => navigateTo(`${d().page.category_slug}--${sub.subcategory_slug}`)}
+                            class={`wk-sb-link${tab.nav_slug === params.slug ? " wk-sb-link--active" : ""}`}
+                            onClick={() => navigateTo(tab.nav_slug)}
                           >
-                            {sub.subcategory_slug?.replace(/-/g, " ")}
+                            {tab.title}
                           </a>
                         )}
                       </For>
@@ -198,12 +194,7 @@ export default function WikiPage() {
               </Show>
             </div>
 
-            <div class="wk-sb-profile">
-              <div class="wk-sb-profile-avatar">VK</div>
-              <div class="wk-sb-profile-info">
-                <div class="wk-sb-profile-name">Vaibhaw Khemka</div>
-              </div>
-            </div>
+
           </Show>
         </aside>
 
@@ -221,19 +212,34 @@ export default function WikiPage() {
                 <div class="wk-page-content">
                   <div class="wk-breadcrumb">
                     <span class="wk-breadcrumb-link" onClick={() => navigate(`/${params.dir}/wiki`)}>Supadense</span>
-                    <Show when={d().category}>
-                      {(cat) => (
+                    <Show when={d().parent_category}>
+                      {(parent) => (
                         <>
                           <span class="wk-breadcrumb-sep">›</span>
-                          <span class="wk-breadcrumb-link" onClick={() => navigateTo(cat().slug)}>
-                            {cat().name || cat().slug}
+                          <span class="wk-breadcrumb-link" onClick={() => navigateTo(parent().slug)}>
+                            {parent().name}
                           </span>
                         </>
                       )}
                     </Show>
-                    <Show when={d().page.page_type === "subcategory"}>
+                    <Show when={d().category}>
+                      {(cat) => (
+                        <>
+                          <span class="wk-breadcrumb-sep">›</span>
+                          <Show
+                            when={d().page.type !== "overview" || d().parent_category}
+                            fallback={<span class="wk-breadcrumb-current">{cat().name || cat().slug}</span>}
+                          >
+                            <span class="wk-breadcrumb-link" onClick={() => navigateTo(cat().slug)}>
+                              {cat().name || cat().slug}
+                            </span>
+                          </Show>
+                        </>
+                      )}
+                    </Show>
+                    <Show when={d().page.type === "section"}>
                       <span class="wk-breadcrumb-sep">›</span>
-                      <span class="wk-breadcrumb-current">{d().page.subcategory_slug?.replace(/-/g, " ")}</span>
+                      <span class="wk-breadcrumb-current">{d().page.title}</span>
                     </Show>
                   </div>
 
@@ -247,61 +253,26 @@ export default function WikiPage() {
                     </Show>
                   </div>
 
-                  <Show when={preamble()}>
-                    <div class="wk-prose wk-preamble" innerHTML={renderMarkdown(preamble())} />
-                  </Show>
-
-                  <Show when={sections().length > 0}>
+                  <Show when={d().category_tabs.length >= 1}>
                     <div class="wk-section-tabs">
-                      <For each={sections()}>
-                        {(sec, i) => (
+                      <For each={d().category_tabs}>
+                        {(tab) => (
                           <button
-                            class={`wk-section-tab${activeTab() === i() ? " wk-section-tab--active" : ""}`}
-                            onClick={() => setActiveTab(i())}
+                            class={`wk-section-tab${tab.nav_slug === params.slug ? " wk-section-tab--active" : ""}`}
+                            onClick={() => navigateTo(tab.nav_slug)}
                           >
-                            <span class="wk-tab-icon">{sectionIcon(sec.heading)}</span>
-                            {sec.heading}
+                            {tab.title}
                           </button>
                         )}
                       </For>
                     </div>
-
-                    <Show when={sections()[activeTab()]}>
-                      {(sec) => (
-                        <div class="wk-tab-pane">
-                          <Show
-                            when={sec().content.trim()}
-                            fallback={<p class="wk-empty-section">No content yet for this section.</p>}
-                          >
-                            <div class="wk-prose" innerHTML={renderMarkdown(sec().content)} />
-                          </Show>
-                        </div>
-                      )}
-                    </Show>
                   </Show>
 
-                  <Show when={sections().length === 0 && rewrittenContent()}>
-                    <div class="wk-prose" innerHTML={renderMarkdown(rewrittenContent())} />
-                  </Show>
-
-                  <Show when={d().subcategories.length > 0}>
-                    <div class="wk-subcat-section">
-                      <div class="wk-section-heading">Subcategories</div>
-                      <div class="wk-subcat-list">
-                        <For each={d().subcategories}>
-                          {(sub) => (
-                            <div
-                              class="wk-subcat-item"
-                              onClick={() => navigateTo(`${d().page.category_slug}--${sub.subcategory_slug}`)}
-                            >
-                              <span class="wk-subcat-name">{sub.subcategory_slug?.replace(/-/g, " ")}</span>
-                              <span class="wk-subcat-count">{sub.resource_count} sources</span>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </div>
-                  </Show>
+                  <div
+                    class="wk-prose wk-tab-pane"
+                    innerHTML={renderMarkdown(rewrittenContent())}
+                    onClick={(e) => handleProseClick(e, d().page.category_slug ?? "")}
+                  />
                 </div>
               )}
             </Show>
@@ -390,7 +361,7 @@ export default function WikiPage() {
                       <div class="wk-image-card">
                         <img
                           class="wk-image-thumb"
-                          src={`${wikiBase()}/${img.src_path}`}
+                          src={assetUrl(img.src_path)}
                           alt={img.alt_text ?? img.caption ?? ""}
                           loading="lazy"
                         />

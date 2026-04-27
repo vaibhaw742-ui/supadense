@@ -1,29 +1,29 @@
 /* ── Fonts ───────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* ── Design tokens (Notion-inspired warm neutral palette) ────────────────── */
+/* ── Design tokens (orange + white theme) ────────────────────────────────── */
 :root {
   /* Backgrounds */
   --wk-bg:              #ffffff;
-  --wk-bg-sidebar:      #f7f7f5;
-  --wk-bg-hover:        #efefed;
-  --wk-bg-active:       #e9e9e7;
-  --wk-bg-subtle:       #f1f1ef;
-  --wk-bg-inset:        #eae9e6;
+  --wk-bg-sidebar:      #faf9f8;
+  --wk-bg-hover:        #f5f0ee;
+  --wk-bg-active:       #ede8e5;
+  --wk-bg-subtle:       #f7f4f2;
+  --wk-bg-inset:        #ede8e5;
 
   /* Borders */
-  --wk-border:          rgba(55, 53, 47, 0.09);
-  --wk-border-muted:    rgba(55, 53, 47, 0.05);
+  --wk-border:          rgba(196, 74, 14, 0.12);
+  --wk-border-muted:    rgba(196, 74, 14, 0.06);
 
   /* Text */
-  --wk-text:            #37352f;
-  --wk-text-muted:      #787774;
-  --wk-text-faint:      #b0aca6;
+  --wk-text:            #1a1210;
+  --wk-text-muted:      #7a6860;
+  --wk-text-faint:      #b8a89e;
 
-  /* Accent (kept for links, highlights) */
-  --wk-accent:          #2d6a4f;
-  --wk-accent-hover:    #1b4332;
-  --wk-accent-light:    rgba(45, 106, 79, 0.08);
+  /* Accent — orange */
+  --wk-accent:          #c44a0e;
+  --wk-accent-hover:    #a33a08;
+  --wk-accent-light:    rgba(196, 74, 14, 0.08);
 
   /* Semantic */
   --wk-green:           #2d6a4f;
@@ -31,7 +31,7 @@
   --wk-amber:           #d97706;
   --wk-blue:            #0f7488;
   --wk-purple:          #6940a5;
-  --wk-yellow-tint:     #fbf3db;
+  --wk-yellow-tint:     #fff7f4;
 }
 
 /* ── Wiki root layout ─────────────────────────────────────────────────────── */
@@ -172,15 +172,25 @@
   display: none;
 }
 
-/* Scrollable nav area */
+/* Scrollable nav area — grows to fill sidebar, tree scrolls within */
 .wk-sb-nav {
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
+  min-height: 0;
 }
 
 .wk-sb-nav::-webkit-scrollbar {
   display: none;
+}
+
+/* Docs + Stats pinned below the tree, above the profile */
+.wk-sb-bottom {
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  border-top: 1px solid var(--wk-border);
+  padding-top: 6px;
 }
 
 /* Profile section pinned at the bottom of the sidebar */
@@ -322,6 +332,89 @@
   font-size: 12px;
   color: var(--wk-text-muted);
   padding: 2px 14px;
+}
+
+/* ── Sidebar category tree ───────────────────────────────────────────────── */
+.wk-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0;
+}
+
+.wk-tree-cat {
+  display: flex;
+  flex-direction: column;
+}
+
+.wk-tree-subcat {
+  display: flex;
+  flex-direction: column;
+}
+
+.wk-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.wk-tree-row:hover {
+  background: var(--wk-bg-hover);
+}
+
+.wk-tree-row--subcat {
+  padding-left: 10px;
+}
+
+.wk-tree-toggle {
+  font-size: 9px;
+  color: var(--wk-text-faint);
+  width: 12px;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+}
+
+.wk-tree-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--wk-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wk-tree-label--subcat {
+  font-weight: 400;
+  color: var(--wk-text-muted);
+  font-size: 11.5px;
+}
+
+.wk-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.wk-tree-leaf {
+  font-size: 11.5px;
+  color: var(--wk-text-muted);
+  padding: 2px 8px 2px 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wk-tree-leaf:hover {
+  background: var(--wk-bg-hover);
+  color: var(--wk-text);
 }
 
 /* ── Graph panel collapsed — shrinks to toggle strip ────────────────────── */
@@ -556,13 +649,20 @@
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
   border-radius: 6px;
-  padding: 14px 16px;
-  cursor: pointer;
+  overflow: hidden;
   transition: background 0.1s, box-shadow 0.1s;
 }
 
-.wk-card:hover {
+.wk-card-header {
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.wk-card-header:hover {
   background: var(--wk-bg-hover);
+}
+
+.wk-card:hover {
   box-shadow: 0 1px 3px rgba(55, 53, 47, 0.06);
 }
 
@@ -578,6 +678,30 @@
   font-size: 12px;
   color: var(--wk-text-muted);
   line-height: 1.5;
+}
+
+.wk-card-subcats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--wk-border);
+}
+
+.wk-card-subcat-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.1s;
+  user-select: none;
+}
+
+.wk-card-subcat-chip:hover {
+  opacity: 0.75;
 }
 
 /* ── Wiki page styles (wiki-page.tsx) ────────────────────────────────────── */
@@ -823,7 +947,7 @@
 .wk-prose a {
   color: var(--wk-accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(45, 106, 79, 0.3);
+  border-bottom: 1px solid rgba(196, 74, 14, 0.3);
 }
 
 .wk-prose a:hover {
@@ -971,9 +1095,9 @@
 }
 
 .wk-section-tab--active {
-  color: var(--wk-text);
+  color: var(--wk-accent);
   font-weight: 500;
-  border-bottom-color: var(--wk-text);
+  border-bottom-color: var(--wk-accent);
 }
 
 .wk-tab-icon {
@@ -1212,9 +1336,9 @@
 }
 
 .wk-rp-tab--active {
-  color: var(--wk-text);
+  color: var(--wk-accent);
   font-weight: 500;
-  border-bottom-color: var(--wk-text);
+  border-bottom-color: var(--wk-accent);
 }
 
 .wk-rp-tab-count {

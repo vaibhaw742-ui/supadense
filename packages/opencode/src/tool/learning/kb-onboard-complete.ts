@@ -1,88 +1,123 @@
-/**
- * kb_onboard_complete — Save onboarding profile and build initial KB structure.
- *
- * After gathering the user's intent, goals, and categories through conversation,
- * call this tool to persist everything and scaffold the wiki pages, schema.json,
- * supadense.md, and log.md.
- */
 import z from "zod"
 import { mkdirSync } from "fs"
 import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
 import { WikiBuilder } from "../../learning/wiki-builder"
-import { KbSchema, DEFAULT_SUBCATEGORIES } from "../../learning/kb-schema"
+
+// ── Built-in templates ────────────────────────────────────────────────────────
+
+const TEMPLATES = {
+  ml: {
+    categories: [
+      { slug: "agents", name: "Agents", description: "Autonomous AI systems that reason, plan, and act using tools, memory, and environment feedback to complete multi-step tasks.", depth: "deep" as const, icon: "🤖" },
+      { slug: "rag", name: "RAG", description: "Retrieval-Augmented Generation — grounding LLM outputs with external knowledge retrieval for accurate, up-to-date responses.", depth: "deep" as const, icon: "🔍" },
+      { slug: "llm-inference", name: "LLM Inference", description: "Serving large language models efficiently — latency, throughput, quantization, batching, and hardware trade-offs.", depth: "working" as const, icon: "⚡" },
+      { slug: "llm-training", name: "LLM Training", description: "Pre-training, fine-tuning, RLHF, and alignment techniques that shape how large language models learn and behave.", depth: "working" as const, icon: "🧠" },
+    ],
+    sectionName: "Key Concepts",
+  },
+  software: {
+    categories: [
+      { slug: "database", name: "Database", description: "Relational and non-relational databases — schema design, indexing, query optimization, transactions, and consistency models.", depth: "working" as const, icon: "🗄️" },
+      { slug: "frontend", name: "Frontend", description: "UI engineering — component architecture, state management, rendering strategies, accessibility, and performance.", depth: "working" as const, icon: "🖥️" },
+      { slug: "software-system-design", name: "Software System Design", description: "Distributed systems, scalability patterns, API design, caching, and architectural trade-offs for production systems.", depth: "deep" as const, icon: "🏗️" },
+    ],
+    sectionName: "Key Concepts",
+  },
+} as const
 
 const CategoryInput = z.object({
   slug: z.string().describe("URL-safe slug, e.g. 'agents', 'rag', 'systems-design'"),
   name: z.string().describe("Display name, e.g. 'Agents', 'RAG', 'Systems Design'"),
   description: z.string().optional().describe("One-line description of this domain"),
-  depth: z
-    .enum(["deep", "working", "awareness"])
-    .optional()
-    .describe("'deep' = expert focus | 'working' = practical | 'awareness' = survey"),
-  color: z.string().optional().describe("Hex color for UI, e.g. '#6366f1'"),
-  icon: z.string().optional().describe("Emoji icon, e.g. '🤖'"),
+  depth: z.enum(["deep", "working", "awareness"]).optional(),
+  color: z.string().optional(),
+  icon: z.string().optional(),
 })
 
 export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
   description: [
-    "Complete the KB onboarding by saving the user's learning profile and building the initial wiki structure.",
+    "Complete KB onboarding. Saves the learning profile and builds the initial wiki structure.",
     "",
-    "Call this AFTER collecting all onboarding information through conversation.",
-    "It will:",
-    "  1. Save the workspace profile (intent, goals, trusted sources, etc.)",
-    "  2. Create category records and their wiki pages in the DB",
-    "  3. Apply default subcategory structure (key-concepts, papers, examples, tools) to every category",
-    "  4. Write schema.json, supadense.md, log.md, and all wiki pages to disk",
-    "  5. Log the onboarding event",
+    "Supports three modes via the `template` field:",
+    "  'ml'       — creates Agents, RAG, LLM Inference, LLM Training categories (each with a Key Concepts section)",
+    "  'software' — creates Database, Frontend, Software System Design categories (each with a Key Concepts section)",
+    "  'custom'   — uses the `categories` array you provide; you must supply at least one category",
     "",
-    "The subcategory structure can be evolved later via chat (add/remove sections, subcategories).",
+    "When template is 'ml' or 'software', the `categories` field is ignored — the template defines them.",
+    "After this call succeeds, the user can add/remove/rename categories and sections freely.",
   ].join("\n"),
   parameters: z.object({
-    workspace_id: z.string().describe("Workspace ID from kb_workspace_init output"),
-    learning_intent: z.string().describe("One sentence: what the user is trying to achieve"),
+    workspace_id: z.string(),
+    template: z.enum(["ml", "software", "custom"]).describe("Which category template to use"),
+    learning_intent: z.string().describe("One sentence: what the user wants to achieve"),
+    years_of_experience: z.number().optional(),
     goals: z.array(z.string()).describe("2-5 concrete goals"),
-    depth_prefs: z
-      .record(z.string(), z.enum(["deep", "working", "awareness"]))
-      .describe("Per-category depth override, e.g. { 'agents': 'deep', 'rag': 'working' }"),
-    trusted_sources: z.array(z.string()).optional().describe("Domains or authors the user trusts"),
-    scout_platforms: z.array(z.string()).optional().describe("Where to look for content, e.g. ['Twitter', 'HN', 'ArXiv']"),
-    categories: z.array(CategoryInput).describe("The 2-6 knowledge domains to track"),
+    depth_prefs: z.record(z.string(), z.enum(["deep", "working", "awareness"])).default({}),
+    trusted_sources: z.array(z.string()).optional(),
+    scout_platforms: z.array(z.string()).optional(),
+    categories: z.array(CategoryInput).optional().describe("Required when template is 'custom'"),
   }),
   async execute(params, ctx) {
+    // Resolve categories from template or custom input
+    const templateDef = params.template !== "custom" ? TEMPLATES[params.template] : undefined
+    const resolvedCategories = templateDef
+      ? templateDef.categories.map((c) => ({ ...c, color: undefined }))
+      : (params.categories ?? [])
+
+    if (resolvedCategories.length === 0) {
+      throw new Error("No categories provided. For custom template, supply at least one category.")
+    }
+
     await ctx.ask({
       permission: "edit",
-      patterns: ["wiki/**", "raw/", "schema.json", "supadense.md", "log.md"],
+      patterns: ["wiki/**", "raw/", "supadense.md", "log.md"],
       always: ["*"],
       metadata: {
         filepath: params.workspace_id,
-        diff: `Onboarding: creating ${params.categories.length} categories + wiki pages`,
+        diff: `Onboarding (${params.template} template): creating ${resolvedCategories.length} categories`,
       },
     })
 
-    const categories = Workspace.completeOnboarding(params.workspace_id, {
+    // Save workspace metadata (intent, goals, etc.) and mark as initialized
+    Workspace.completeOnboarding(params.workspace_id, {
       learning_intent: params.learning_intent,
+      years_of_experience: params.years_of_experience,
       goals: params.goals,
       depth_prefs: params.depth_prefs,
       trusted_sources: params.trusted_sources ?? [],
       scout_platforms: params.scout_platforms ?? [],
-      categories: params.categories,
-      subcategories: DEFAULT_SUBCATEGORIES,
+      categories: resolvedCategories,
+      subcategories: [],
     })
 
     const workspace = Workspace.getById(params.workspace_id)!
 
-    // Ensure schema metadata row exists and render schema.json
-    KbSchema.ensure(params.workspace_id)
-    KbSchema.renderToFile(params.workspace_id)
-
-    // Scaffold directory structure
-    mkdirSync(path.join(workspace.kb_path, "wiki", "assets"), { recursive: true })
+    // Scaffold root directory structure
+    mkdirSync(path.join(workspace.kb_path, "assets"), { recursive: true })
     mkdirSync(path.join(workspace.kb_path, "raw"), { recursive: true })
 
-    // Build all wiki files from DB state
-    WikiBuilder.buildAll(params.workspace_id)
+    // Create each category as a proper folder with overview.md
+    const createdCategories: ReturnType<typeof Workspace.createCategory>["category"][] = []
+    for (let i = 0; i < resolvedCategories.length; i++) {
+      const cat = resolvedCategories[i]
+      const { category } = Workspace.createCategory(
+        params.workspace_id,
+        cat.name,
+        undefined,
+        cat.description,
+        { depth: cat.depth, icon: (cat as { icon?: string }).icon, color: (cat as { color?: string }).color, position: i },
+      )
+      createdCategories.push(category)
+
+      // For built-in templates: add the Key Concepts section
+      if (templateDef) {
+        const sectionDesc = `Key concepts and terminology for ${cat.name} — definitions, mental models, and core ideas to build a strong foundation.`
+        Workspace.createSection(params.workspace_id, templateDef.sectionName, category.id, sectionDesc)
+      }
+    }
+
     WikiBuilder.buildSupadenseMd(workspace)
     WikiBuilder.buildLogFile(workspace)
 
@@ -92,19 +127,17 @@ export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
       title: "Onboarding complete",
       metadata: {
         workspace_id: params.workspace_id,
-        categories_created: categories.length,
+        template: params.template,
+        categories_created: createdCategories.length,
         pages_created: pages.length,
       },
       output: [
-        `Onboarding complete. Created ${categories.length} categories and ${pages.length} wiki pages.`,
+        `Onboarding complete (${params.template} template). Created ${createdCategories.length} categories and ${pages.length} wiki pages.`,
         "",
         "Categories:",
-        ...categories.map((c) => `  • ${c.icon ?? ""} ${c.name} (${c.depth}) → wiki/${c.slug}.md`),
+        ...createdCategories.map((c) => `  • ${c.icon ?? ""} ${c.name} (${c.depth})`),
         "",
-        "Wiki pages:",
-        ...pages.map((p) => `  • ${p.file_path} [${p.page_type}]`),
-        "",
-        "All files written to disk: schema.json, supadense.md, log.md, wiki/, raw/",
+        "You can add/remove/rename categories and sections at any time from the file panel or via chat.",
       ].join("\n"),
     }
   },

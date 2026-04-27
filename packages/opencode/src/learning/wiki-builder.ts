@@ -27,6 +27,7 @@ import {
   LearningMediaAssetTable,
 } from "./schema.sql"
 import { Placement } from "./resource"
+import { Workspace as WorkspaceUtil } from "./workspace"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,13 @@ export namespace WikiBuilder {
           .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, page.slug!))
           .run()
       )
+    }
+
+    // Overview pages are structural indexes — delegate to refreshOverview instead of
+    // rendering resource content. This prevents placed content from polluting overview.md.
+    if (page.type === "overview" && page.category_id) {
+      WorkspaceUtil.refreshOverview(page.workspace_id, page.category_id)
+      return
     }
 
     let content: string

@@ -11,7 +11,6 @@ import { spawnSync } from "child_process"
 import { Tool } from "../tool"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
-import { KbSchema } from "../../learning/kb-schema"
 import { Project } from "../../project/project"
 
 export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
@@ -27,7 +26,8 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
     "  supadense.md",
     "  log.md",
     "  wiki/index.md",
-    "  wiki/assets/",
+    "  assets/",
+    "  raw/",
     "",
     "Returns the workspace record including: id, kb_path, kb_initialized, categories, wiki pages.",
     "If kb_initialized is false, run the onboard flow (kb_onboard_complete) before memorizing.",
@@ -76,12 +76,6 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
       }
     }
 
-    // Render schema.json if the workspace has been onboarded
-    if (workspace.kb_initialized) {
-      KbSchema.ensure(workspace.id)
-      KbSchema.renderToFile(workspace.id)
-    }
-
     const categories = Workspace.getCategories(workspace.id)
     const pages = Workspace.getWikiPages(workspace.id)
 
@@ -101,7 +95,19 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
         kb_path: workspace.kb_path,
         kb_initialized: workspace.kb_initialized,
         categories: categories.map((c) => ({ id: c.id, slug: c.slug, name: c.name, depth: c.depth })),
-        wiki_pages: pages.map((p) => ({ id: p.id, type: p.page_type, file_path: p.file_path, title: p.title })),
+        wiki_pages: pages
+          .filter((p) => p.page_type !== "index")
+          .map((p) => ({
+            id: p.id,
+            title: p.title,
+            file_path: p.file_path,
+            page_type: p.page_type,
+            category_slug: p.category_slug,
+            subcategory_slug: p.subcategory_slug,
+            nav_slug: p.subcategory_slug
+              ? `${p.category_slug}--${p.subcategory_slug}`
+              : (p.category_slug ?? p.slug),
+          })),
       },
       output: summary,
     }

@@ -23,7 +23,6 @@ import { MessageID } from "../../session/schema"
 import { MessageV2 } from "../../session/message-v2"
 import { Resource } from "../../learning/resource"
 import { Workspace } from "../../learning/workspace"
-import { KbSchema, type SchemaContent } from "../../learning/kb-schema"
 
 // ── Prompt builder ─────────────────────────────────────────────────────────
 
@@ -31,7 +30,6 @@ function buildCuratorPrompt(
   resource: ReturnType<typeof Resource.get>,
   workspace: ReturnType<typeof Workspace.getById>,
   pages: ReturnType<typeof Workspace.getWikiPages>,
-  schema: SchemaContent,
 ): string {
   if (!resource || !workspace) return ""
 
@@ -81,38 +79,32 @@ function buildCuratorPrompt(
     "Extract content into the sections listed below — only when the resource has genuinely relevant content for that section.",
     "The **Guidance** tells you what to look for. Skip a section if the resource has nothing valuable to add.",
     "",
-    // Category pages with direct sections (common when no subcategories exist)
-    ...schema.categories.flatMap((cat) => {
-      const catPage = categoryPages.find((p) => p.category_slug === cat.slug)
-      if (!catPage || cat.sections.length === 0) return []
-      return [
-        `### ${cat.name} — category page`,
-        `(wiki_page_id: \`${catPage.id}\`, file: ${catPage.file_path})`,
+    // Category pages with sections (skip overview pages — content belongs in section pages)
+    ...categoryPages
+      .filter((p) => p.type !== "overview" && (p.sections ?? []).length > 0)
+      .flatMap((p) => [
+        `### ${p.title} — category page`,
+        `(wiki_page_id: \`${p.id}\`, file: ${p.file_path})`,
         "",
-        ...cat.sections.flatMap((sec) => [
+        ...(p.sections ?? []).flatMap((sec) => [
           `**${sec.heading}** (\`section_slug: "${sec.slug}"\`)`,
-          `> ${sec.description}`,
+          sec.description ? `> ${sec.description}` : "",
           "",
         ]),
-      ]
-    }),
-    // Subcategory pages
-    ...schema.categories.flatMap((cat) =>
-      cat.subcategories.flatMap((sub) => {
-        const matchingPages = subcatPages.filter((p) => p.subcategory_slug === sub.slug)
-        if (matchingPages.length === 0) return []
-        return matchingPages.flatMap((p) => [
-          `### ${cat.name} → ${sub.name} — subcategory page`,
-          `(wiki_page_id: \`${p.id}\`, file: ${p.file_path})`,
+      ]),
+    // Subcategory pages with sections (skip overview pages)
+    ...subcatPages
+      .filter((p) => p.type !== "overview" && (p.sections ?? []).length > 0)
+      .flatMap((p) => [
+        `### ${p.category_slug} → ${p.title} — subcategory page`,
+        `(wiki_page_id: \`${p.id}\`, file: ${p.file_path})`,
+        "",
+        ...(p.sections ?? []).flatMap((sec) => [
+          `**${sec.heading}** (\`section_slug: "${sec.slug}"\`)`,
+          sec.description ? `> ${sec.description}` : "",
           "",
-          ...sub.sections.flatMap((sec) => [
-            `**${sec.heading}** (\`section_slug: "${sec.slug}"\`)`,
-            `> ${sec.description}`,
-            "",
-          ]),
-        ])
-      }),
-    ),
+        ]),
+      ]),
     "---",
     "",
     "## Your Task",
@@ -169,10 +161,9 @@ export const KbPipelineRunTool = Tool.defineEffect(
         providerID: msg.info.providerID,
       }
 
-      // ── Build schema context ──────────────────────────────────────────
+      // ── Build curator prompt ──────────────────────────────────────────
       const pages = yield* Effect.sync(() => Workspace.getWikiPages(params.workspace_id))
-      const schema = yield* Effect.sync(() => KbSchema.buildContent(params.workspace_id))
-      const curatorPrompt = buildCuratorPrompt(resource, workspace, pages, schema)
+      const curatorPrompt = buildCuratorPrompt(resource, workspace, pages)
 
       // ── Create child session ──────────────────────────────────────────
       const childSession = yield* Effect.promise(() =>

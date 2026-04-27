@@ -34,7 +34,7 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
   ].join("\n"),
   parameters: z.object({
     resource_id: z.string().describe("Resource ID from kb_resource_create"),
-    wiki_page_id: z.string().describe("Target wiki page ID from kb_workspace_init. Also accepts category slug (e.g. 'agents') as fallback."),
+    wiki_page_id: z.string().describe("Target wiki page — use 'id' or 'nav_slug' from kb_workspace_init wiki_pages list. Nav slug format: 'agents' (overview) or 'agents--key-concepts' (section). Double-dash separates category from section."),
     section_slug: z
       .string()
       .describe("Section identifier, e.g. 'key-concepts', 'examples', 'tools', 'papers'"),
@@ -62,35 +62,69 @@ export const KbResourcePlaceTool = Tool.define("kb_resource_place", {
     const resource = Resource.get(params.resource_id)
     if (!resource) throw new Error(`Resource ${params.resource_id} not found`)
 
-    // Accept either a DB ID or a category/subcategory slug as wiki_page_id
+    // Resolve page: try ID first, then several slug formats
     let page = Workspace.getWikiPageById(params.wiki_page_id)
     if (!page) {
-      // Try slug lookup within this project's workspace
       const workspace = Workspace.getByKbPath(Instance.directory)
       if (workspace) {
-        page = Database.use((db) =>
-          db.select().from(LearningWikiPageTable)
-            .where(and(
-              eq(LearningWikiPageTable.workspace_id, workspace.id),
-              eq(LearningWikiPageTable.slug, params.wiki_page_id),
-            )).get(),
-        ) ?? undefined
+        const allPages = Workspace.getWikiPages(workspace.id)
+        const id = params.wiki_page_id
+
+        page =
+          // exact slug column
+          allPages.find((p) => p.slug === id) ??
+          // nav_slug format: "category--subcategory"
+          allPages.find((p) => p.category_slug && p.subcategory_slug && `${p.category_slug}--${p.subcategory_slug}` === id) ??
+          // category overview: "agents"
+          allPages.find((p) => p.category_slug === id && !p.subcategory_slug) ??
+          // hyphenated combo: "agents-key-concepts" → category_slug="agents", subcategory_slug="key-concepts"
+          allPages.find((p) => {
+            if (!p.category_slug || !p.subcategory_slug) return false
+            return `${p.category_slug}-${p.subcategory_slug}` === id ||
+              id.startsWith(p.category_slug + "-") && id.slice(p.category_slug.length + 1) === p.subcategory_slug
+          }) ??
+          // file_path match
+          allPages.find((p) => p.file_path === id || p.file_path.endsWith(`/${id}.md`))
       }
     }
-    if (!page) throw new Error(`Wiki page '${params.wiki_page_id}' not found. Check the wiki_pages list from kb_workspace_init.`)
+    if (!page) throw new Error(
+      `Wiki page '${params.wiki_page_id}' not found.\n` +
+      `Use the 'id' or 'nav_slug' field from kb_workspace_init wiki_pages list.\n` +
+      `Nav slug format: "agents" (overview) or "agents--key-concepts" (section).`
+    )
+
+    // Overview pages are structural indexes only — content must go into section pages.
+    if (page.type === "overview") {
+      const sectionSlug = params.section_slug ?? "key-concepts"
+      const navSlug = page.category_slug
+        ? `${page.category_slug}--${sectionSlug}`
+        : `${page.slug}--${sectionSlug}`
+      throw new Error(
+        `Cannot place content on overview page '${page.file_path}'.\n` +
+        `Overview pages are structural indexes only.\n` +
+        `Place content on a section page instead, e.g. wiki_page_id: "${navSlug}".\n` +
+        `Check kb_workspace_init wiki_pages list for available section pages.`
+      )
+    }
 
     type M = { skipped: boolean; placement_id?: string; resource_id?: string; wiki_page_id?: string; section_slug?: string; file_path?: string }
 
     const pageId = page.id
 
-    // Enforce schema: only allow sections already defined on this page
+    // Auto-register the section on the page if not already defined
     const definedSections = page.sections ?? []
     if (!definedSections.some((s) => s.slug === params.section_slug)) {
-      const allowed = definedSections.map((s) => `"${s.slug}"`).join(", ")
-      throw new Error(
-        `Section "${params.section_slug}" is not defined on page "${page.file_path}". ` +
-        `Allowed sections: ${allowed || "(none defined yet)"}. ` +
-        `Ask the user to add the section first via kb_category_manage(action: "add_section").`,
+      const newSection = {
+        slug: params.section_slug,
+        heading: params.section_heading,
+        description: `Content from resources about ${params.section_slug.replace(/-/g, " ")}.`,
+        updated_at: Date.now(),
+      }
+      Database.use((db) =>
+        db.update(LearningWikiPageTable)
+          .set({ sections: [...definedSections, newSection], time_updated: Date.now() })
+          .where(eq(LearningWikiPageTable.id, page.id))
+          .run(),
       )
     }
 

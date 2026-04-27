@@ -4,6 +4,7 @@
 import { useParams } from "@solidjs/router"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
+import { getAuthToken } from "@/utils/server"
 
 export function useWikiApi() {
   const server = useServer()
@@ -11,9 +12,11 @@ export function useWikiApi() {
 
   function headers(): Record<string, string> {
     const dir = decode64(params.dir) ?? ""
+    const token = getAuthToken()
     return {
       "x-opencode-directory": dir,
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }
   }
 
@@ -90,6 +93,7 @@ export interface WikiCategory {
   depth: "deep" | "working" | "awareness"
   icon: string | null
   color: string | null
+  parent_category_id: string | null
   resource_count: number
   pages: WikiPageSummary[]
 }
@@ -130,6 +134,7 @@ export interface WikiPageData {
     slug: string
     title: string
     description: string | null
+    type: string
     page_type: string
     file_path: string
     resource_count: number
@@ -145,7 +150,17 @@ export interface WikiPageData {
     depth: string
     icon: string | null
   } | null
+  parent_category: {
+    id: string
+    slug: string
+    name: string
+  } | null
   content: string
+  category_tabs: {
+    nav_slug: string
+    title: string
+    type: string
+  }[]
   subcategories: {
     id: string
     slug: string

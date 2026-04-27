@@ -1,33 +1,9 @@
-/**
- * kb-schema.ts — Per-workspace schema management.
- *
- * The schema defines the full structure of a KB:
- *   categories → subcategories → sections (with extraction guidance)
- *
- * Source of truth: learning_categories + learning_wiki_pages.sections (DB)
- * Generated artifact: schema.json (on disk, git-tracked, chat-only edits)
- *
- * schema.json is rebuilt whenever the structure changes — same contract as
- * supadense.md and log.md.
- */
-import path from "path"
-import { writeFileSync } from "fs"
-import { ulid } from "ulid"
-import { eq, and } from "drizzle-orm"
-import { Database } from "../storage/db"
-import {
-  LearningKbSchemaTable,
-  LearningKbWorkspaceTable,
-  LearningCategoryTable,
-  LearningWikiPageTable,
-} from "./schema.sql"
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Shared KB structure types and defaults used across workspace and tools.
 
 export interface SchemaSection {
   slug: string
   heading: string
-  description: string // extraction guidance for KBCurator
+  description: string
 }
 
 export interface SchemaSubcategory {
@@ -35,24 +11,6 @@ export interface SchemaSubcategory {
   name: string
   sections: SchemaSection[]
 }
-
-export interface SchemaCategory {
-  slug: string
-  name: string
-  depth: string
-  icon?: string
-  sections: SchemaSection[]
-  subcategories: SchemaSubcategory[]
-}
-
-export interface SchemaContent {
-  version: number
-  generated_at: string
-  categories: SchemaCategory[]
-}
-
-// ─── Default sections ────────────────────────────────────────────────────────
-// Applied to every new category and subcategory page automatically.
 
 export const DEFAULT_SECTIONS: SchemaSection[] = [
   {
@@ -62,10 +20,6 @@ export const DEFAULT_SECTIONS: SchemaSection[] = [
       "Core concepts, definitions, and terminology introduced by this resource. Use bullet points: **Term** — definition.",
   },
 ]
-
-// ─── Default subcategory structure ───────────────────────────────────────────
-// Applied to every category during onboarding. Can be evolved per-workspace
-// via chat after setup.
 
 export const DEFAULT_SUBCATEGORIES: SchemaSubcategory[] = [
   {
@@ -146,122 +100,3 @@ export const DEFAULT_SUBCATEGORIES: SchemaSubcategory[] = [
     ],
   },
 ]
-
-// ─── KbSchema namespace ───────────────────────────────────────────────────────
-
-export namespace KbSchema {
-  type SchemaRow = typeof LearningKbSchemaTable.$inferSelect
-
-  /** Get the schema metadata row for a workspace (null if not yet created). */
-  export function get(workspaceId: string): SchemaRow | undefined {
-    return Database.use((db) =>
-      db.select().from(LearningKbSchemaTable).where(eq(LearningKbSchemaTable.workspace_id, workspaceId)).get(),
-    )
-  }
-
-  /** Ensure the schema metadata row exists. Idempotent. */
-  export function ensure(workspaceId: string): SchemaRow {
-    const existing = get(workspaceId)
-    if (existing) return existing
-    const now = Date.now()
-    const id = ulid()
-    Database.use((db) =>
-      db.insert(LearningKbSchemaTable).values({ id, workspace_id: workspaceId, version: 1, time_created: now, time_updated: now }).run(),
-    )
-    return get(workspaceId)!
-  }
-
-  /** Bump the version counter (call after any structural change). */
-  export function bumpVersion(workspaceId: string): void {
-    const schema = get(workspaceId)
-    if (!schema) return
-    Database.use((db) =>
-      db
-        .update(LearningKbSchemaTable)
-        .set({ version: schema.version + 1, time_updated: Date.now() })
-        .where(eq(LearningKbSchemaTable.workspace_id, workspaceId))
-        .run(),
-    )
-  }
-
-  /**
-   * Assemble the full schema content from the DB tables.
-   * Reads learning_categories + learning_wiki_pages (category + subcategory pages with sections).
-   */
-  export function buildContent(workspaceId: string): SchemaContent {
-    const schema = get(workspaceId)
-    const categories = Database.use((db) =>
-      db
-        .select()
-        .from(LearningCategoryTable)
-        .where(eq(LearningCategoryTable.workspace_id, workspaceId))
-        .all(),
-    )
-    const allPages = Database.use((db) =>
-      db
-        .select()
-        .from(LearningWikiPageTable)
-        .where(
-          and(
-            eq(LearningWikiPageTable.workspace_id, workspaceId),
-            // include both category and subcategory pages
-          ),
-        )
-        .all(),
-    )
-    const catPages = allPages.filter((p) => p.page_type === "category")
-    const subcatPages = allPages.filter((p) => p.page_type === "subcategory")
-
-    return {
-      version: schema?.version ?? 1,
-      generated_at: new Date().toISOString(),
-      categories: categories
-        .sort((a, b) => a.position - b.position)
-        .map((cat) => {
-          const catPage = catPages.find((p) => p.category_slug === cat.slug)
-          return {
-            slug: cat.slug,
-            name: cat.name,
-            depth: cat.depth,
-            icon: cat.icon ?? undefined,
-            sections: (catPage?.sections ?? []).map((s) => ({
-              slug: s.slug,
-              heading: s.heading,
-              description: s.description ?? "",
-            })),
-            subcategories: subcatPages
-              .filter((p) => p.category_slug === cat.slug)
-              .map((p) => ({
-                slug: p.subcategory_slug!,
-                name: p.title.split(" — ")[1] ?? p.subcategory_slug!,
-                sections: (p.sections ?? []).map((s) => ({
-                  slug: s.slug,
-                  heading: s.heading,
-                  description: s.description ?? "",
-                })),
-              })),
-          }
-        }),
-    }
-  }
-
-  /**
-   * Render schema.json to disk from current DB state.
-   * Call after any structural change (add/remove category, subcategory, section).
-   */
-  export function renderToFile(workspaceId: string): void {
-    const workspace = Database.use((db) =>
-      db.select().from(LearningKbWorkspaceTable).where(eq(LearningKbWorkspaceTable.id, workspaceId)).get(),
-    )
-    if (!workspace) return
-
-    const schema = ensure(workspaceId)
-    const content = buildContent(workspaceId)
-    const filePath = path.join(workspace.kb_path, schema.schema_path)
-    writeFileSync(
-      filePath,
-      JSON.stringify(content, null, 2) + "\n",
-      "utf8",
-    )
-  }
-}
