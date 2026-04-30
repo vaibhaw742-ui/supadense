@@ -37,6 +37,7 @@ export default function LoginPage(props: Props) {
   const [mode, setMode] = createSignal<Mode>(props.initialMode ?? "login")
   const [email, setEmail] = createSignal("")
   const [password, setPassword] = createSignal("")
+  const [yearsOfExp, setYearsOfExp] = createSignal("")
   const [error, setError] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [waitlisted, setWaitlisted] = createSignal(false)
@@ -84,7 +85,7 @@ export default function LoginPage(props: Props) {
       const res = await fetch(`${props.backendUrl}/supa-auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email() }),
+        body: JSON.stringify({ email: email(), years_of_experience: yearsOfExp() }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -181,11 +182,28 @@ export default function LoginPage(props: Props) {
 
           <Show when={!waitlisted() && mode() === "signup"}>
             <form onSubmit={handleSignup}>
-              <div style={{ "margin-bottom": "20px" }}>
+              <div style={{ "margin-bottom": "14px" }}>
                 <label style={{ display: "block", "font-size": "12px", "font-weight": "500", color: "#333", "margin-bottom": "6px" }}>
                   Email
                 </label>
                 <input type="email" required autocomplete="email" value={email()} onInput={(e) => setEmail(e.currentTarget.value)} style={inputStyle} placeholder="you@example.com" />
+              </div>
+              <div style={{ "margin-bottom": "20px" }}>
+                <label style={{ display: "block", "font-size": "12px", "font-weight": "500", color: "#333", "margin-bottom": "6px" }}>
+                  Years of Experience
+                </label>
+                <select
+                  required
+                  value={yearsOfExp()}
+                  onChange={(e) => setYearsOfExp(e.currentTarget.value)}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                >
+                  <option value="" disabled>Select experience</option>
+                  <option value="<2">&lt;2 years</option>
+                  <option value="2-5">2–5 years</option>
+                  <option value="5-10">5–10 years</option>
+                  <option value="10+">10+ years</option>
+                </select>
               </div>
               <Show when={error()}>
                 <div style={{ "font-size": "12px", color: "#e53e3e", "margin-bottom": "14px", padding: "8px 12px", background: "#fff5f5", "border-radius": "6px", border: "1px solid #fed7d7" }}>
