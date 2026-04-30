@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal, Show, onMount, onCleanup } from "solid-js"
 import LoginPage from "./login"
 
 interface Props {
@@ -12,6 +12,11 @@ const ORANGE = "#c44a0e"
 
 export default function LandingPage(props: Props) {
   const [view, setView] = createSignal<View>("landing")
+
+  onMount(() => {
+    document.body.style.overflow = "auto"
+    onCleanup(() => { document.body.style.overflow = "" })
+  })
 
   return (
     <Show
@@ -34,13 +39,9 @@ export default function LandingPage(props: Props) {
             <span style={{ "font-weight": "600", "font-size": "16px", color: "#111" }}>Supadense</span>
           </div>
           <div style={{ display: "flex", "align-items": "center", gap: "16px" }}>
-            <a
-              href="http://localhost:4097/docs"
-              target="_blank"
-              style={{ "font-size": "14px", "font-weight": "500", color: "#333", "text-decoration": "none", padding: "6px 12px" }}
-            >
+            <span style={{ "font-size": "14px", "font-weight": "500", color: "#333", padding: "6px 12px", cursor: "default" }}>
               Docs
-            </a>
+            </span>
             <button
               onClick={() => setView("login")}
               style={{ background: "none", border: "none", "font-size": "14px", "font-weight": "500", color: "#333", cursor: "pointer", padding: "6px 12px" }}
@@ -57,7 +58,7 @@ export default function LandingPage(props: Props) {
         </nav>
 
         {/* Hero */}
-        <main style={{ flex: "1", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", "text-align": "center", padding: "80px 24px 60px" }}>
+        <main style={{ display: "flex", "flex-direction": "column", "align-items": "center", "text-align": "center", padding: "80px 24px 80px" }}>
           {/* Badge */}
           <div style={{ display: "inline-flex", "align-items": "center", gap: "6px", background: "#fff7f4", border: "1px solid #f5cbb5", "border-radius": "100px", padding: "5px 14px", "margin-bottom": "32px" }}>
             <span style={{ width: "7px", height: "7px", background: ORANGE, "border-radius": "50%", display: "inline-block" }} />
@@ -90,6 +91,15 @@ export default function LandingPage(props: Props) {
             </button>
           </div>
           <p style={{ "font-size": "13px", color: "#aaa", margin: "0" }}>Free to get started · No credit card required</p>
+
+          <div style={{ "margin-top": "80px", width: "550px", "max-width": "90vw", "margin-left": "auto", "margin-right": "auto", display: "flex", "justify-content": "center" }}>
+            <iframe
+              src="https://platform.twitter.com/embed/Tweet.html?dnt=true&id=2045132112374964620&theme=light"
+              style={{ border: "none", width: "100%", height: "750px", "border-radius": "12px", display: "block" }}
+              scrolling="no"
+              allowFullScreen
+            />
+          </div>
         </main>
 
         {/* Footer */}
@@ -128,6 +138,7 @@ export default function LandingPage(props: Props) {
     </Show>
   )
 }
+
 
 function FooterCol(props: { title: string; links: [string, string][] }) {
   return (
