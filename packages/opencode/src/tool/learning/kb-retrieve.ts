@@ -8,11 +8,11 @@
  * fetch only the relevant section (offset + limit pattern).
  */
 import z from "zod"
+import { readFileSync, existsSync } from "fs"
 import { Tool } from "../tool"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
 import { Retrieval } from "../../learning/retrieval"
-import { Server } from "../../server/server"
 
 export const KbRetrieveTool = Tool.define("kb_retrieve", {
   description: [
@@ -63,22 +63,25 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
 
     const { locations, concepts, sources } = Retrieval.searchWithContext(workspaceId, params.query, params.max_results ?? 8)
 
-    // Build base URL — always localhost from the browser's perspective.
-    // Server may bind to 0.0.0.0 inside Docker, but the browser hits localhost.
-    const serverPort = Server.url ? Server.url.port || "4096" : "4096"
-    const serverOrigin = `http://localhost:${serverPort}`
-
     // Collect all images across results, deduplicated by local_path
+    // Serve as base64 data URLs so the browser never makes a separate authenticated request
     const seenImagePaths = new Set<string>()
     const allImages = locations.flatMap((r) => r.images).filter((img) => {
       if (seenImagePaths.has(img.local_path)) return false
       seenImagePaths.add(img.local_path)
       return true
-    }).map((img) => ({
-      ...img,
-      // Convert "wiki/assets/abc/foo.jpg" → "http://localhost:4096/wiki/assets/abc/foo.jpg"
-      url: `${serverOrigin}/${img.local_path}`,
-    }))
+    }).map((img) => {
+      let url = img.abs_path
+      try {
+        if (existsSync(img.abs_path)) {
+          const ext = img.abs_path.split(".").pop()?.toLowerCase() ?? ""
+          const mime = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "webp" ? "image/webp" : "image/jpeg"
+          const b64 = readFileSync(img.abs_path).toString("base64")
+          url = `data:${mime};base64,${b64}`
+        }
+      } catch { /* fall back to abs_path if read fails */ }
+      return { ...img, url }
+    })
 
     const conceptsText = concepts.length > 0
       ? [

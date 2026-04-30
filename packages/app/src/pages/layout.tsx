@@ -3,6 +3,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -64,6 +65,7 @@ import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
+import { clearAuthToken, getAuthToken } from "@/utils/server"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -1399,10 +1401,26 @@ export default function Layout(props: ParentProps) {
     globalSync.project.meta(project.worktree, { name })
   }
 
-  const renameWorkspace = (directory: string, next: string, projectId?: string, branch?: string) => {
+  const renameWorkspace = async (directory: string, next: string, projectId?: string, branch?: string) => {
+    const trimmed = next.trim()
     const current = workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
-    if (current === next) return
-    setWorkspaceName(directory, next, projectId, branch)
+    if (current === trimmed) return
+
+    const allProjects = layout.projects.list()
+    const isDuplicate = allProjects.some(
+      (p) => workspaceKey(p.worktree) !== workspaceKey(directory) && displayName(p) === trimmed,
+    )
+    if (isDuplicate) {
+      showToast({ title: "A workspace with that name already exists" })
+      return
+    }
+
+    setWorkspaceName(directory, trimmed, projectId, branch)
+
+    const project = allProjects.find((p) => workspaceKey(p.worktree) === workspaceKey(directory))
+    if (project?.id && project.id !== "global") {
+      await globalSDK.client.project.update({ projectID: project.id, directory, name: trimmed })
+    }
   }
 
   function closeProject(directory: string) {
@@ -1429,6 +1447,50 @@ export default function Layout(props: ParentProps) {
     queueMicrotask(() => {
       void navigateToProject(next.worktree)
     })
+  }
+
+  function DialogDeleteProject(props: { project: LocalProject }) {
+    const handleDelete = async () => {
+      dialog.close()
+      closeProject(props.project.worktree)
+      if (!props.project.id || props.project.id === "global") return
+      const base = import.meta.env.DEV
+        ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+        : location.origin
+      const token = getAuthToken()
+      await fetch(
+        `${base}/project/${encodeURIComponent(props.project.id)}?directory=${encodeURIComponent(props.project.worktree)}`,
+        {
+          method: "DELETE",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      )
+    }
+
+    return (
+      <Dialog title="Delete workspace" fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              Are you sure you want to delete "{props.project.name || getFilename(props.project.worktree)}"?
+            </span>
+            <span class="text-12-regular text-text-weak">This will permanently remove the workspace and all its data.</span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function deleteProject(project: LocalProject) {
+    dialog.show(() => <DialogDeleteProject project={project} />)
   }
 
   function toggleProjectWorkspaces(project: LocalProject) {
@@ -1477,6 +1539,77 @@ export default function Layout(props: ParentProps) {
         )
       })
     }
+  }
+
+  function DialogCreateNewKB() {
+    const [name, setName] = createSignal("")
+    const [error, setError] = createSignal("")
+
+    const handleCreate = async () => {
+      const trimmed = name().trim()
+      if (!trimmed) return
+      setError("")
+      const token = getAuthToken()
+      try {
+        const base = import.meta.env.DEV
+          ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+          : location.origin
+        const res = await fetch(`${base}/kb/create`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ name: trimmed }),
+        })
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string }
+          setError(err.error ?? "Failed to create KB")
+          return
+        }
+        const { directory } = (await res.json()) as { directory: string; name: string }
+        dialog.close()
+        openProject(directory)
+      } catch {
+        setError("Failed to create KB — check connection")
+      }
+    }
+
+    return (
+      <Dialog title="New KB" fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1.5">
+            <input
+              autofocus
+              class="w-72 rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak"
+              classList={{ "border-red-500 focus:border-red-500": !!error() }}
+              placeholder="e.g. Machine Learning"
+              value={name()}
+              onInput={(e) => { setName(e.currentTarget.value); setError("") }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate()
+                if (e.key === "Escape") dialog.close()
+              }}
+            />
+            <Show when={error()}>
+              <div class="text-12-regular text-red-500 pl-1">{error()}</div>
+            </Show>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="large" disabled={!name().trim()} onClick={handleCreate}>
+              Create
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function createNewKB() {
+    dialog.show(() => <DialogCreateNewKB />, { noOverlay: true })
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
@@ -1922,10 +2055,10 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", undefined)
   }
 
-  const createWorkspace = async (project: LocalProject) => {
+  const doCreateWorkspace = async (project: LocalProject, name: string) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree })
+      .create({ directory: project.worktree, name })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -1937,7 +2070,7 @@ export default function Layout(props: ParentProps) {
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+    setWorkspaceName(created.directory, name, project.id, created.branch)
 
     const local = project.worktree
     const key = workspaceKey(created.directory)
@@ -1960,6 +2093,47 @@ export default function Layout(props: ParentProps) {
 
     globalSync.child(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
+  }
+
+  function DialogCreateWorkspace(props: { project: LocalProject }) {
+    const [name, setName] = createSignal("")
+
+    const handleCreate = () => {
+      const trimmed = name().trim()
+      if (!trimmed) return
+      dialog.close()
+      void doCreateWorkspace(props.project, trimmed)
+    }
+
+    return (
+      <Dialog title="New KB" fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <input
+            autofocus
+            class="w-72 rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak"
+            placeholder="e.g. Machine Learning"
+            value={name()}
+            onInput={(e) => setName(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate()
+              if (e.key === "Escape") dialog.close()
+            }}
+          />
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="large" disabled={!name().trim()} onClick={handleCreate}>
+              Create
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  const createWorkspace = (project: LocalProject) => {
+    dialog.show(() => <DialogCreateWorkspace project={project} />)
   }
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
@@ -2005,6 +2179,7 @@ export default function Layout(props: ParentProps) {
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
+    deleteProject,
     showEditProjectDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
@@ -2092,8 +2267,8 @@ export default function Layout(props: ParentProps) {
                       {language.t("sidebar.empty.description")}
                     </div>
                   </div>
-                  <Button size="large" icon="folder-add-left" onClick={chooseProject}>
-                    {language.t("command.project.open")}
+                  <Button size="large" icon="folder-add-left" onClick={createNewKB}>
+                    Create Knowledge Base
                   </Button>
                 </div>
               </div>
@@ -2117,20 +2292,6 @@ export default function Layout(props: ParentProps) {
                     stopPropagation
                   />
 
-                  <Tooltip
-                    placement="bottom"
-                    gutter={2}
-                    value={worktree()}
-                    class="shrink-0"
-                    contentStyle={{
-                      "max-width": "640px",
-                      transform: "translate3d(52px, 0, 0)",
-                    }}
-                  >
-                    <span class="text-12-regular text-text-base truncate select-text">
-                      {worktree().replace(homedir(), "~")}
-                    </span>
-                  </Tooltip>
                 </div>
 
                 <DropdownMenu modal={!sidebarHovering()}>
@@ -2187,15 +2348,15 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Item>
                       <DropdownMenu.Separator />
                       <DropdownMenu.Item
-                        data-action="project-close-menu"
+                        data-action="project-delete"
                         data-project={slug()}
                         onSelect={() => {
-                          const dir = worktree()
-                          if (!dir) return
-                          closeProject(dir)
+                          const item = project()
+                          if (!item) return
+                          deleteProject(item)
                         }}
                       >
-                        <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
+                        <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
@@ -2326,6 +2487,25 @@ export default function Layout(props: ParentProps) {
 
   const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
+
+  const getSessionEmail = (): string | undefined => {
+    const token = getAuthToken()
+    if (!token) return undefined
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+      return typeof payload.email === "string" ? payload.email : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  const handleLogout = getAuthToken()
+    ? () => {
+        clearAuthToken()
+        location.reload()
+      }
+    : undefined
+
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
       mobile={mobile}
@@ -2338,9 +2518,9 @@ export default function Layout(props: ParentProps) {
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
       handleDragOver={handleDragOver}
-      openProjectLabel={language.t("command.project.open")}
-      openProjectKeybind={() => command.keybind("project.open")}
-      onOpenProject={chooseProject}
+      openProjectLabel="Create New KB"
+      openProjectKeybind={() => undefined}
+      onOpenProject={createNewKB}
       renderProjectOverlay={projectOverlay}
       settingsLabel={() => language.t("sidebar.settings")}
       settingsKeybind={() => command.keybind("settings.open")}
@@ -2350,6 +2530,8 @@ export default function Layout(props: ParentProps) {
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
+      userEmail={getSessionEmail()}
+      onLogout={handleLogout}
     />
   )
 

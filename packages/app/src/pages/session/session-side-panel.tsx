@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -8,11 +8,12 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff, VcsFileDiff, FileNode } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import type { KbTreeNode } from "@/pages/session/kb-files-panel"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
@@ -24,6 +25,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useKbApi } from "@/pages/session/kb-files-panel"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -44,6 +46,49 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const { sessionKey, tabs, view } = useSessionLayout()
+  const kbApi = useKbApi()
+  const [kbCreating, setKbCreating] = createSignal<"category" | "section" | "collapsed" | null>(null)
+  const [activePath, setActivePath] = createSignal<string | null>(null)
+  const [kbPathRef, setKbPathRef] = createSignal("")
+  const [kbFlatNodes, setKbFlatNodes] = createSignal<{ id: string; name: string; folder_path: string }[]>([])
+  const [renaming, setRenaming] = createSignal<{ path: string; currentName: string; node: FileNode } | null>(null)
+  const [kbFlatSections, setKbFlatSections] = createSignal<{ id: string; file_path: string }[]>([])
+
+  function normPath(p: string): string {
+    return p.replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "")
+  }
+
+  function resolveKbEntity(nodePath: string): { type: "category" | "section"; id: string } | undefined {
+    const kb = normPath(kbPathRef() ?? "")
+    const target = normPath(nodePath)
+    // Try folders (categories)
+    for (const n of kbFlatNodes()) {
+      const abs = kb ? `${kb}/${n.folder_path}` : n.folder_path
+      if (normPath(abs) === target) return { type: "category", id: n.id }
+    }
+    // Try files (sections)
+    for (const s of kbFlatSections()) {
+      const abs = kb ? `${kb}/${s.file_path}` : s.file_path
+      if (normPath(abs) === target) return { type: "section", id: s.id }
+    }
+    return undefined
+  }
+
+  function populateFlatData(nodes: KbTreeNode[], kb_path: string) {
+    const flat: { id: string; name: string; folder_path: string }[] = []
+    const allSections: { id: string; file_path: string }[] = []
+    const walk = (ns: KbTreeNode[]) => {
+      for (const n of ns) {
+        flat.push({ id: n.id, name: n.name, folder_path: n.folder_path })
+        for (const s of n.sections) allSections.push({ id: s.id, file_path: s.file_path })
+        walk(n.subcategories)
+      }
+    }
+    walk(nodes)
+    setKbPathRef(kb_path)
+    setKbFlatNodes(flat)
+    setKbFlatSections(allSections)
+  }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -401,19 +446,194 @@ export function SessionSidePanel(props: {
                     <Match when={true}>{empty(props.empty())}</Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
-                    <Match when={true}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        modified={diffFiles()}
-                        kinds={kinds()}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                      />
-                    </Match>
-                  </Switch>
+                <Tabs.Content value="all" class="bg-background-stronger py-0" style={{ "padding-left": "0", "padding-right": "0" }}>
+                  {/* VS Code-style explorer header */}
+                  <div class="kb-explorer-header" style={{
+                    display: "flex", "align-items": "center",
+                    padding: "0 8px 0 4px", height: "28px",
+                    "flex-shrink": "0",
+                  }}>
+                    {/* Section title + collapse toggle */}
+                    <button
+                      onClick={() => setKbCreating((v) => v === "collapsed" ? null : "collapsed")}
+                      style={{ display: "flex", "align-items": "center", gap: "4px", background: "none", border: "none", cursor: "pointer", flex: "1", "min-width": "0", padding: "0 4px 0 2px" }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" style={{ "flex-shrink": "0", color: "var(--text-weak-base)", transform: kbCreating() === "collapsed" ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }}>
+                        <path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span style={{ "font-size": "11px", "font-weight": "600", "letter-spacing": "0.6px", "text-transform": "uppercase", color: "var(--text-base)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
+                        Supadense
+                      </span>
+                    </button>
+
+                    {/* Action buttons — shown on hover of the header */}
+                    <div class="kb-header-actions" style={{ display: "flex", "align-items": "center", gap: "1px", "flex-shrink": "0" }}>
+                      {/* New section */}
+                      <button
+                        title={activePath() ? `New section in ${activePath()!.split("/").pop()}` : "New section (select a folder first)"}
+                        onClick={async () => {
+                          const { nodes, kb_path } = await kbApi.tree()
+                          populateFlatData(nodes, kb_path)
+                          const p = activePath()
+                          if (p) file.tree.expand(p)
+                          setKbCreating("section")
+                        }}
+                        class="kb-header-btn"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "3px", "border-radius": "4px", color: "var(--text-weak-base)", display: "flex", "align-items": "center" }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                          <rect x="2" y="1" width="9" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                          <line x1="11" y1="10" x2="11" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <line x1="8.5" y1="12.5" x2="13.5" y2="12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                      </button>
+
+                      {/* New folder/category */}
+                      <button
+                        title={activePath() ? `New folder in ${activePath()!.split("/").pop()}` : "New folder"}
+                        onClick={async () => {
+                          const { nodes, kb_path } = await kbApi.tree()
+                          populateFlatData(nodes, kb_path)
+                          const p = activePath()
+                          if (p) file.tree.expand(p)
+                          setKbCreating("category")
+                        }}
+                        class="kb-header-btn"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "3px", "border-radius": "4px", color: "var(--text-weak-base)", display: "flex", "align-items": "center" }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                          <path d="M1 4.5C1 3.67 1.67 3 2.5 3H6l1.5 1.5H13.5C14.33 4.5 15 5.17 15 6v6.5C15 13.33 14.33 14 13.5 14h-11C1.67 14 1 13.33 1 12.5V4.5z" stroke="currentColor" stroke-width="1.2"/>
+                          <line x1="9" y1="8.5" x2="9" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <line x1="6.5" y1="10.75" x2="11.5" y2="10.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                      </button>
+
+                      {/* Refresh */}
+                      <button
+                        title="Refresh"
+                        onClick={async () => { const p = activePath(); if (p) await file.tree.refresh(p); await file.tree.refresh("") }}
+                        class="kb-header-btn"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "3px", "border-radius": "4px", color: "var(--text-weak-base)", display: "flex", "align-items": "center" }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                          <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                          <polyline points="10,2 12.5,4.7 10,7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+
+                      {/* Collapse all */}
+                      <button
+                        title="Collapse all"
+                        onClick={() => {
+                          for (const node of file.tree.children("")) {
+                            if (node.type === "directory") file.tree.collapse(node.path)
+                          }
+                        }}
+                        class="kb-header-btn"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "3px", "border-radius": "4px", color: "var(--text-weak-base)", display: "flex", "align-items": "center" }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                          <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                          <line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* File tree */}
+                  <Show when={kbCreating() !== "collapsed"}>
+                    <div class="px-3">
+                      <Switch>
+                        <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                        <Match when={true}>
+                          <FileTree
+                            path=""
+                            class="pt-3"
+                            modified={diffFiles()}
+                            kinds={kinds()}
+                            active={activePath() ?? undefined}
+                            onFileClick={(node) => { setActivePath(node.path); openTab(file.tab(node.path)) }}
+                            onFolderClick={(node) => setActivePath(node.path)}
+                            inlineCreate={kbCreating() === "category" || kbCreating() === "section" ? {
+                              parentPath: activePath() ?? "",
+                              type: kbCreating() === "category" ? "folder" : "file",
+                              onCancel: () => setKbCreating(null),
+                              onConfirm: async (name) => {
+                                const mode = kbCreating()
+                                setKbCreating(null)
+                                const sel = activePath()
+                                const matchedId = sel
+                                  ? kbFlatNodes().find((n) => {
+                                      const abs = kbPathRef() ? `${kbPathRef()}/${n.folder_path}` : n.folder_path
+                                      return abs === sel || n.folder_path === sel || sel.endsWith(`/${n.folder_path}`) || sel.endsWith(n.folder_path)
+                                    })?.id
+                                  : undefined
+                                if (mode === "category") {
+                                  await kbApi.createCategory(name, matchedId)
+                                } else {
+                                  if (matchedId) await kbApi.createSection(name, matchedId)
+                                }
+                                const parent = activePath()
+                                if (parent) await file.tree.refresh(parent)
+                                await file.tree.refresh("")
+                              },
+                            } : undefined}
+                            actions={{
+                              onRename: async (node) => {
+                                if (node.name === "wiki" || node.name === "raw" || node.name === "overview.md" || node.name === "index.md" || node.name === "log.md" || node.name === "supadense.md" || node.name === "assets") return
+                                const { nodes, kb_path } = await kbApi.tree()
+                                populateFlatData(nodes, kb_path)
+                                setRenaming({ path: node.path, currentName: node.name, node })
+                              },
+                              onDelete: async (node) => {
+                                if (node.name === "wiki" || node.name === "raw" || node.name === "overview.md" || node.name === "index.md" || node.name === "log.md" || node.name === "supadense.md" || node.name === "assets") return
+                                const { nodes, kb_path } = await kbApi.tree()
+                                populateFlatData(nodes, kb_path)
+                                const entity = resolveKbEntity(node.path)
+                                if (!entity) return
+                                if (entity.type === "category") await kbApi.deleteCategory(entity.id)
+                                else await kbApi.deleteSection(entity.id)
+                                const p = activePath()
+                                if (p) await file.tree.refresh(p)
+                                await file.tree.refresh("")
+                              },
+                            }}
+                            inlineRename={renaming() ? {
+                              path: renaming()!.path,
+                              onCancel: () => setRenaming(null),
+                              onConfirm: async (newName) => {
+                                const r = renaming()
+                                setRenaming(null)
+                                if (!r) return
+                                const entity = resolveKbEntity(r.path)
+                                if (!entity) {
+                                  console.error("[kb rename] could not resolve entity for path:", r.path, "flat nodes:", kbFlatNodes(), "flat sections:", kbFlatSections(), "kb_path:", kbPathRef())
+                                  return
+                                }
+                                try {
+                                  if (entity.type === "category") await kbApi.renameCategory(entity.id, newName)
+                                  else await kbApi.renameSection(entity.id, newName)
+                                } catch (e) {
+                                  console.error("[kb rename] API call failed:", e)
+                                  return
+                                }
+                                const { nodes, kb_path } = await kbApi.tree()
+                                populateFlatData(nodes, kb_path)
+                                try { if (activePath()) await file.tree.refresh(activePath()!) } catch { /* old path gone */ }
+                                await file.tree.refresh("")
+                              },
+                            } : undefined}
+                          />
+                        </Match>
+                      </Switch>
+                    </div>
+                  </Show>
+
+                  <style>{`
+                    .kb-explorer-header .kb-header-actions { opacity: 0; transition: opacity 0.1s; }
+                    .kb-explorer-header:hover .kb-header-actions { opacity: 1; }
+                    .kb-header-btn:hover { background: var(--surface-raised-base-hover) !important; color: var(--text-base) !important; }
+                  `}</style>
                 </Tabs.Content>
               </Tabs>
             </div>

@@ -36,6 +36,7 @@ export const WorkspaceRoutes = lazy(() =>
         const body = c.req.valid("json")
         const workspace = await Workspace.create({
           projectID: Instance.project.id,
+          userID: Instance.current.userId,
           ...body,
         })
         return c.json(workspace)
@@ -88,6 +89,10 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const { id } = c.req.valid("param")
+        const workspace = await Workspace.get(id)
+        if (!workspace || workspace.projectID !== Instance.project.id) {
+          return c.json({ error: "Not found" }, 404)
+        }
         return c.json(await Workspace.remove(id))
       },
     ),

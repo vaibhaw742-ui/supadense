@@ -43,6 +43,7 @@ export namespace Workspace {
       directory: row.directory,
       extra: row.extra,
       projectID: row.project_id,
+      userID: row.user_id ?? null,
     }
   }
 
@@ -52,6 +53,7 @@ export namespace Workspace {
     branch: Info.shape.branch,
     projectID: ProjectID.zod,
     extra: Info.shape.extra,
+    userID: z.string().optional(),
   })
 
   export const create = fn(CreateInput, async (input) => {
@@ -68,6 +70,7 @@ export namespace Workspace {
       directory: config.directory ?? null,
       extra: config.extra ?? null,
       projectID: input.projectID,
+      userID: input.userID ?? null,
     }
 
     Database.use((db) => {
@@ -80,6 +83,7 @@ export namespace Workspace {
           directory: info.directory,
           extra: info.extra,
           project_id: info.projectID,
+          user_id: info.userID ?? null,
         })
         .run()
     })

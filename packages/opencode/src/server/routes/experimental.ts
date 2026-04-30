@@ -220,6 +220,10 @@ export const ExperimentalRoutes = lazy(() =>
       async (c) => {
         const body = c.req.valid("json")
         const worktree = await Worktree.create(body)
+        if (body?.name) {
+          const { project } = await Project.fromDirectory(worktree.directory, Instance.current.userId)
+          await Project.update({ projectID: project.id, name: body.name })
+        }
         return c.json(worktree)
       },
     )

@@ -11,6 +11,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -31,6 +32,8 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  userEmail?: string
+  onLogout?: () => void
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -108,6 +111,32 @@ export const SidebarContent = (props: {
               aria-label={props.helpLabel()}
             />
           </Tooltip>
+          <Show when={props.onLogout}>
+            <DropdownMenu placement="right-end">
+              <Tooltip placement={placement()} value={props.userEmail ?? "Account"}>
+                <DropdownMenu.Trigger
+                  as={IconButton}
+                  icon="person"
+                  variant="ghost"
+                  size="large"
+                  aria-label="Account"
+                />
+              </Tooltip>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  <Show when={props.userEmail}>
+                    <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                      {props.userEmail}
+                    </div>
+                    <DropdownMenu.Separator />
+                  </Show>
+                  <DropdownMenu.Item onSelect={props.onLogout}>
+                    Sign out
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
+          </Show>
         </div>
       </div>
 

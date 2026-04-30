@@ -14,4 +14,5 @@ export const WorkspaceTable = sqliteTable("workspace", {
     .$type<ProjectID>()
     .notNull()
     .references(() => ProjectTable.id, { onDelete: "cascade" }),
+  user_id: text(),
 })

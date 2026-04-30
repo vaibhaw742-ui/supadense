@@ -7,6 +7,10 @@
   background-color: hsl(from var(--background-base) h s l / 0.2);
 }
 
+[data-component="dialog-overlay"][data-no-overlay] {
+  background-color: transparent;
+}
+
 [data-component="dialog"] {
   position: fixed;
   inset: 0;

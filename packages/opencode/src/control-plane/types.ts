@@ -10,6 +10,7 @@ export const WorkspaceInfo = z.object({
   directory: z.string().nullable(),
   extra: z.unknown().nullable(),
   projectID: ProjectID.zod,
+  userID: z.string().nullable().optional(),
 })
 export type WorkspaceInfo = z.infer<typeof WorkspaceInfo>
 

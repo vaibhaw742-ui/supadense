@@ -1,5 +1,6 @@
 import z from "zod"
-import { and, Database, eq } from "../storage/db"
+import { existsSync } from "node:fs"
+import { and, Database, eq, like } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
@@ -14,6 +15,17 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+
+export class DirectoryInUseError extends Error {
+  readonly directory: string
+  readonly claimedByUserId: string
+  constructor(directory: string, claimedByUserId: string) {
+    super(`Directory already in use by another user: ${directory}`)
+    this.directory = directory
+    this.claimedByUserId = claimedByUserId
+    this.name = "DirectoryInUseError"
+  }
+}
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -88,7 +100,7 @@ export namespace Project {
   // ---------------------------------------------------------------------------
 
   export interface Interface {
-    readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
+    readonly fromDirectory: (directory: string, userId?: string) => Effect.Effect<{ project: Info; sandbox: string }>
     readonly discover: (input: Info) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Info[]>
     readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
@@ -162,8 +174,13 @@ export namespace Project {
         )
       })
 
-      const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
+      const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string, userId?: string) {
         log.info("fromDirectory", { directory })
+
+        // Reject directories that don't exist so stale localStorage entries
+        // don't silently re-create project rows on reconnect.
+        const dirExists = yield* fs.isDir(directory).pipe(Effect.orDie)
+        if (!dirExists) throw new Error(`Directory does not exist: ${directory}`)
 
         // Phase 1: discover git info
         type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
@@ -249,11 +266,28 @@ export namespace Project {
         })
 
         // Phase 2: upsert
-        const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+        // Guard: reject if this directory is already claimed by a different user.
+        if (userId) {
+          const conflict = yield* db((d) =>
+            d
+              .select({ user_id: ProjectTable.user_id })
+              .from(ProjectTable)
+              .where(eq(ProjectTable.worktree, data.worktree))
+              .get(),
+          )
+          if (conflict?.user_id && conflict.user_id !== userId) {
+            throw new DirectoryInUseError(data.worktree, conflict.user_id)
+          }
+        }
+
+        // Scope project ID per-user so two users opening the same directory
+        // get isolated project rows, preventing cross-user session leakage.
+        const scopedId: ProjectID = userId ? ProjectID.make(`${userId}:${data.id}`) : data.id
+        const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, scopedId)).get())
         const existing = row
           ? fromRow(row)
           : {
-              id: data.id,
+              id: scopedId,
               worktree: data.worktree,
               vcs: data.vcs,
               sandboxes: [] as string[],
@@ -265,6 +299,7 @@ export namespace Project {
 
         const result: Info = {
           ...existing,
+          id: scopedId,
           worktree: data.worktree,
           vcs: data.vcs,
           time: { ...existing.time, updated: Date.now() },
@@ -285,7 +320,7 @@ export namespace Project {
           d
             .insert(ProjectTable)
             .values({
-              id: result.id,
+              id: scopedId,
               worktree: result.worktree,
               vcs: result.vcs ?? null,
               name: result.name,
@@ -296,6 +331,7 @@ export namespace Project {
               time_initialized: result.time.initialized,
               sandboxes: result.sandboxes,
               commands: result.commands,
+              user_id: userId ?? null,
             })
             .onConflictDoUpdate({
               target: ProjectTable.id,
@@ -471,22 +507,30 @@ export namespace Project {
   // Promise-based API (delegates to Effect service via runPromise)
   // ---------------------------------------------------------------------------
 
-  export function fromDirectory(directory: string) {
-    return runPromise((svc) => svc.fromDirectory(directory))
+  export function fromDirectory(directory: string, userId?: string) {
+    return runPromise((svc) => svc.fromDirectory(directory, userId))
   }
 
   export function discover(input: Info) {
     return runPromise((svc) => svc.discover(input))
   }
 
-  export function list() {
-    return Database.use((db) =>
-      db
-        .select()
-        .from(ProjectTable)
-        .all()
-        .map((row) => fromRow(row)),
-    )
+  export function list(userId?: string) {
+    return Database.use((db) => {
+      const query = db.select().from(ProjectTable)
+      let rows
+      if (userId) {
+        // Only return projects inside the user's workspace directory to avoid
+        // stale entries (e.g. /root, /) accumulating in the sidebar.
+        const userWorkspacePrefix = `/workspaces/${userId}/`
+        rows = query
+          .where(and(eq(ProjectTable.user_id, userId), like(ProjectTable.worktree, `${userWorkspacePrefix}%`)))
+          .all()
+      } else {
+        rows = query.all()
+      }
+      return rows.map((row) => fromRow(row)).filter((p) => existsSync(p.worktree))
+    })
   }
 
   export function get(id: ProjectID): Info | undefined {
@@ -495,10 +539,22 @@ export namespace Project {
     return fromRow(row)
   }
 
+  // Like get() but returns undefined (not the row) when the project does not belong to userId.
+  export function getForUser(id: ProjectID, userId: string): Info | undefined {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    if (!row) return undefined
+    if (row.user_id && row.user_id !== userId) return undefined
+    return fromRow(row)
+  }
+
   export function setInitialized(id: ProjectID) {
     Database.use((db) =>
       db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
     )
+  }
+
+  export function remove(id: ProjectID) {
+    Database.use((db) => db.delete(ProjectTable).where(eq(ProjectTable.id, id)).run())
   }
 
   export function initGit(input: { directory: string; project: Info }) {

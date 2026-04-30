@@ -88,18 +88,22 @@ export async function bootstrapGlobal(input: {
   formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
 }) {
+  const startupRetry = { attempts: 8, delay: 1000 }
+
   const fast = [
     () =>
       retry(() =>
         input.globalSDK.global.config.get().then((x) => {
           input.setGlobalStore("config", x.data!)
         }),
+        startupRetry,
       ),
     () =>
       retry(() =>
         input.globalSDK.provider.list().then((x) => {
           input.setGlobalStore("provider", normalizeProviderList(x.data!))
         }),
+        startupRetry,
       ),
   ]
 

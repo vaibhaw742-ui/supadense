@@ -8,6 +8,15 @@ import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { InstanceBootstrap } from "../../project/bootstrap"
+import { Database } from "../../storage/db"
+import { rmSync, existsSync } from "node:fs"
+
+function projectBelongsToUser(projectID: ProjectID, userId: string): boolean {
+  const row = Database.Client().$client
+    .prepare("SELECT user_id FROM project WHERE id = ?")
+    .get(projectID) as { user_id: string | null } | undefined
+  return row?.user_id === userId
+}
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -29,7 +38,8 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const projects = Project.list()
+        const userId = Instance.current.userId
+        const projects = Project.list(userId)
         return c.json(projects)
       },
     )
@@ -110,9 +120,43 @@ export const ProjectRoutes = lazy(() =>
       validator("json", Project.UpdateInput.omit({ projectID: true })),
       async (c) => {
         const projectID = c.req.valid("param").projectID
+        const userId = Instance.current.userId
+        if (userId && !projectBelongsToUser(projectID, userId)) {
+          return c.json({ error: "Not found" }, 404)
+        }
         const body = c.req.valid("json")
         const project = await Project.update({ ...body, projectID })
         return c.json(project)
+      },
+    )
+    .delete(
+      "/:projectID",
+      describeRoute({
+        summary: "Delete project",
+        description: "Delete a project and all its data from the database.",
+        operationId: "project.delete",
+        responses: {
+          200: { description: "Deleted", content: { "application/json": { schema: resolver(z.boolean()) } } },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ projectID: ProjectID.zod })),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        const userId = Instance.current.userId
+        if (userId && !projectBelongsToUser(projectID, userId)) {
+          return c.json({ error: "Not found" }, 404)
+        }
+        const project = Project.get(projectID)
+        await Project.remove(projectID)
+        if (project?.worktree && userId) {
+          const userWorkspacePrefix = `/workspaces/${userId}/`
+          const isKBDir = project.worktree.startsWith(userWorkspacePrefix)
+          if (isKBDir && existsSync(project.worktree)) {
+            rmSync(project.worktree, { recursive: true, force: true })
+          }
+        }
+        return c.json(true)
       },
     ),
 )

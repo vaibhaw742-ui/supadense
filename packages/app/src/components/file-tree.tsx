@@ -6,6 +6,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import {
   createEffect,
   createMemo,
+  createSignal,
   For,
   Match,
   on,
@@ -120,6 +121,7 @@ const FileTreeNode = (
       kinds?: ReadonlyMap<string, Kind>
       marks?: Set<string>
       as?: "div" | "button"
+      hoverActions?: JSXElement
     },
 ) => {
   const [local, rest] = splitProps(p, [
@@ -134,6 +136,7 @@ const FileTreeNode = (
     "children",
     "class",
     "classList",
+    "hoverActions",
   ])
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
@@ -147,7 +150,7 @@ const FileTreeNode = (
     <Dynamic
       component={local.as ?? "div"}
       classList={{
-        "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+        "group/row w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active,
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
@@ -187,7 +190,124 @@ const FileTreeNode = (
         }
         return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={kindDotColor(value)} />
       })()}
+      <Show when={local.hoverActions}>
+        <div class="opacity-0 group-hover/row:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+          {local.hoverActions}
+        </div>
+      </Show>
     </Dynamic>
+  )
+}
+
+function InlineRenameInput(props: {
+  initialValue: string
+  level: number
+  nodeType: "file" | "directory"
+  onConfirm: (name: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = createSignal(props.initialValue)
+  const indent = Math.max(0, 8 + props.level * 12 - (props.nodeType === "file" ? 24 : 4))
+  let submitted = false
+
+  const confirm = () => {
+    const v = value().trim()
+    if (v && v !== props.initialValue) {
+      submitted = true
+      props.onConfirm(v)
+    } else {
+      props.onCancel()
+    }
+  }
+
+  return (
+    <div
+      class="w-full min-w-0 h-6 flex items-center gap-x-1.5 rounded-md"
+      style={{ "padding-left": `${indent}px`, "padding-right": "8px" }}
+    >
+      <input
+        autofocus
+        type="text"
+        value={value()}
+        onInput={(e) => setValue(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); confirm() }
+          if (e.key === "Escape") props.onCancel()
+        }}
+        onBlur={() => { if (!submitted) props.onCancel() }}
+        class="flex-1 min-w-0 bg-transparent text-12-medium text-text-base"
+        style={{
+          outline: "none",
+          border: "1px solid var(--color-focus-ring, #0078d4)",
+          "border-radius": "2px",
+          padding: "0 4px",
+          height: "18px",
+          "font-size": "12px",
+        }}
+      />
+    </div>
+  )
+}
+
+export type InlineCreate = {
+  parentPath: string
+  type: "file" | "folder"
+  onConfirm: (name: string) => void
+  onCancel: () => void
+}
+
+export type FileTreeActions = {
+  onRename?: (node: FileNode) => void
+  onDelete?: (node: FileNode) => void
+}
+
+export type InlineRename = {
+  path: string
+  onConfirm: (newName: string) => void
+  onCancel: () => void
+}
+
+function InlineFileRow(props: { type: "file" | "folder"; level: number; onConfirm: (name: string) => void; onCancel: () => void }) {
+  const [value, setValue] = createSignal("")
+  const indent = Math.max(0, 8 + props.level * 12 - (props.type === "file" ? 24 : 4))
+
+  const confirm = () => {
+    const v = value().trim()
+    if (v) props.onConfirm(v)
+    else props.onCancel()
+  }
+
+  return (
+    <div
+      class="w-full min-w-0 h-6 flex items-center gap-x-1.5 rounded-md"
+      style={{ "padding-left": `${indent}px`, "padding-right": "8px" }}
+    >
+      <Show when={props.type === "folder"} fallback={<div class="w-4 shrink-0" />}>
+        <div class="size-4 flex items-center justify-center text-icon-weak shrink-0">
+          <Icon name="folder" size="small" />
+        </div>
+      </Show>
+      <input
+        autofocus
+        type="text"
+        value={value()}
+        onInput={(e) => setValue(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") confirm()
+          if (e.key === "Escape") props.onCancel()
+        }}
+        onBlur={props.onCancel}
+        class="flex-1 min-w-0 bg-transparent text-12-medium text-text-base"
+        style={{
+          outline: "none",
+          border: "1px solid var(--color-focus-ring, #0078d4)",
+          "border-radius": "2px",
+          padding: "0 4px",
+          height: "18px",
+          "font-size": "12px",
+        }}
+      />
+    </div>
   )
 }
 
@@ -202,6 +322,10 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  onFolderClick?: (folder: FileNode) => void
+  inlineCreate?: InlineCreate
+  actions?: FileTreeActions
+  inlineRename?: InlineRename
 
   _filter?: Filter
   _marks?: Set<string>
@@ -384,6 +508,70 @@ export default function FileTree(props: {
     return out
   })
 
+  const showInlineCreate = createMemo(() => {
+    const ic = props.inlineCreate
+    if (!ic) return false
+    const normalizedParent = ic.parentPath.replace(/[\\/]+$/, "").replaceAll("\\", "/")
+    const normalizedThis = key(props.path)
+    return normalizedParent === normalizedThis
+  })
+
+  const hoverActionsFor = (node: FileNode) => {
+    if (!props.actions) return undefined
+    const PROTECTED = new Set(["wiki", "raw", "assets", "overview.md", "index.md", "log.md", "supadense.md"])
+    if (PROTECTED.has(node.name)) return undefined
+    return (
+      <>
+        <button
+          title="Rename"
+          onClick={(e) => { e.stopPropagation(); props.actions?.onRename?.(node) }}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "1px",
+            "border-radius": "3px",
+            color: "var(--text-weak-base)",
+            display: "flex",
+            "align-items": "center",
+          }}
+          class="hover:!bg-surface-raised-base-hover"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button
+          title="Delete"
+          onClick={(e) => { e.stopPropagation(); props.actions?.onDelete?.(node) }}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "1px",
+            "border-radius": "3px",
+            color: "var(--text-weak-base)",
+            display: "flex",
+            "align-items": "center",
+          }}
+          class="hover:!text-red-500 hover:!bg-surface-raised-base-hover"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </>
+    )
+  }
+
+  const isInlineRenaming = (node: FileNode) => {
+    const ir = props.inlineRename
+    if (!ir) return false
+    const normalizedTarget = ir.path.replace(/[\\/]+$/, "").replaceAll("\\", "/")
+    const normalizedNode = node.path.replace(/[\\/]+$/, "").replaceAll("\\", "/")
+    return normalizedTarget === normalizedNode
+  }
+
   return (
     <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
       <For each={nodes()}>
@@ -396,112 +584,153 @@ export default function FileTree(props: {
           return (
             <Switch>
               <Match when={node.type === "directory"}>
-                <Collapsible
-                  variant="ghost"
-                  class="w-full"
-                  data-scope="filetree"
-                  forceMount={false}
-                  open={expanded()}
-                  onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
-                >
-                  <Collapsible.Trigger>
-                    <FileTreeNode
-                      node={node}
+                <Show
+                  when={!isInlineRenaming(node)}
+                  fallback={
+                    <InlineRenameInput
+                      initialValue={node.name}
                       level={level}
-                      active={props.active}
-                      nodeClass={props.nodeClass}
-                      draggable={draggable()}
-                      kinds={kinds()}
-                      marks={marks()}
-                    >
-                      <div class="size-4 flex items-center justify-center text-icon-weak">
-                        <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                      </div>
-                    </FileTreeNode>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content class="relative pt-0.5">
-                    <div
-                      classList={{
-                        "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
-                        "group-hover/filetree:opacity-100": expanded() && deep() === level,
-                        "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
-                      }}
-                      style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
+                      nodeType="directory"
+                      onConfirm={props.inlineRename!.onConfirm}
+                      onCancel={props.inlineRename!.onCancel}
                     />
-                    <Show
-                      when={level < MAX_DEPTH && !chain.includes(key(node.path))}
-                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
-                    >
-                      <FileTree
-                        path={node.path}
-                        level={level + 1}
-                        allowed={props.allowed}
-                        modified={props.modified}
-                        kinds={props.kinds}
+                  }
+                >
+                  <Collapsible
+                    variant="ghost"
+                    class="w-full"
+                    data-scope="filetree"
+                    forceMount={false}
+                    open={expanded()}
+                    onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                  >
+                    <Collapsible.Trigger>
+                      <FileTreeNode
+                        node={node}
+                        level={level}
                         active={props.active}
-                        draggable={props.draggable}
-                        onFileClick={props.onFileClick}
-                        _filter={filter()}
-                        _marks={marks()}
-                        _deeps={deeps()}
-                        _kinds={kinds()}
-                        _chain={chain}
+                        nodeClass={props.nodeClass}
+                        draggable={draggable()}
+                        kinds={kinds()}
+                        marks={marks()}
+                        hoverActions={hoverActionsFor(node)}
+                        onClick={() => props.onFolderClick?.(node)}
+                      >
+                        <div class="size-4 flex items-center justify-center text-icon-weak">
+                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                        </div>
+                      </FileTreeNode>
+                    </Collapsible.Trigger>
+                    <Collapsible.Content class="relative pt-0.5">
+                      <div
+                        classList={{
+                          "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
+                          "group-hover/filetree:opacity-100": expanded() && deep() === level,
+                          "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
+                        }}
+                        style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
                       />
-                    </Show>
-                  </Collapsible.Content>
-                </Collapsible>
+                      <Show
+                        when={level < MAX_DEPTH && !chain.includes(key(node.path))}
+                        fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
+                      >
+                        <FileTree
+                          path={node.path}
+                          level={level + 1}
+                          allowed={props.allowed}
+                          modified={props.modified}
+                          kinds={props.kinds}
+                          active={props.active}
+                          draggable={props.draggable}
+                          onFileClick={props.onFileClick}
+                          onFolderClick={props.onFolderClick}
+                          inlineCreate={props.inlineCreate}
+                          actions={props.actions}
+                          inlineRename={props.inlineRename}
+                          _filter={filter()}
+                          _marks={marks()}
+                          _deeps={deeps()}
+                          _kinds={kinds()}
+                          _chain={chain}
+                        />
+                      </Show>
+                    </Collapsible.Content>
+                  </Collapsible>
+                </Show>
               </Match>
               <Match when={node.type === "file"}>
-                <FileTreeNode
-                  node={node}
-                  level={level}
-                  active={props.active}
-                  nodeClass={props.nodeClass}
-                  draggable={draggable()}
-                  kinds={kinds()}
-                  marks={marks()}
-                  as="button"
-                  type="button"
-                  onClick={() => props.onFileClick?.(node)}
+                <Show
+                  when={!isInlineRenaming(node)}
+                  fallback={
+                    <InlineRenameInput
+                      initialValue={node.name.replace(/\.md$/, "")}
+                      level={level}
+                      nodeType="file"
+                      onConfirm={props.inlineRename!.onConfirm}
+                      onCancel={props.inlineRename!.onCancel}
+                    />
+                  }
                 >
-                  <div class="w-4 shrink-0" />
-                  <Switch>
-                    <Match when={node.ignored}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style="color: var(--icon-weak-base)"
-                        mono
-                      />
-                    </Match>
-                    <Match when={active()}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style={kindTextColor(kind()!)}
-                        mono
-                      />
-                    </Match>
-                    <Match when={!node.ignored}>
-                      <span class="filetree-iconpair size-4">
+                  <FileTreeNode
+                    node={node}
+                    level={level}
+                    active={props.active}
+                    nodeClass={props.nodeClass}
+                    draggable={draggable()}
+                    kinds={kinds()}
+                    marks={marks()}
+                    hoverActions={hoverActionsFor(node)}
+                    as="button"
+                    type="button"
+                    onClick={() => props.onFileClick?.(node)}
+                  >
+                    <div class="w-4 shrink-0" />
+                    <Switch>
+                      <Match when={node.ignored}>
                         <FileIcon
                           node={node}
-                          class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
-                        />
-                        <FileIcon
-                          node={node}
-                          class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style="color: var(--icon-weak-base)"
                           mono
                         />
-                      </span>
-                    </Match>
-                  </Switch>
-                </FileTreeNode>
+                      </Match>
+                      <Match when={active()}>
+                        <FileIcon
+                          node={node}
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style={kindTextColor(kind()!)}
+                          mono
+                        />
+                      </Match>
+                      <Match when={!node.ignored}>
+                        <span class="filetree-iconpair size-4">
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
+                        </span>
+                      </Match>
+                    </Switch>
+                  </FileTreeNode>
+                </Show>
               </Match>
             </Switch>
           )
         }}
       </For>
+      <Show when={showInlineCreate()}>
+        <InlineFileRow
+          type={props.inlineCreate!.type}
+          level={level}
+          onConfirm={props.inlineCreate!.onConfirm}
+          onCancel={props.inlineCreate!.onCancel}
+        />
+      </Show>
     </div>
   )
 }

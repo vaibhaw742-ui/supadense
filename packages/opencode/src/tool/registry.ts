@@ -27,6 +27,7 @@ import {
   KbPipelineStatusTool,
   KbSectionGroupTool,
   KbRemoveResourceTool,
+  KbRenameTool,
 } from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -200,6 +201,7 @@ export namespace ToolRegistry {
             kb_pipeline_status: Tool.init(KbPipelineStatusTool),
             kb_section_group: Tool.init(KbSectionGroupTool),
             kb_remove_resource: Tool.init(KbRemoveResourceTool),
+            kb_rename: Tool.init(KbRenameTool),
           })
 
           return {
@@ -237,6 +239,7 @@ export namespace ToolRegistry {
               tool.kb_pipeline_status,
               tool.kb_section_group,
               tool.kb_remove_resource,
+              tool.kb_rename,
             ],
             task: tool.task,
             read: tool.read,

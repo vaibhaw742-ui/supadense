@@ -72,7 +72,7 @@ function init() {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const show = (element: DialogElement, owner: Owner, onClose?: () => void, noOverlay?: boolean) => {
     // Immediately dispose any existing dialog when showing a new one
     const current = active()
     if (current) {
@@ -105,7 +105,7 @@ function init() {
             }}
           >
             <Kobalte.Portal>
-              <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
+              <Kobalte.Overlay data-component="dialog-overlay" data-no-overlay={noOverlay ? true : undefined} onClick={close} />
               {element()}
             </Kobalte.Portal>
           </Kobalte>
@@ -152,9 +152,13 @@ export function useDialog() {
     get active() {
       return ctx.active
     },
-    show(element: DialogElement, onClose?: () => void) {
+    show(element: DialogElement, options?: { onClose?: () => void; noOverlay?: boolean } | (() => void)) {
       const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose)
+      if (typeof options === "function") {
+        ctx.show(element, base, options)
+      } else {
+        ctx.show(element, base, options?.onClose, options?.noOverlay)
+      }
     },
     close() {
       ctx.close()

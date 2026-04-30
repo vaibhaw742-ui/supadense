@@ -56,10 +56,14 @@ export function DialogConnectProvider(props: { provider: string }) {
     async () => {
       const cached = globalSync.data.provider_auth[props.provider]
       if (cached) return cached
-      const res = await globalSDK.client.provider.auth()
-      if (!alive.value) return fallback()
-      globalSync.set("provider_auth", res.data ?? {})
-      return res.data?.[props.provider] ?? fallback()
+      try {
+        const res = await globalSDK.client.provider.auth()
+        if (!alive.value) return fallback()
+        globalSync.set("provider_auth", res.data ?? {})
+        return res.data?.[props.provider] ?? fallback()
+      } catch {
+        return fallback()
+      }
     },
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])

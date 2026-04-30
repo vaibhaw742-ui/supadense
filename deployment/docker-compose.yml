@@ -22,8 +22,8 @@ services:
       # Persist global opencode config (e.g. permission overrides) across rebuilds
       - ../data/opencode-config:/root/.config/opencode
 
-      # Mount Desktop so any folder on it can be opened as a project
-      - /Users/vaibhawkhemka/Desktop:/workspaces/Desktop
+      # Per-user workspace directories — each user gets /workspaces/{userId}/
+      - ../data/workspaces:/workspaces
     env_file:
       - .env
     restart: unless-stopped
@@ -53,4 +53,5 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
 

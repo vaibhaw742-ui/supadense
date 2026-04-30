@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, createResource, Show } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,10 +8,26 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsUsers } from "./settings-users"
+import { getAuthToken, getBackendUrl } from "@/utils/server"
+
+async function checkIsAdmin(): Promise<boolean> {
+  const token = getAuthToken()
+  if (!token) return false
+  try {
+    const res = await fetch(`${getBackendUrl()}/supa-auth/users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
+  const [isAdmin] = createResource(checkIsAdmin)
 
   return (
     <Dialog size="x-large" transition>
@@ -45,6 +61,12 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    <Show when={isAdmin()}>
+                      <Tabs.Trigger value="users">
+                        <Icon name="person" />
+                        Users
+                      </Tabs.Trigger>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -67,6 +89,11 @@ export const DialogSettings: Component = () => {
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
         </Tabs.Content>
+        <Show when={isAdmin()}>
+          <Tabs.Content value="users" class="no-scrollbar">
+            <SettingsUsers />
+          </Tabs.Content>
+        </Show>
       </Tabs>
     </Dialog>
   )

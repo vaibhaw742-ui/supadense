@@ -13,11 +13,18 @@ import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "./router"
 import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
+import { Project } from "../project/project"
+import { SupaAuthRoutes, seedAdminUser, verifyToken } from "./routes/supa-auth"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
+import { KBRoutes } from "./routes/kb"
 import { initProjectors } from "./projectors"
+import { ModelsDev } from "../provider/models"
+import { Provider } from "../provider/provider"
+import { Config } from "../config/config"
+import { mapValues } from "remeda"
 import { createAdaptorServer, type ServerType } from "@hono/node-server"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -47,16 +54,53 @@ export namespace Server {
   export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
     return app
       .onError(errorHandler(log))
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
+      .use(
+        cors({
+          maxAge: 86_400,
+          origin(input) {
+            if (!input) return
+            if (input.startsWith("http://localhost:")) return input
+            if (input.startsWith("http://127.0.0.1:")) return input
+            if (
+              input === "tauri://localhost" ||
+              input === "http://tauri.localhost" ||
+              input === "https://tauri.localhost"
+            )
+              return input
+            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
+            if (opts?.cors?.includes(input)) return input
+          },
+        }),
+      )
+      // ── Session auth (JWT Bearer token) ──────────────────────────────────
+      .route("/supa-auth", SupaAuthRoutes())
+      .use(async (c, next) => {
         if (c.req.method === "OPTIONS") return next()
+        // Skip auth for public endpoints
+        if (c.req.path.startsWith("/supa-auth/")) return next()
+        if (c.req.path === "/global/health") return next()
+
+        const secret = Flag.SUPADENSE_AUTH_SECRET
+        if (secret) {
+          // Accept token from Authorization header or auth_token query param
+          // (query param is used by <img> tags which cannot send custom headers)
+          const authHeader = c.req.header("Authorization")
+          const rawToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : (c.req.query("auth_token") ?? null)
+          if (!rawToken) return c.json({ error: "Unauthorized" }, 401)
+          try {
+            const payload = verifyToken(rawToken, secret)
+            c.set("userId", payload.userId as string)
+            return next()
+          } catch {
+            return c.json({ error: "Unauthorized" }, 401)
+          }
+        }
+
+        // Fall back to Basic Auth if no session auth configured
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-
         if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
-
         return basicAuth({ username, password })(c, next)
       })
       .use(async (c, next) => {
@@ -74,26 +118,6 @@ export namespace Server {
         await next()
         if (!skip) timer.stop()
       })
-      .use(
-        cors({
-          maxAge: 86_400,
-          origin(input) {
-            if (!input) return
-
-            if (input.startsWith("http://localhost:")) return input
-            if (input.startsWith("http://127.0.0.1:")) return input
-            if (
-              input === "tauri://localhost" ||
-              input === "http://tauri.localhost" ||
-              input === "https://tauri.localhost"
-            )
-              return input
-
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
-            if (opts?.cors?.includes(input)) return input
-          },
-        }),
-      )
       .use((c, next) => {
         if (skipCompress(c.req.path, c.req.method)) return next()
         return zipped(c, next)
@@ -127,7 +151,12 @@ export namespace Server {
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
-          await Auth.set(providerID, info)
+          const userId = c.get("userId") as string | undefined
+          if (userId) {
+            await Auth.setForUser(userId, providerID, info)
+          } else {
+            await Auth.set(providerID, info)
+          }
           return c.json(true)
         },
       )
@@ -157,8 +186,31 @@ export namespace Server {
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          await Auth.remove(providerID)
+          const userId = c.get("userId") as string | undefined
+          if (userId) {
+            await Auth.removeForUser(userId, providerID)
+          } else {
+            await Auth.remove(providerID)
+          }
           return c.json(true)
+        },
+      )
+      .get(
+        "/auth",
+        describeRoute({
+          summary: "List stored auth credentials",
+          description: "Get all stored provider credentials for the current user.",
+          operationId: "auth.list",
+          responses: {
+            200: { description: "Stored credentials keyed by providerID" },
+          },
+        }),
+        async (c) => {
+          const userId = c.get("userId") as string | undefined
+          if (userId) {
+            return c.json(await Auth.allForUser(userId))
+          }
+          return c.json(await Auth.all())
         },
       )
       .get(
@@ -235,6 +287,63 @@ export namespace Server {
           return c.json(true)
         },
       )
+      // Serve project list directly so it works even when no workspace directory exists.
+      // WorkspaceRouterMiddleware would auto-create the default workspace dir on this call.
+      .get("/project", async (c) => {
+        const userId = c.get("userId") as string | undefined
+        return c.json(Project.list(userId))
+      })
+      .route("/kb", KBRoutes())
+      // Intercept GET /provider and GET /provider/auth ONLY when no directory is
+      // specified — that is, global-context calls from bootstrapGlobal or the
+      // connect-provider dialog that don't have a KB open yet.
+      // When ?directory is present, fall through to WorkspaceRouterMiddleware so
+      // the per-KB Instance (with env-var providers, plugins, etc.) is used.
+      .use("/provider", async (c, next) => {
+        // Only handle exact GET /provider (the list) in this middleware.
+        // Sub-paths like /provider/auth and /provider/:id/oauth/* need an Instance
+        // (for plugins, OAuth flows), so always delegate those to WorkspaceRouterMiddleware.
+        if (c.req.method !== "GET") return next()
+        if (c.req.path !== "/provider") return next()
+        const directory = c.req.query("directory") || c.req.header("x-opencode-directory")
+        if (directory) return next()
+
+        const userId = c.get("userId") as string | undefined
+        const config = await Config.getGlobal()
+        const allProviders = await ModelsDev.get()
+
+        const disabled = new Set(config.disabled_providers ?? [])
+        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+        const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
+        for (const [key, value] of Object.entries(allProviders)) {
+          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+            filteredProviders[key] = value
+          }
+        }
+
+        const userAuth = userId ? await Auth.allForUser(userId) : await Auth.all()
+        const connected: Record<string, Provider.Info> = {}
+        for (const [providerID, authInfo] of Object.entries(userAuth)) {
+          const mdProvider = filteredProviders[providerID]
+          if (!mdProvider) continue
+          const base = Provider.fromModelsDevProvider(mdProvider)
+          connected[providerID] = {
+            ...base,
+            source: "api",
+            key: authInfo.type === "api" ? authInfo.key : undefined,
+          }
+        }
+
+        const providers = Object.assign(
+          mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
+          connected,
+        )
+        return c.json({
+          all: Object.values(providers),
+          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0]?.id ?? ""),
+          connected: Object.keys(connected),
+        })
+      })
       .use(WorkspaceRouterMiddleware(upgrade))
   }
 
@@ -302,6 +411,7 @@ export namespace Server {
         server.listen(port, opts.hostname)
       })
 
+    await seedAdminUser()
     const server = opts.port === 0 ? await start(4096).catch(() => start(0)) : await start(opts.port)
     const addr = server.address()
     if (!addr || typeof addr === "string") {

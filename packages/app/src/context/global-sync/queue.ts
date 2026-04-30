@@ -58,7 +58,7 @@ export function createRefreshQueue(input: QueueInput) {
         }
         const dirs = take(2)
         if (dirs.length === 0) return
-        await Promise.all(dirs.map((dir) => input.bootstrapInstance(dir)))
+        await Promise.allSettled(dirs.map((dir) => input.bootstrapInstance(dir)))
         await tick()
       }
     } finally {

@@ -11,6 +11,7 @@ export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
+  userId?: string
 }
 
 const context = Context.create<InstanceContext>("instance")
@@ -32,7 +33,7 @@ function emit(directory: string) {
   })
 }
 
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string; userId?: string }) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -40,11 +41,13 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
             directory: input.directory,
             worktree: input.worktree,
             project: input.project,
+            userId: input.userId,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
+        : await Project.fromDirectory(input.directory, input.userId).then(({ project, sandbox }) => ({
             directory: input.directory,
             worktree: sandbox,
             project,
+            userId: input.userId,
           }))
     await context.provide(ctx, async () => {
       await input.init?.()
@@ -53,26 +56,32 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<InstanceContext>) {
+function cacheKey(directory: string, userId?: string) {
+  return userId ? `${directory}:${userId}` : directory
+}
+
+function track(key: string, next: Promise<InstanceContext>) {
   const task = next.catch((error) => {
-    if (cache.get(directory) === task) cache.delete(directory)
+    if (cache.get(key) === task) cache.delete(key)
     throw error
   })
-  cache.set(directory, task)
+  cache.set(key, task)
   return task
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R; userId?: string }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
-    let existing = cache.get(directory)
+    const key = cacheKey(directory, input.userId)
+    let existing = cache.get(key)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
       existing = track(
-        directory,
+        key,
         boot({
           directory,
           init: input.init,
+          userId: input.userId,
         }),
       )
     }
@@ -127,18 +136,22 @@ export const Instance = {
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
+    const userId = Instance.current.userId
+    const key = cacheKey(directory, userId)
     Log.Default.info("reloading instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
-    const next = track(directory, boot({ ...input, directory }))
+    cache.delete(key)
+    const next = track(key, boot({ ...input, directory, userId }))
     emit(directory)
     return await next
   },
   async dispose() {
     const directory = Instance.directory
+    const userId = Instance.current.userId
+    const key = cacheKey(directory, userId)
     Log.Default.info("disposing instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
+    cache.delete(key)
     emit(directory)
   },
   async disposeAll() {
@@ -171,5 +184,26 @@ export const Instance = {
     })
 
     return disposal.all
+  },
+
+  async disposeForUser(userId: string) {
+    Log.Default.info("disposing instances for user", { userId })
+    const suffix = `:${userId}`
+    const entries = [...cache.entries()].filter(([key]) => key.endsWith(suffix))
+    for (const [key, value] of entries) {
+      if (cache.get(key) !== value) continue
+      const ctx = await value.catch((error) => {
+        Log.Default.warn("instance dispose failed", { key, error })
+        return undefined
+      })
+      if (!ctx) {
+        if (cache.get(key) === value) cache.delete(key)
+        continue
+      }
+      if (cache.get(key) !== value) continue
+      await context.provide(ctx, async () => {
+        await Instance.dispose()
+      })
+    }
   },
 }

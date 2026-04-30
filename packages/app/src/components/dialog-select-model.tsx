@@ -31,7 +31,7 @@ const ModelList: Component<{
   const models = createMemo(() =>
     model
       .list()
-      .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
+      .filter((m) => isFree(m.provider.id, m.cost) || model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
@@ -45,8 +45,10 @@ const ModelList: Component<{
       current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => (isFree(x.provider.id, x.cost) ? "Free" : x.provider.name)}
       sortGroupsBy={(a, b) => {
+        if (a.category === "Free") return -1
+        if (b.category === "Free") return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1

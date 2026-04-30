@@ -22,6 +22,7 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
+    port: 4097,
   },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
@@ -31,7 +32,7 @@ export default defineConfig({
     configSchema(),
     solidJs(),
     starlight({
-      title: "OpenCode",
+      title: "Supadense",
       defaultLocale: "root",
       locales: {
         root: {

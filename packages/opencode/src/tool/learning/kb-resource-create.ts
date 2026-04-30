@@ -2,7 +2,7 @@
  * kb_resource_create — Fetch + create a resource record in the KB.
  *
  * Step 1 of the memorize pipeline. Creates the DB row, fetches content,
- * and automatically downloads images into wiki/assets/.
+ * and automatically downloads images into assets/.
  */
 import z from "zod"
 import { createHash } from "crypto"
@@ -147,7 +147,7 @@ async function downloadImages(
   kbPath: string,
 ): Promise<{ asset_ids: string[]; downloaded: number; skipped: number }> {
   const nsPrefix = workspaceId.slice(0, 8)
-  const assetsDir = path.join(kbPath, "wiki", "assets", nsPrefix)
+  const assetsDir = path.join(kbPath, "assets", nsPrefix)
   mkdirSync(assetsDir, { recursive: true })
 
   const assetIds: string[] = []
@@ -202,7 +202,7 @@ async function downloadImages(
       const ext = ALLOWED_MIMES[mime]
       const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8)
       const filename = `${resourceId.slice(0, 8)}-${hash}.${ext}`
-      const localPath = `wiki/assets/${nsPrefix}/${filename}`
+      const localPath = `assets/${nsPrefix}/${filename}`
       const fullPath = path.join(assetsDir, filename)
 
       // DB dedup

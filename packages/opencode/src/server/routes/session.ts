@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import type { MiddlewareHandler } from "hono"
 import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { SessionID, MessageID, PartID } from "@/session/schema"
@@ -23,12 +24,32 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
+import { Instance } from "../../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 
 const log = Log.create({ service: "server" })
 
+// Verifies that /:sessionID routes only return sessions belonging to the
+// current user's project. Applied before all parameterised session handlers.
+const sessionOwnershipCheck: MiddlewareHandler = async (c, next) => {
+  const sessionID = c.req.param("sessionID")
+  // Only apply to actual session IDs (they start with "ses"); skip e.g. /status
+  if (!sessionID || !sessionID.startsWith("ses")) return next()
+  try {
+    const session = await Session.get(SessionID.make(sessionID))
+    if (session.projectID !== Instance.project.id) {
+      return c.json({ error: "Not found" }, 404)
+    }
+  } catch {
+    return c.json({ error: "Not found" }, 404)
+  }
+  return next()
+}
+
 export const SessionRoutes = lazy(() =>
   new Hono()
+    .use("/:sessionID{[^/]+}", sessionOwnershipCheck)
+    .use("/:sessionID{[^/]+}/*", sessionOwnershipCheck)
     .get(
       "/",
       describeRoute({

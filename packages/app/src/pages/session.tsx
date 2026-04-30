@@ -10,6 +10,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createSignal,
   on,
   onMount,
   untrack,
@@ -330,8 +331,9 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string; send?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const [autoSend, setAutoSend] = createSignal(false)
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -340,7 +342,8 @@ export default function Page() {
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      setSearchParams({ ...searchParams, prompt: undefined })
+      if (searchParams.send === "1") setAutoSend(true)
+      setSearchParams({ ...searchParams, prompt: undefined, send: undefined })
     })
   })
 
@@ -1948,10 +1951,12 @@ const reviewEmptyText = createMemo(() => {
             newSessionWorktree={newSessionWorktree()}
             onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
             onSubmit={() => {
+              setAutoSend(false)
               comments.clear()
               resumeScroll()
             }}
             onResponseSubmit={resumeScroll}
+            autoSend={autoSend}
             followup={
               params.id && !isChildSession()
                 ? {

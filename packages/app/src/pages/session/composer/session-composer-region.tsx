@@ -26,6 +26,7 @@ export function SessionComposerRegion(props: {
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   onResponseSubmit: () => void
+  autoSend?: () => boolean
   followup?: {
     queue: () => boolean
     items: { id: string; text: string }[]
@@ -260,6 +261,7 @@ export function SessionComposerRegion(props: {
                       onQueue={props.followup?.onQueue}
                       onAbort={props.followup?.onAbort}
                       onSubmit={props.onSubmit}
+                      autoSend={props.autoSend}
                     />
                   </Show>
                 }

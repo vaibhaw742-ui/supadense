@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { AppFileSystem } from "../filesystem"
+import { Global } from "../global"
 
 type Kind = "file" | "directory"
 
@@ -14,9 +15,23 @@ type Options = {
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
   if (!target) return
 
+  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+
+  // Hard-block access to the opencode data directory (auth keys, logs, config).
+  // This is unconditional — bypass does not override it.
+  if (full.startsWith(Global.Path.data + path.sep) || full === Global.Path.data) {
+    throw new Error("Access to opencode internal data is not permitted.")
+  }
+
   if (options?.bypass) return
 
-  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  // Hard-block access to other users' workspace directories.
+  // /workspaces/{userId}/ is only accessible by that user's instance.
+  const userId = Instance.current.userId
+  if (userId && full.startsWith("/workspaces/") && !full.startsWith(`/workspaces/${userId}/`)) {
+    throw new Error("Access to another user's workspace is not permitted.")
+  }
+
   if (Instance.containsPath(full)) return
 
   const kind = options?.kind ?? "file"

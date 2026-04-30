@@ -4,7 +4,7 @@
  * Deletes:
  *   - The resource row (cascades → placements, media asset rows, skill results)
  *   - The raw content file on disk (raw_content_path)
- *   - All image/asset files on disk (wiki/assets/...)
+ *   - All image/asset files on disk (assets/...)
  *
  * Nulls out soft references in:
  *   - learning_concept_wiki_placements.introduced_by_resource_id

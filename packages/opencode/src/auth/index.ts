@@ -1,13 +1,21 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
+import { Effect, Layer, Option, Record, Result, Schema, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
 import { AppFileSystem } from "../filesystem"
+import { InstanceRef } from "@/effect/instance-ref"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-const file = path.join(Global.Path.data, "auth.json")
+const globalFile = path.join(Global.Path.data, "auth.json")
+
+function userAuthFile(userId: string): string {
+  const dir = path.join(Global.Path.data, "auth")
+  mkdirSync(dir, { recursive: true })
+  return path.join(dir, `${userId}.json`)
+}
 
 const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
@@ -57,7 +65,16 @@ export namespace Auth {
       const fsys = yield* AppFileSystem.Service
       const decode = Schema.decodeUnknownOption(Info)
 
+      // Resolve the auth file dynamically per call.
+      // When running inside an Instance context (InstanceRef is injected by makeRuntime's attach()),
+      // use a per-user file. Otherwise fall back to the global file (e.g. CLI usage).
+      const resolveFile = Effect.gen(function* () {
+        const ref = yield* InstanceRef
+        return ref?.userId ? userAuthFile(ref.userId) : globalFile
+      })
+
       const all = Effect.fn("Auth.all")(function* () {
+        const file = yield* resolveFile
         const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
         return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
       })
@@ -67,6 +84,7 @@ export namespace Auth {
       })
 
       const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
+        const file = yield* resolveFile
         const norm = key.replace(/\/+$/, "")
         const data = yield* all()
         if (norm !== key) delete data[key]
@@ -77,6 +95,7 @@ export namespace Auth {
       })
 
       const remove = Effect.fn("Auth.remove")(function* (key: string) {
+        const file = yield* resolveFile
         const norm = key.replace(/\/+$/, "")
         const data = yield* all()
         delete data[key]
@@ -92,6 +111,7 @@ export namespace Auth {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
+  // Global fallback (CLI, no user context)
   export async function get(providerID: string) {
     return runPromise((service) => service.get(providerID))
   }
@@ -106,5 +126,53 @@ export namespace Auth {
 
   export async function remove(key: string) {
     return runPromise((service) => service.remove(key))
+  }
+
+  // ── Per-user helpers for HTTP routes that have userId from request context ──
+  // These run before WorkspaceRouterMiddleware so there is no Instance/InstanceRef context.
+  // They use direct synchronous file I/O — the logic mirrors the Effect layer above.
+
+  const _decode = Schema.decodeUnknownOption(Info)
+
+  function readRaw(userId: string): Record<string, unknown> {
+    try {
+      return JSON.parse(readFileSync(userAuthFile(userId), "utf-8")) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  }
+
+  function writeRaw(userId: string, data: Record<string, unknown>): void {
+    writeFileSync(userAuthFile(userId), JSON.stringify(data, null, 2), { mode: 0o600 })
+  }
+
+  export async function getForUser(userId: string, providerID: string): Promise<Info | undefined> {
+    return Option.getOrUndefined(_decode(readRaw(userId)[providerID]))
+  }
+
+  export async function allForUser(userId: string): Promise<Record<string, Info>> {
+    const data = readRaw(userId)
+    const result: Record<string, Info> = {}
+    for (const [key, value] of Object.entries(data)) {
+      const opt = _decode(value)
+      if (Option.isSome(opt)) result[key] = opt.value
+    }
+    return result
+  }
+
+  export async function setForUser(userId: string, key: string, info: Info): Promise<void> {
+    const norm = key.replace(/\/+$/, "")
+    const data = readRaw(userId)
+    delete data[key]
+    delete data[norm + "/"]
+    writeRaw(userId, { ...data, [norm]: info })
+  }
+
+  export async function removeForUser(userId: string, key: string): Promise<void> {
+    const norm = key.replace(/\/+$/, "")
+    const data = readRaw(userId)
+    delete data[key]
+    delete data[norm]
+    writeRaw(userId, data)
   }
 }

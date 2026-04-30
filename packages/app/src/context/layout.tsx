@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
@@ -474,6 +474,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
 
           if (project.expanded) server.projects.expand(root)
+        }
+      })
+    })
+
+    // After first bootstrap, restore any server-side KBs missing from the local sidebar list.
+    // This handles cases where localStorage was cleared (private browsing, fresh install, etc.).
+    let synced = false
+    createEffect(() => {
+      if (!globalSync.ready) return
+      if (synced) return
+      synced = true
+      const backendProjects = untrack(() => globalSync.data.project)
+      const existing = new Set(untrack(() => server.projects.list()).map((p) => p.worktree))
+      batch(() => {
+        for (const project of backendProjects) {
+          if (!project.worktree) continue
+          if (existing.has(project.worktree)) continue
+          server.projects.open(project.worktree)
         }
       })
     })

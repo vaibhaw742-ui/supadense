@@ -241,7 +241,12 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        await Instance.disposeAll()
+        const userId = c.get("userId") as string | undefined
+        if (userId) {
+          await Instance.disposeForUser(userId)
+        } else {
+          await Instance.disposeAll()
+        }
         GlobalBus.emit("event", {
           directory: "global",
           payload: {

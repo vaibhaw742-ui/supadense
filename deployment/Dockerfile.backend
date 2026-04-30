@@ -48,7 +48,7 @@ COPY packages/console/resource/package.json packages/console/resource/
 # Native modules (tree-sitter, node-pty) are compiled here (slow first time, cached after)
 # --ignore-scripts skips native module compilation (tree-sitter, node-pty).
 # The serve command uses web-tree-sitter (WASM) and doesn't need the native builds.
-RUN bun install --ignore-scripts
+RUN bun install --ignore-scripts || bun install --ignore-scripts || bun install --ignore-scripts
 
 # ── Copy source code ──────────────────────────────────────────────────────────
 # Overridden by bind mounts in docker-compose for hot reload.
@@ -62,5 +62,7 @@ COPY packages/script/src    packages/script/src
 
 EXPOSE 4096
 
-CMD ["bun", "--watch", "run", "--cwd", "packages/opencode", "--conditions=browser", \
+WORKDIR /app/packages/opencode
+
+CMD ["bun", "--watch", "run", "--conditions=browser", \
      "src/index.ts", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

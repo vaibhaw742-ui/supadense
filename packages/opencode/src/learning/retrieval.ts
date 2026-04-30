@@ -29,7 +29,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RetrievalImage {
-  /** Relative path from kb_path: "wiki/assets/abc/img.jpg" */
+  /** Relative path from kb_path: "assets/abc/img.jpg" */
   local_path: string
   /** Full abs path */
   abs_path: string

@@ -9,6 +9,8 @@ import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceRoutes } from "./instance"
+import { DirectoryInUseError } from "@/project/project"
+import { defaultKBDir } from "@/util/workspace-provision"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -30,7 +32,9 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
   const routes = lazy(() => InstanceRoutes(upgrade))
 
   return async (c) => {
-    const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+    const userId = c.get("userId") as string | undefined
+    const defaultDir = userId ? defaultKBDir(userId) : process.cwd()
+    const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || defaultDir
     const directory = Filesystem.resolve(
       (() => {
         try {
@@ -41,21 +45,48 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })(),
     )
 
+    // When auth is active, lock every request to the authenticated user's workspace.
+    // Reject any directory that isn't strictly under /workspaces/{userId}/ — this blocks
+    // both cross-user paths (/workspaces/other/) and arbitrary disk paths (/etc, /root, …).
+    if (userId) {
+      const allowed = `/workspaces/${userId}/`
+      if (!directory.startsWith(allowed)) {
+        return new Response(JSON.stringify({ error: "forbidden", message: "Directory does not belong to you." }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        })
+      }
+    }
+
     const url = new URL(c.req.url)
     const workspaceParam = url.searchParams.get("workspace") || c.req.header("x-opencode-workspace")
 
-    // TODO: If session is being routed, force it to lookup the
-    // project/workspace
-
     // If no workspace is provided we use the "project" workspace
     if (!workspaceParam) {
-      return Instance.provide({
-        directory,
-        init: InstanceBootstrap,
-        async fn() {
-          return routes().fetch(c.req.raw, c.env)
-        },
-      })
+      try {
+        return await Instance.provide({
+          directory,
+          userId,
+          init: InstanceBootstrap,
+          async fn() {
+            return routes().fetch(c.req.raw, c.env)
+          },
+        })
+      } catch (err) {
+        if (err instanceof DirectoryInUseError) {
+          return new Response(
+            JSON.stringify({ error: "directory_in_use", message: `This folder is already in use by another user.` }),
+            { status: 409, headers: { "content-type": "application/json" } },
+          )
+        }
+        if (err instanceof Error && err.message.startsWith("Directory does not exist:")) {
+          return new Response(
+            JSON.stringify({ error: "directory_not_found", message: err.message }),
+            { status: 404, headers: { "content-type": "application/json" } },
+          )
+        }
+        throw err
+      }
     }
 
     const workspaceID = WorkspaceID.make(workspaceParam)
@@ -63,9 +94,15 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     if (!workspace) {
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-        },
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      })
+    }
+
+    // Ownership check — reject if the workspace belongs to a different user
+    if (userId && workspace.userID && workspace.userID !== userId) {
+      return new Response("Forbidden", {
+        status: 403,
+        headers: { "content-type": "text/plain; charset=utf-8" },
       })
     }
 
@@ -73,13 +110,30 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const target = await adaptor.target(workspace)
 
     if (target.type === "local") {
-      return Instance.provide({
-        directory: target.directory,
-        init: InstanceBootstrap,
-        async fn() {
-          return routes().fetch(c.req.raw, c.env)
-        },
-      })
+      try {
+        return await Instance.provide({
+          directory: target.directory,
+          userId,
+          init: InstanceBootstrap,
+          async fn() {
+            return routes().fetch(c.req.raw, c.env)
+          },
+        })
+      } catch (err) {
+        if (err instanceof DirectoryInUseError) {
+          return new Response(
+            JSON.stringify({ error: "directory_in_use", message: `This folder is already in use by another user.` }),
+            { status: 409, headers: { "content-type": "application/json" } },
+          )
+        }
+        if (err instanceof Error && err.message.startsWith("Directory does not exist:")) {
+          return new Response(
+            JSON.stringify({ error: "directory_not_found", message: err.message }),
+            { status: 404, headers: { "content-type": "application/json" } },
+          )
+        }
+        throw err
+      }
     }
 
     if (local(c.req.method, url.pathname)) {

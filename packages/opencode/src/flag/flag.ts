@@ -47,6 +47,11 @@ export namespace Flag {
   export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+
+  // Supadense session auth
+  export const SUPADENSE_AUTH_SECRET = process.env["SUPADENSE_AUTH_SECRET"]
+  export const SUPADENSE_ADMIN_EMAIL = process.env["SUPADENSE_ADMIN_EMAIL"]
+  export const SUPADENSE_ADMIN_PASSWORD = process.env["SUPADENSE_ADMIN_PASSWORD"]
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental

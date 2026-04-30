@@ -305,10 +305,34 @@ async function ask(ctx: Tool.Context, scan: Scan) {
 
 async function shellEnv(ctx: Tool.Context, cwd: string) {
   const extra = await Plugin.trigger("shell.env", { cwd, sessionID: ctx.sessionID, callID: ctx.callID }, { env: {} })
-  return {
-    ...process.env,
-    ...extra.env,
+  // Allowlist only the env vars subprocesses legitimately need.
+  // Never forward secrets (API keys, auth tokens, passwords) from process.env.
+  const safe: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    USER: process.env.USER,
+    LOGNAME: process.env.LOGNAME,
+    SHELL: process.env.SHELL,
+    LANG: process.env.LANG,
+    LC_ALL: process.env.LC_ALL,
+    TERM: process.env.TERM,
+    TMPDIR: process.env.TMPDIR,
+    TMP: process.env.TMP,
+    TEMP: process.env.TEMP,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    // Windows-specific
+    USERPROFILE: process.env.USERPROFILE,
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    COMPUTERNAME: process.env.COMPUTERNAME,
+    SystemRoot: process.env.SystemRoot,
+    SystemDrive: process.env.SystemDrive,
   }
+  // Remove undefined entries so the child process env is clean
+  for (const key of Object.keys(safe)) {
+    if (safe[key] === undefined) delete safe[key]
+  }
+  return { ...safe, ...extra.env }
 }
 
 function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {

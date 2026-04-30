@@ -1,46 +1,54 @@
 services:
 
-  # ── Backend: OpenCode headless server ──────────────────────────────────────
+  # ── Backend: no port exposed to host — only reachable via nginx ────────────
   backend:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile.prod.backend
-    # Only accessible to Nginx on the host — not exposed to the internet
-    ports:
-      - "127.0.0.1:4096:4096"
+      dockerfile: deployment/Dockerfile.backend.prod
+    # NO ports — backend is internal only
     volumes:
-      # Persist DB across container restarts/rebuilds
-      - opencode-data:/root/.local/share/opencode
-      # Persist global opencode config
-      - opencode-config:/root/.config/opencode
-      # Workspaces folder on the droplet (KB files, etc.)
-      - ${WORKSPACES_PATH:-/home/deploy/workspaces}:/workspaces/Desktop
+      # Bind mounts so all data lives at a predictable path on the droplet
+      # Easy to snapshot, rsync, inspect, or restore from /root/data/
+      - /root/data/opencode:/root/.local/share/opencode
+      - /root/data/opencode-config:/root/.config/opencode
+      - /root/data/workspaces:/workspaces
     env_file:
       - .env.prod
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4096/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
 
-  # ── Frontend: Nginx serving built static files ────────────────────────────
+  # ── Frontend: static build served by nginx ─────────────────────────────────
   frontend:
     build:
       context: ..
-      dockerfile: deployment/Dockerfile.prod.frontend
-      args:
-        # These are baked into the static bundle at build time.
-        # Browser connects to the host's public domain — Nginx proxies /api and /wiki to backend.
-        VITE_OPENCODE_SERVER_HOST: ${PUBLIC_DOMAIN}
-        VITE_OPENCODE_SERVER_PORT: "443"
-    ports:
-      - "127.0.0.1:3000:80"
+      dockerfile: deployment/Dockerfile.frontend.prod
+    # NO ports — served through nginx
     restart: unless-stopped
     depends_on:
       - backend
 
-volumes:
-  opencode-data:
-  opencode-config:
+  # ── nginx: only public-facing service ─────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certbot/conf:/etc/letsencrypt:ro
+      - ./nginx/certbot/www:/var/www/certbot:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  # ── Certbot: renews SSL certs automatically ────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./nginx/certbot/conf:/etc/letsencrypt
+      - ./nginx/certbot/www:/var/www/certbot
+    # Renew every 12 hours; certbot skips if cert is still valid
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+
+# No named volumes — all data uses bind mounts at /root/data/ on the droplet

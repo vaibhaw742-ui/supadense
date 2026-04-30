@@ -5,6 +5,7 @@ import { Timestamps } from "../storage/schema.sql"
 
 export const AccountTable = sqliteTable("account", {
   id: text().$type<AccountID>().primaryKey(),
+  user_id: text().notNull().default("global"),
   email: text().notNull(),
   url: text().notNull(),
   access_token: text().$type<AccessToken>().notNull(),
@@ -14,7 +15,7 @@ export const AccountTable = sqliteTable("account", {
 })
 
 export const AccountStateTable = sqliteTable("account_state", {
-  id: integer().primaryKey(),
+  user_id: text().primaryKey(),
   active_account_id: text()
     .$type<AccountID>()
     .references(() => AccountTable.id, { onDelete: "set null" }),

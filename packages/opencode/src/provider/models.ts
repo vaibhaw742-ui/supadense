@@ -152,6 +152,14 @@ export namespace ModelsDev {
 
   export async function get() {
     const result = await Data()
+    // Merge snapshot as a baseline so providers absent from live models.dev
+    // (e.g. "opencode") are still available. Live data takes precedence.
+    const snapshot = await import("./models-snapshot.js")
+      .then((m) => m.snapshot as Record<string, unknown>)
+      .catch(() => undefined)
+    if (snapshot) {
+      return { ...snapshot, ...result } as Record<string, Provider>
+    }
     return result as Record<string, Provider>
   }
 

@@ -2,7 +2,7 @@
  * kb_resource_extract_images — Download and store images from a resource's web page.
  *
  * Called after kb_resource_create when image_candidates are returned.
- * Downloads, filters, and stores images to wiki/assets/.
+ * Downloads, filters, and stores images to assets/.
  * Returns asset_ids that can be passed to kb_resource_place via media_asset_ids.
  */
 import z from "zod"
@@ -127,7 +127,7 @@ async function downloadImage(
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8)
     const resPrefix = resourceId.slice(0, 8)
     const filename = `${resPrefix}-${hash}.${ext}`
-    const localPath = `wiki/assets/${nsPrefix}/${filename}`
+    const localPath = `assets/${nsPrefix}/${filename}`
     const fullPath = path.join(assetsDir, filename)
 
     if (!existsSync(fullPath)) {
@@ -143,7 +143,7 @@ async function downloadImage(
 
 export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_images", {
   description: [
-    "Download and store images from a memorized resource into wiki/assets/.",
+    "Download and store images from a memorized resource into assets/.",
     "",
     "Call this after kb_resource_create when image_candidates are returned in the metadata.",
     "Returns asset_ids that you can pass to kb_resource_place via the media_asset_ids parameter.",
@@ -169,7 +169,7 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
     if (!workspace) throw new Error(`Workspace not found for resource`)
 
     const nsPrefix = resource.workspace_id.slice(0, 8)
-    const assetsDir = path.join(workspace.kb_path, "wiki", "assets", nsPrefix)
+    const assetsDir = path.join(workspace.kb_path, "assets", nsPrefix)
     mkdirSync(assetsDir, { recursive: true })
 
     const assetIds: string[] = []

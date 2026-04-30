@@ -4,7 +4,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -32,6 +32,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     dragOver: false,
     iconHover: false,
   })
+  const [nameError, setNameError] = createSignal("")
 
   let iconInput: HTMLInputElement | undefined
 
@@ -73,8 +74,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
   const saveMutation = useMutation(() => ({
     mutationFn: async () => {
-      const name = store.name.trim() === folderName() ? "" : store.name.trim()
+      setNameError("")
+      const trimmedName = store.name.trim()
+      const name = trimmedName === folderName() ? "" : trimmedName
       const start = store.startup.trim()
+
+      // Duplicate name check
+      const allProjects = await globalSDK.client.project.list().then((x) => x.data ?? [])
+      const isDuplicate = allProjects.some(
+        (p) => p.id !== props.project.id && (p.name || p.worktree.split("/").at(-1)) === trimmedName,
+      )
+      if (isDuplicate) {
+        setNameError("A workspace with that name already exists")
+        return
+      }
 
       if (props.project.id && props.project.id !== "global") {
         await globalSDK.client.project.update({
@@ -108,14 +121,19 @@ export function DialogEditProject(props: { project: LocalProject }) {
     <Dialog title={language.t("dialog.project.edit.title")} class="w-full max-w-[480px] mx-auto">
       <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
-          <TextField
-            autofocus
-            type="text"
-            label={language.t("dialog.project.edit.name")}
-            placeholder={folderName()}
-            value={store.name}
-            onChange={(v) => setStore("name", v)}
-          />
+          <div class="flex flex-col gap-1">
+            <TextField
+              autofocus
+              type="text"
+              label={language.t("dialog.project.edit.name")}
+              placeholder={folderName()}
+              value={store.name}
+              onChange={(v) => { setStore("name", v); setNameError("") }}
+            />
+            <Show when={nameError()}>
+              <span class="text-12-regular text-text-danger">{nameError()}</span>
+            </Show>
+          </div>
 
           <div class="flex flex-col gap-2">
             <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
