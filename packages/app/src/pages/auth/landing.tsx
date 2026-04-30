@@ -15,7 +15,13 @@ export default function LandingPage(props: Props) {
 
   onMount(() => {
     document.body.style.overflow = "auto"
-    onCleanup(() => { document.body.style.overflow = "" })
+    document.body.style.background = "#fff"
+    document.documentElement.style.background = "#fff"
+    onCleanup(() => {
+      document.body.style.overflow = ""
+      document.body.style.background = ""
+      document.documentElement.style.background = ""
+    })
   })
 
   return (
