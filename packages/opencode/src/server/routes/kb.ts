@@ -1,4 +1,6 @@
 import { Hono } from "hono"
+
+type HonoEnv = { Variables: { userId: string } }
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { createKB, listKBs } from "../../util/workspace-provision"
@@ -10,7 +12,7 @@ const KBInfo = z.object({
 })
 
 export const KBRoutes = lazy(() =>
-  new Hono()
+  new Hono<HonoEnv>()
     .post(
       "/create",
       describeRoute({

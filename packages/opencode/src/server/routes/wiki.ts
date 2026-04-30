@@ -41,7 +41,7 @@ async function generateKbDescription(
     const { text } = await generateText({
       model: anthropic("claude-haiku-4-5-20251001"),
       prompt,
-      maxTokens: 80,
+      maxOutputTokens: 80,
     })
     return text.trim()
   } catch {

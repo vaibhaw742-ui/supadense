@@ -1,4 +1,6 @@
 import { Hono, type Context } from "hono"
+
+type HonoEnv = { Variables: { userId: string } }
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
@@ -68,7 +70,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
 }
 
 export const GlobalRoutes = lazy(() =>
-  new Hono()
+  new Hono<HonoEnv>()
     .get(
       "/health",
       describeRoute({

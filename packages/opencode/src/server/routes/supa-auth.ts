@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { createHmac, randomUUID } from "node:crypto"
 import { Database } from "@/storage/db"
 import { Flag } from "@/flag/flag"
@@ -132,7 +132,7 @@ export function SupaAuthRoutes() {
 
   // ── Admin helpers ─────────────────────────────────────────────────────────────
 
-  function getCallerEmail(c: typeof app extends Hono<infer E> ? Parameters<Parameters<(typeof app)["get"]>[1]>[0] : never): string | null {
+  function getCallerEmail(c: Context): string | null {
     const secret = Flag.SUPADENSE_AUTH_SECRET
     if (!secret) return null
     const authHeader = c.req.header("Authorization")
@@ -146,7 +146,7 @@ export function SupaAuthRoutes() {
     }
   }
 
-  function requireAdmin(c: Parameters<typeof getCallerEmail>[0]) {
+  function requireAdmin(c: Context) {
     const email = getCallerEmail(c)
     if (!email) return { error: "Unauthorized" as const }
     if (email !== Flag.SUPADENSE_ADMIN_EMAIL) return { error: "Forbidden" as const }

@@ -51,7 +51,9 @@ export namespace Server {
 
   export const Default = lazy(() => create({}))
 
-  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
+  type HonoEnv = { Variables: { userId: string } }
+
+  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono<HonoEnv>(), opts?: { cors?: string[] }): Hono<HonoEnv> {
     return app
       .onError(errorHandler(log))
       .use(
@@ -348,7 +350,7 @@ export namespace Server {
   }
 
   function create(opts: { cors?: string[] }) {
-    const app = new Hono()
+    const app = new Hono<HonoEnv>()
     const ws = createNodeWebSocket({ app })
     return {
       app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),

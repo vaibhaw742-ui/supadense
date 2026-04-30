@@ -22,7 +22,8 @@ export const KbRenameTool = Tool.define("kb_rename", {
   async execute(params) {
     const project = Instance.project
     const workspace = Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
-    if (!workspace) return { title: "KB Rename", output: "Error: no KB workspace found", metadata: {} }
+    const meta: { id?: string; entity_type?: string; new_name?: string } = {}
+    if (!workspace) return { title: "KB Rename", output: "Error: no KB workspace found", metadata: meta }
 
     if (params.entity_type === "category") {
       Workspace.renameCategory(workspace.id, params.id, params.new_name)
@@ -30,10 +31,13 @@ export const KbRenameTool = Tool.define("kb_rename", {
       Workspace.renameSection(workspace.id, params.id, params.new_name)
     }
 
+    meta.id = params.id
+    meta.entity_type = params.entity_type
+    meta.new_name = params.new_name
     return {
       title: "KB Rename",
       output: `Renamed ${params.entity_type} ${params.id} → "${params.new_name}"`,
-      metadata: { id: params.id, entity_type: params.entity_type, new_name: params.new_name },
+      metadata: meta,
     }
   },
 })
