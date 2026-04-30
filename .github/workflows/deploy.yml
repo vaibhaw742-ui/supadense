@@ -1,9 +1,10 @@
-name: Deploy to Production
+name: deploy
 
 on:
   push:
     branches:
-      - main
+      - dev
+      - production
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -12,20 +13,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to droplet via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd /root/supadense
-            git pull origin main
-            cd deployment
-            docker-compose-v2 -f docker-compose.prod.yml build backend
-            docker-compose-v2 -f docker-compose.prod.yml build frontend
-            docker-compose-v2 -f docker-compose.prod.yml rm -f backend frontend
-            docker-compose-v2 -f docker-compose.prod.yml up -d
-            echo "Deploy complete"
+          node-version: "24"
+
+      - name: Fix Pulumi version conflict
+        run: sudo rm -f /usr/local/bin/pulumi-language-nodejs
+
+      - run: bun sst deploy --stage=${{ github.ref_name }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
