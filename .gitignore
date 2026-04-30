@@ -35,3 +35,7 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# SSL certificates - never commit
+deployment/nginx/certbot/
+.env.prod
