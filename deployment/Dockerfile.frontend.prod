@@ -44,7 +44,7 @@ COPY packages/ui/src        packages/ui/src
 COPY packages/sdk/js/src    packages/sdk/js/src
 COPY packages/util/src      packages/util/src
 
-RUN bun --cwd packages/app run build
+RUN cd packages/app && bun run build
 
 # ── Serve static build with nginx ────────────────────────────────────────────
 FROM nginx:alpine
