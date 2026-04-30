@@ -1,6 +1,4 @@
 import { Hono, type Context } from "hono"
-
-type HonoEnv = { Variables: { userId: string } }
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
@@ -70,7 +68,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
 }
 
 export const GlobalRoutes = lazy(() =>
-  new Hono<HonoEnv>()
+  new Hono()
     .get(
       "/health",
       describeRoute({
@@ -243,7 +241,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const userId = c.get("userId") as string | undefined
+        const userId = (c as any).get("userId") as string | undefined
         if (userId) {
           await Instance.disposeForUser(userId)
         } else {

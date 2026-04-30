@@ -1,6 +1,4 @@
 import { Hono } from "hono"
-
-type HonoEnv = { Variables: { userId: string } }
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { createKB, listKBs } from "../../util/workspace-provision"
@@ -12,7 +10,7 @@ const KBInfo = z.object({
 })
 
 export const KBRoutes = lazy(() =>
-  new Hono<HonoEnv>()
+  new Hono()
     .post(
       "/create",
       describeRoute({
@@ -29,7 +27,7 @@ export const KBRoutes = lazy(() =>
       validator("json", z.object({ name: z.string().min(1) })),
       (c) => {
         const { name } = c.req.valid("json")
-        const userId = c.get("userId") as string | undefined
+        const userId = (c as any).get("userId") as string | undefined
         if (!userId) return c.json({ error: "Not authenticated" }, 401)
         try {
           const directory = createKB(userId, name)
@@ -54,7 +52,7 @@ export const KBRoutes = lazy(() =>
         },
       }),
       (c) => {
-        const userId = c.get("userId") as string | undefined
+        const userId = (c as any).get("userId") as string | undefined
         if (!userId) return c.json({ error: "Not authenticated" }, 401)
         const dirs = listKBs(userId)
         return c.json(dirs.map((d) => ({ directory: d, name: d.split("/").at(-1)! })))

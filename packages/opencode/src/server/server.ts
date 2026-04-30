@@ -51,9 +51,7 @@ export namespace Server {
 
   export const Default = lazy(() => create({}))
 
-  type HonoEnv = { Variables: { userId: string } }
-
-  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono<HonoEnv>(), opts?: { cors?: string[] }): Hono<HonoEnv> {
+  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
     return app
       .onError(errorHandler(log))
       .use(
@@ -91,7 +89,7 @@ export namespace Server {
           if (!rawToken) return c.json({ error: "Unauthorized" }, 401)
           try {
             const payload = verifyToken(rawToken, secret)
-            c.set("userId", payload.userId as string)
+            ;(c as any).set("userId", payload.userId as string)
             return next()
           } catch {
             return c.json({ error: "Unauthorized" }, 401)
@@ -153,7 +151,7 @@ export namespace Server {
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
-          const userId = c.get("userId") as string | undefined
+          const userId = (c as any).get("userId") as string | undefined
           if (userId) {
             await Auth.setForUser(userId, providerID, info)
           } else {
@@ -188,7 +186,7 @@ export namespace Server {
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const userId = c.get("userId") as string | undefined
+          const userId = (c as any).get("userId") as string | undefined
           if (userId) {
             await Auth.removeForUser(userId, providerID)
           } else {
@@ -208,7 +206,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const userId = c.get("userId") as string | undefined
+          const userId = (c as any).get("userId") as string | undefined
           if (userId) {
             return c.json(await Auth.allForUser(userId))
           }
@@ -292,7 +290,7 @@ export namespace Server {
       // Serve project list directly so it works even when no workspace directory exists.
       // WorkspaceRouterMiddleware would auto-create the default workspace dir on this call.
       .get("/project", async (c) => {
-        const userId = c.get("userId") as string | undefined
+        const userId = (c as any).get("userId") as string | undefined
         return c.json(Project.list(userId))
       })
       .route("/kb", KBRoutes())
@@ -310,7 +308,7 @@ export namespace Server {
         const directory = c.req.query("directory") || c.req.header("x-opencode-directory")
         if (directory) return next()
 
-        const userId = c.get("userId") as string | undefined
+        const userId = (c as any).get("userId") as string | undefined
         const config = await Config.getGlobal()
         const allProviders = await ModelsDev.get()
 
@@ -350,7 +348,7 @@ export namespace Server {
   }
 
   function create(opts: { cors?: string[] }) {
-    const app = new Hono<HonoEnv>()
+    const app = new Hono()
     const ws = createNodeWebSocket({ app })
     return {
       app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),
