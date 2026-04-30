@@ -2058,7 +2058,7 @@ export default function Layout(props: ParentProps) {
   const doCreateWorkspace = async (project: LocalProject, name: string) => {
     clearSidebarHoverState()
     const created = await globalSDK.client.worktree
-      .create({ directory: project.worktree, name })
+      .create({ directory: project.worktree })
       .then((x) => x.data)
       .catch((err) => {
         showToast({

@@ -152,12 +152,12 @@ export const SettingsUsers: Component = () => {
                       <div style={{ display: "flex", gap: "6px" }}>
                         <Button
                           variant="primary"
-                          size="sm"
+                          size="small"
                           onClick={() => { setApprovingId(approvingId() === user.id ? null : user.id); setApprovePassword("") }}
                         >
                           Approve
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => rejectUser(user.id, user.email)}>
+                        <Button variant="ghost" size="small" onClick={() => rejectUser(user.id, user.email)}>
                           Reject
                         </Button>
                       </div>
@@ -171,10 +171,10 @@ export const SettingsUsers: Component = () => {
                           onInput={(e) => setApprovePassword(e.currentTarget.value)}
                           style={{ ...inputStyle, flex: "1" }}
                         />
-                        <Button variant="primary" size="sm" onClick={() => confirmApprove(user.id, user.email)}>
+                        <Button variant="primary" size="small" onClick={() => confirmApprove(user.id, user.email)}>
                           Confirm
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setApprovingId(null); setApprovePassword("") }}>
+                        <Button variant="ghost" size="small" onClick={() => { setApprovingId(null); setApprovePassword("") }}>
                           Cancel
                         </Button>
                       </div>
@@ -196,7 +196,7 @@ export const SettingsUsers: Component = () => {
         <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
           <input type="email" placeholder="Email" value={email()} onInput={(e) => setEmail(e.currentTarget.value)} style={inputStyle} />
           <input type="password" placeholder="Temporary password" value={password()} onInput={(e) => setPassword(e.currentTarget.value)} style={inputStyle} />
-          <Button variant="primary" size="sm" disabled={!email() || !password() || creating()} onClick={createUser}>
+          <Button variant="primary" size="small" disabled={!email() || !password() || creating()} onClick={createUser}>
             {creating() ? "Creating..." : "Create user"}
           </Button>
         </div>
@@ -217,7 +217,7 @@ export const SettingsUsers: Component = () => {
                         Joined {new Date(user.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => deleteUser(user.id, user.email)}>
+                    <Button variant="ghost" size="small" onClick={() => deleteUser(user.id, user.email)}>
                       Remove
                     </Button>
                   </div>

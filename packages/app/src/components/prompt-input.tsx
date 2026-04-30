@@ -1108,7 +1108,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(() => {
     if (!props.autoSend?.()) return
     if (!prompt.ready()) return
-    handleSubmit()
+    handleSubmit(new Event("submit"))
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
