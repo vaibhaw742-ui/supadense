@@ -97,7 +97,6 @@ export default function LandingPage(props: Props) {
               src="https://platform.twitter.com/embed/Tweet.html?dnt=true&id=2045132112374964620&theme=light"
               style={{ border: "none", width: "100%", height: "750px", "border-radius": "12px", display: "block" }}
               scrolling="no"
-              allowFullScreen
             />
           </div>
         </main>
