@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -26,6 +26,7 @@ import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type S
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useKbApi } from "@/pages/session/kb-files-panel"
+import { useSDK } from "@/context/sdk"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -47,6 +48,18 @@ export function SessionSidePanel(props: {
   const dialog = useDialog()
   const { sessionKey, tabs, view } = useSessionLayout()
   const kbApi = useKbApi()
+  const sdk = useSDK()
+
+  onMount(() => {
+    const stop = sdk.event.listen((evt) => {
+      if (evt.details.type === "session.idle") {
+        file.tree.refresh("").catch(() => {})
+      }
+    })
+    const interval = setInterval(() => { file.tree.refresh("").catch(() => {}) }, 10_000)
+    onCleanup(() => { stop(); clearInterval(interval) })
+  })
+
   const [kbCreating, setKbCreating] = createSignal<"category" | "section" | "collapsed" | null>(null)
   const [activePath, setActivePath] = createSignal<string | null>(null)
   const [kbPathRef, setKbPathRef] = createSignal("")
