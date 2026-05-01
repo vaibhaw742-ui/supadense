@@ -1456,7 +1456,7 @@ export default function Layout(props: ParentProps) {
       if (!props.project.id || props.project.id === "global") return
       const base = import.meta.env.DEV
         ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-        : location.origin
+        : `${location.origin}/api`
       const token = getAuthToken()
       await fetch(
         `${base}/project/${encodeURIComponent(props.project.id)}?directory=${encodeURIComponent(props.project.worktree)}`,
@@ -1553,7 +1553,7 @@ export default function Layout(props: ParentProps) {
       try {
         const base = import.meta.env.DEV
           ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-          : location.origin
+          : `${location.origin}/api`
         const res = await fetch(`${base}/kb/create`, {
           method: "POST",
           headers: {

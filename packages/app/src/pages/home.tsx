@@ -66,7 +66,7 @@ export default function Home() {
     try {
       const base = import.meta.env.DEV
         ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-        : location.origin
+        : `${location.origin}/api`
       const res = await fetch(`${base}/kb/create`, {
         method: "POST",
         headers: {
