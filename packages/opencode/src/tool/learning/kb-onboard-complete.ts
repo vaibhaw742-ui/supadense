@@ -110,12 +110,6 @@ export const KbOnboardCompleteTool = Tool.define("kb_onboard_complete", {
         { depth: cat.depth, icon: (cat as { icon?: string }).icon, color: (cat as { color?: string }).color, position: i },
       )
       createdCategories.push(category)
-
-      // For built-in templates: add the Key Concepts section
-      if (templateDef) {
-        const sectionDesc = `Key concepts and terminology for ${cat.name} — definitions, mental models, and core ideas to build a strong foundation.`
-        Workspace.createSection(params.workspace_id, templateDef.sectionName, category.id, sectionDesc)
-      }
     }
 
     WikiBuilder.buildSupadenseMd(workspace)
