@@ -1,6 +1,7 @@
-import { createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createResource, createSignal, type Accessor, For, onCleanup, onMount, Show } from "solid-js"
 import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
 import { Popover } from "@opencode-ai/ui/popover"
 
@@ -91,8 +92,61 @@ export function KbJobsBadge() {
   )
 }
 
-export function KbNotificationBell() {
-  const { jobs, justFinished } = useKbJobs()
+// Variant of useKbJobs that works outside SDKProvider (uses GlobalSDK + Server directly)
+export function useKbJobsGlobal(directory: Accessor<string | undefined>) {
+  const server = useServer()
+  const globalSDK = useGlobalSDK()
+
+  function baseUrl(): string {
+    const http = server.current?.http
+    if (!http) return "http://localhost:4096"
+    return typeof http === "string" ? http : (http as { url: string }).url
+  }
+
+  function getHeaders(): Record<string, string> | undefined {
+    const dir = directory()
+    if (!dir) return undefined
+    const token = getAuthToken()
+    return {
+      "x-opencode-directory": dir,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+  }
+
+  const [jobs, setJobs] = createSignal<KbJob[]>([])
+  const [justFinished, setJustFinished] = createSignal(false)
+
+  async function poll() {
+    const h = getHeaders()
+    if (!h) return
+    try {
+      const res = await fetch(`${baseUrl()}/wiki/jobs`, { headers: h })
+      if (!res.ok) return
+      const data = await res.json() as { jobs: KbJob[] }
+      const prev = jobs()
+      const next = data.jobs
+      setJobs(next)
+      if (prev.length > 0 && next.length === 0) {
+        setJustFinished(true)
+        setTimeout(() => setJustFinished(false), 3000)
+      }
+    } catch { /* ignore */ }
+  }
+
+  onMount(() => {
+    poll()
+    const interval = setInterval(poll, 4_000)
+    const stop = globalSDK.event.listen((e) => {
+      if (e.details.type === "session.idle") poll()
+    })
+    onCleanup(() => { clearInterval(interval); stop() })
+  })
+
+  return { jobs, justFinished }
+}
+
+export function KbNotificationBell(props: { directory: Accessor<string | undefined> }) {
+  const { jobs, justFinished } = useKbJobsGlobal(props.directory)
   const hasActivity = () => jobs().length > 0 || justFinished()
   const isRunning = () => jobs().length > 0
 

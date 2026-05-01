@@ -2505,7 +2505,7 @@ export default function Layout(props: ParentProps) {
       }
       userEmail={getSessionEmail()}
       onLogout={handleLogout}
-      notificationBell={<KbNotificationBell />}
+      notificationBell={<KbNotificationBell directory={() => currentProject()?.worktree} />}
     />
   )
 
