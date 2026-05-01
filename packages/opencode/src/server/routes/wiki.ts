@@ -5,7 +5,7 @@
 import { Hono } from "hono"
 import { readFileSync, existsSync, readdirSync } from "fs"
 import path from "path"
-import { eq, desc, inArray } from "drizzle-orm"
+import { eq, desc, inArray, isNotNull } from "drizzle-orm"
 import { Instance } from "../../project/instance"
 import { ProjectTable } from "../../project/project.sql"
 import { Workspace } from "../../learning/workspace"
@@ -20,6 +20,8 @@ import {
   LearningMediaAssetTable,
 } from "../../learning/schema.sql"
 import { Auth } from "../../auth"
+import { SessionStatus } from "../../session/status"
+import { SessionTable } from "../../session/session.sql"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { generateText } from "ai"
 
@@ -709,6 +711,32 @@ export const WikiRoutes = () => {
     }
 
     return c.text("Not found", 404)
+  })
+
+  // ── KB background jobs (curator sessions) ────────────────────────────────────
+  app.get("/jobs", async (c) => {
+    // Get all currently busy sessions
+    const busyMap = await SessionStatus.list()
+    if (busyMap.size === 0) return c.json({ jobs: [] })
+
+    const busyIds = [...busyMap.keys()]
+
+    // Fetch DB rows for busy sessions that are child sessions with "KB:" titles
+    const rows = Database.use((db) =>
+      db
+        .select({ id: SessionTable.id, title: SessionTable.title, parent_id: SessionTable.parent_id })
+        .from(SessionTable)
+        .where(isNotNull(SessionTable.parent_id))
+        .all(),
+    ).filter((r) => busyIds.includes(r.id as any) && r.title.startsWith("KB:"))
+
+    const jobs = rows.map((r) => ({
+      sessionID: r.id,
+      title: r.title.replace(/^KB:\s*/, ""),
+      status: busyMap.get(r.id as any)?.type ?? "busy",
+    }))
+
+    return c.json({ jobs })
   })
 
   return app

@@ -3,6 +3,90 @@ import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 
+// ── KB Jobs badge ─────────────────────────────────────────────────────────────
+
+interface KbJob { sessionID: string; title: string; status: string }
+
+export function useKbJobs() {
+  const server = useServer()
+  const sdk = useSDK()
+
+  function baseUrl(): string {
+    const http = server.current?.http
+    if (!http) return "http://localhost:4096"
+    return typeof http === "string" ? http : (http as { url: string }).url
+  }
+
+  function headers(): Record<string, string> {
+    const token = getAuthToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  const [jobs, setJobs] = createSignal<KbJob[]>([])
+  const [justFinished, setJustFinished] = createSignal(false)
+
+  async function poll() {
+    try {
+      const res = await fetch(`${baseUrl()}/wiki/jobs`, { headers: headers() })
+      if (!res.ok) return
+      const data = await res.json() as { jobs: KbJob[] }
+      const prev = jobs()
+      const next = data.jobs
+      setJobs(next)
+      // If we had running jobs and now have none — briefly show "Done"
+      if (prev.length > 0 && next.length === 0) {
+        setJustFinished(true)
+        setTimeout(() => setJustFinished(false), 3000)
+      }
+    } catch { /* ignore */ }
+  }
+
+  onMount(() => {
+    poll()
+    const interval = setInterval(poll, 4_000)
+    // Also poll immediately when AI finishes a turn
+    const stop = sdk.event.listen((evt) => {
+      if (evt.details.type === "session.idle") poll()
+    })
+    onCleanup(() => { clearInterval(interval); stop() })
+  })
+
+  return { jobs, justFinished }
+}
+
+export function KbJobsBadge() {
+  const { jobs, justFinished } = useKbJobs()
+  const count = () => jobs().length
+
+  return (
+    <Show when={count() > 0 || justFinished()}>
+      <div
+        title={jobs().map(j => j.title).join(", ") || "Done"}
+        style={{
+          display: "inline-flex",
+          "align-items": "center",
+          gap: "5px",
+          padding: "2px 7px",
+          "border-radius": "10px",
+          "font-size": "10px",
+          "font-weight": "600",
+          "white-space": "nowrap",
+          background: count() > 0 ? "rgba(196,74,14,0.10)" : "rgba(34,197,94,0.12)",
+          color: count() > 0 ? "#c44a0e" : "#16a34a",
+          border: count() > 0 ? "1px solid rgba(196,74,14,0.25)" : "1px solid rgba(34,197,94,0.3)",
+          transition: "all 0.3s ease",
+        }}
+      >
+        <Show when={count() > 0} fallback={<span>✓ Done</span>}>
+          <span style={{ animation: "kb-spin 1s linear infinite", display: "inline-block" }}>⟳</span>
+          <span>{count() === 1 ? "Processing" : `${count()} processing`}</span>
+        </Show>
+      </div>
+      <style>{`@keyframes kb-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+    </Show>
+  )
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface KbSection {

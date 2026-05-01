@@ -25,7 +25,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { useKbApi } from "@/pages/session/kb-files-panel"
+import { useKbApi, KbJobsBadge } from "@/pages/session/kb-files-panel"
 import { useSDK } from "@/context/sdk"
 
 export function SessionSidePanel(props: {
@@ -477,6 +477,7 @@ export function SessionSidePanel(props: {
                       <span style={{ "font-size": "11px", "font-weight": "600", "letter-spacing": "0.6px", "text-transform": "uppercase", color: "var(--text-base)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
                         Supadense
                       </span>
+                      <KbJobsBadge />
                     </button>
 
                     {/* Action buttons — shown on hover of the header */}
