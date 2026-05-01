@@ -477,8 +477,8 @@ export function SessionSidePanel(props: {
                       <span style={{ "font-size": "11px", "font-weight": "600", "letter-spacing": "0.6px", "text-transform": "uppercase", color: "var(--text-base)", "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis" }}>
                         Supadense
                       </span>
-                      <KbJobsBadge />
                     </button>
+                    <KbJobsBadge />
 
                     {/* Action buttons — shown on hover of the header */}
                     <div class="kb-header-actions" style={{ display: "flex", "align-items": "center", gap: "1px", "flex-shrink": "0" }}>

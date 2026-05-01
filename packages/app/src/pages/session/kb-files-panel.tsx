@@ -19,7 +19,10 @@ export function useKbJobs() {
 
   function headers(): Record<string, string> {
     const token = getAuthToken()
-    return token ? { Authorization: `Bearer ${token}` } : {}
+    return {
+      "x-opencode-directory": sdk.directory,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
   }
 
   const [jobs, setJobs] = createSignal<KbJob[]>([])
