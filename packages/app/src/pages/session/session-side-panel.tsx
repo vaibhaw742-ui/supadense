@@ -25,7 +25,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { useKbApi, KbJobsBadge } from "@/pages/session/kb-files-panel"
+import { useKbApi } from "@/pages/session/kb-files-panel"
 import { useSDK } from "@/context/sdk"
 
 export function SessionSidePanel(props: {
@@ -478,8 +478,6 @@ export function SessionSidePanel(props: {
                         Supadense
                       </span>
                     </button>
-                    <KbJobsBadge />
-
                     {/* Action buttons — shown on hover of the header */}
                     <div class="kb-header-actions" style={{ display: "flex", "align-items": "center", gap: "1px", "flex-shrink": "0" }}>
                       {/* New section */}

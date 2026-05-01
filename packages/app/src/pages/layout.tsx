@@ -89,6 +89,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { KbNotificationBell } from "./session/kb-files-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2504,6 +2505,7 @@ export default function Layout(props: ParentProps) {
       }
       userEmail={getSessionEmail()}
       onLogout={handleLogout}
+      notificationBell={<KbNotificationBell />}
     />
   )
 
