@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, Show } from "solid-js"
+import { createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
@@ -324,12 +324,21 @@ function TreeNode(props: {
 
 export function KbFilesPanel() {
   const api = useKbApi()
+  const sdk = useSDK()
   const [tick, setTick] = createSignal(0)
   const [creatingRoot, setCreatingRoot] = createSignal(false)
 
   const [tree] = createResource(tick, () => api.tree())
 
   const refresh = () => setTick((t) => t + 1)
+
+  onMount(() => {
+    const stop = sdk.event.listen((evt) => {
+      if (evt.details.type === "session.idle") refresh()
+    })
+    const interval = setInterval(refresh, 10_000)
+    onCleanup(() => { stop(); clearInterval(interval) })
+  })
 
   const handleCreateRoot = async (name: string) => {
     setCreatingRoot(false)
