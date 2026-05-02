@@ -5,7 +5,19 @@ Arguments: $ARGUMENTS
 
 Steps:
 1. Call `kb_workspace_init` to get the workspace.
-2. List the current categories from the workspace so you can match $ARGUMENTS to the correct category_slug.
-3. Confirm with the user which category will be deleted and warn that ALL its content (sections, subcategories, wiki files) will be permanently removed.
-4. Once confirmed, call `kb_category_manage` with action `remove_category` and the matched category_slug.
-5. Confirm the category has been removed.
+2. List the current categories from the workspace to match $ARGUMENTS to the correct category_slug.
+3. Look up the category's wiki pages to determine its folder path (the overview page's directory).
+4. Ask the user for explicit confirmation before proceeding. Show them exactly what will be deleted:
+
+   "⚠️ This will permanently delete:
+      📁 <folder_path>/
+         overview.md
+         key-concepts.md
+         (and any other sections inside)
+   All DB records and resource placements for this category will also be removed.
+   Type **yes** to confirm, or anything else to cancel."
+
+   Wait for the user's reply. Only proceed if they confirm with "yes" (case-insensitive). Otherwise, stop and tell them the operation was cancelled.
+
+5. Once confirmed, call `kb_category_manage` with action `remove_category` and the matched category_slug.
+6. Confirm the category has been removed.
