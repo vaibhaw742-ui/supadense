@@ -172,10 +172,9 @@ export function KbNotificationBell(props: { directory: Accessor<string | undefin
       }}
       trigger={
         <>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 2.5C10 2.5 6.5 4.5 6.5 9V14H13.5V9C13.5 4.5 10 2.5 10 2.5Z" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M8.5 14C8.5 15.1046 9.17157 16 10 16C10.8284 16 11.5 15.1046 11.5 14" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-            <line x1="10" y1="2" x2="10" y2="3" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <Show when={hasActivity()}>
             <span
