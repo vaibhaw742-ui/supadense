@@ -223,19 +223,31 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       )
       if (!category) throw new Error(`Category '${params.category_slug}' not found.`)
 
-      await ctx.ask({
-        permission: "edit",
-        patterns: [`wiki/${params.category_slug}*.md`, "wiki/index.md", "supadense.md"],
-        always: ["*"],
-        metadata: { filepath: `wiki/${params.category_slug}.md`, diff: `Remove category: ${category.name}` },
-      })
-
-      // Get all wiki pages for this category
+      // Get all wiki pages for this category before deleting
       const pages = Database.use((db) =>
         db.select().from(LearningWikiPageTable)
           .where(eq(LearningWikiPageTable.category_id, category.id))
           .all(),
       )
+
+      // Determine folder path from the overview page (new folder-based structure)
+      // Falls back to deleting individual files for old flat-file categories
+      const overviewPage = pages.find((p) => p.type === "overview" || p.slug === "overview")
+      const folderRelPath = overviewPage
+        ? path.dirname(overviewPage.file_path)
+        : null
+
+      await ctx.ask({
+        permission: "edit",
+        patterns: folderRelPath
+          ? [`${folderRelPath}/**`, "wiki/index.md", "supadense.md"]
+          : [`wiki/${params.category_slug}*.md`, "wiki/index.md", "supadense.md"],
+        always: ["*"],
+        metadata: {
+          filepath: folderRelPath ?? `wiki/${params.category_slug}.md`,
+          diff: `Remove category: ${category.name}`,
+        },
+      })
 
       // Delete placements for each page
       for (const page of pages) {
@@ -246,41 +258,42 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         )
       }
 
-      // Delete wiki pages
+      // Delete wiki pages and category record
       Database.use((db) =>
         db.delete(LearningWikiPageTable)
           .where(eq(LearningWikiPageTable.category_id, category.id))
           .run(),
       )
-
-      // Delete category
       Database.use((db) =>
         db.delete(LearningCategoryTable)
           .where(eq(LearningCategoryTable.id, category.id))
           .run(),
       )
 
-      // Delete files
-      const { unlinkSync, existsSync } = await import("fs")
-      for (const page of pages) {
-        const fullPath = `${workspace.kb_path}/${page.file_path}`
-        if (existsSync(fullPath)) unlinkSync(fullPath)
+      // Delete files: remove entire folder if folder-based, else delete individual flat files
+      const { rmSync, unlinkSync, existsSync } = await import("fs")
+      if (folderRelPath) {
+        const absFolder = path.join(workspace.kb_path, folderRelPath)
+        if (existsSync(absFolder)) rmSync(absFolder, { recursive: true, force: true })
+      } else {
+        for (const page of pages) {
+          const fullPath = path.join(workspace.kb_path, page.file_path)
+          if (existsSync(fullPath)) unlinkSync(fullPath)
+        }
       }
-
-      WikiBuilder.buildAll(workspaceId)
-      WikiBuilder.buildSupadenseMd(workspace)
 
       Workspace.logEvent(workspaceId, {
         event_type: "category_removed",
         summary: `Removed category: ${category.name}`,
-        payload: { slug: params.category_slug, pages_removed: pages.length },
+        payload: { slug: params.category_slug, folder: folderRelPath, pages_removed: pages.length },
       })
-      WikiBuilder.buildLogFile(workspace)
 
       return {
         title: `Category removed: ${category.name}`,
         metadata: { category_slug: params.category_slug, pages_removed: pages.length } as M,
-        output: `Removed category '${category.name}' and ${pages.length} wiki page(s).`,
+        output: folderRelPath
+          ? `Removed category '${category.name}' and deleted folder ${folderRelPath}/ (${pages.length} page(s)).`
+          : `Removed category '${category.name}' and ${pages.length} wiki page(s).`,
       }
     }
 
