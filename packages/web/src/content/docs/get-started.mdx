@@ -1,0 +1,74 @@
+---
+title: Get Started
+description: Onboard Supadense and add your first resource.
+---
+
+## 1. Open the app
+
+Navigate to [supadense.com](https://supadense.com) and sign in. You'll land in a fresh chat session.
+
+---
+
+## 2. Onboard
+
+Run the `/onboard` command to set up your knowledge base. The agent will walk you through:
+
+- **Your goals** — what you're trying to learn (e.g. "become proficient in LLM agents and RAG systems")
+- **Your categories** — 2–6 knowledge domains you want to track (e.g. `agents`, `rag`, `llm-inference`, `fine-tuning`)
+- **Depth level** — for each category, choose how deep you want to go:
+  - `deep` — full extraction with subcategories and detailed sections
+  - `working` — practical knowledge, key concepts and use-cases
+  - `awareness` — high-level overview only
+- **Trusted sources** — optionally tell the agent which creators or platforms you prefer (e.g. Andrej Karpathy, Arxiv, Hugging Face blog)
+
+The agent creates your wiki structure at `/wiki` with a folder per category, each containing `overview.md` and `key-concepts.md`.
+
+---
+
+## 3. Add your first resource
+
+Use the `/memorize` command followed by any URL:
+
+```
+/memorize https://x.com/karpathy/status/...
+/memorize https://arxiv.org/abs/2307.09288
+/memorize https://www.youtube.com/watch?v=...
+```
+
+Supadense will:
+1. Fetch and extract the content
+2. Run the curator to identify key concepts
+3. Place the extracted content into the relevant category sections
+4. Rebuild the wiki pages
+
+The agent will tell you exactly where the content was placed once processing completes.
+
+---
+
+## 4. Browse your wiki
+
+Open `/wiki` to see your knowledge base. Each category has:
+
+- **Overview** — a high-level summary that auto-updates as you add resources
+- **Key Concepts** — extracted ideas from all resources, organized by section
+- **Sections** — any additional sections you've added (use-cases, tools, etc.)
+- **Sources panel** — all resources that contributed to this category
+- **Images panel** — diagrams and visuals extracted from resources
+
+---
+
+## Templates
+
+When you onboard, categories are created from a default template structure. Each category folder contains:
+
+```
+wiki/
+  agents/
+    overview.md       ← auto-generated summary
+    key-concepts.md   ← extracted concepts from all resources
+  rag/
+    overview.md
+    key-concepts.md
+```
+
+You can extend any category with additional sections using `/add-section` and organize deeper topics into subcategories.

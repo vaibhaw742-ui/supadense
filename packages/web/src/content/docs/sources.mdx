@@ -1,0 +1,67 @@
+---
+title: Sources & Images
+description: Browse the resources and visuals behind your knowledge base.
+---
+
+Every piece of knowledge in your KB traces back to a source. Supadense preserves the original URLs, extracted images, and per-resource content so you can always verify where something came from.
+
+---
+
+## Sources panel
+
+The **Sources** panel in the wiki right sidebar lists every resource that contributed content to the current category. For each source you can see:
+
+- **Title** — the page or video title extracted at ingestion time
+- **URL** — link back to the original resource
+- **Sections** — which sections of this category the resource was placed into
+- **Placement count** — how many concepts were extracted from it
+
+Click any source to open the original URL in a new tab.
+
+---
+
+## Images panel
+
+The **Images** panel shows all visuals extracted from resources placed in the current category. These include:
+
+- Architecture diagrams
+- Benchmark charts
+- System design illustrations
+- Figures from papers
+
+Images are stored locally in `assets/<resource-id>/` under your KB path and served directly from there — no external dependency.
+
+### How images are extracted
+
+When a resource is ingested, Supadense scans the raw content for image references and downloads them. Images from YouTube videos (thumbnails, chapter frames) and papers (figure images) are extracted where possible.
+
+---
+
+## Filtering by source
+
+In the `key-concepts` wiki tab you can filter to show only content from a specific source. This is useful when you want to review what a particular resource contributed — useful before deciding to remove it.
+
+---
+
+## Removing a source
+
+To remove a specific resource and all its content from the KB:
+
+```
+/remove-resource https://arxiv.org/abs/2307.09288
+```
+
+See [Ingestion → Remove a resource](/docs/ingestion#remove-a-resource) for full details on what gets deleted.
+
+---
+
+## All resources view
+
+To see every resource in your KB (across all categories), ask the agent:
+
+```
+List all resources in my KB
+Show me everything I've added
+```
+
+The agent will query the database and return a table of all resources with their titles, URLs, and placement counts.

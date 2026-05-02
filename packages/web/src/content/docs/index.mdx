@@ -1,142 +1,43 @@
 ---
-title: Intro
-description: Get started with Supadense.
+title: Introduction
+description: What is Supadense and how it works.
 ---
 
-import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../config.mjs"
-export const console = config.console
 
-[**Supadense**](/) is an open source AI coding agent. It's available across:
-terminal (TUI), desktop app (Mac/Windows), web app, and IDE extensions (VS Code, JetBrains).
+[**Supadense**](/) is an AI-powered knowledge base for engineers. You feed it learning resources — articles, YouTube videos, tweets, papers, docs — and it extracts the key ideas, organizes them into your personal wiki, and lets you query that knowledge through a chat interface.
 
----
-
-## Prerequisites
-
-To use Supadense in your terminal, you'll need a modern terminal emulator such as:
-
-- [WezTerm](https://wezfurlong.org/wezterm/) (cross-platform)
-- [Alacritty](https://github.com/alacritty/alacritty) (cross-platform)
-- [Ghostty](https://github.com/ghostty-org/ghostty) (Linux and macOS)
-- [Kitty](https://sw.kovidgoyal.net/kitty/) (Linux and macOS)
-
-You'll also need an API key from at least one LLM provider, or you can use [Supadense Zen](/docs/zen) which provides a curated set of models.
+Unlike a general AI assistant, Supadense only answers from what **you** have added. Every answer is grounded in your KB.
 
 ---
 
-## Install
+## How it works
 
-<Tabs>
-  <TabItem label="Script">
-    ```bash
-    curl -fsSL https://supadense.com/install | bash
-    ```
-  </TabItem>
-  <TabItem label="Node.js">
-    ```bash
-    npm install -g opencode-ai
-    bun install -g opencode-ai
-    pnpm install -g opencode-ai
-    yarn global add opencode-ai
-    ```
-  </TabItem>
-  <TabItem label="macOS">
-    ```bash
-    brew install anomalyco/tap/opencode
-    ```
-  </TabItem>
-  <TabItem label="Arch Linux">
-    ```bash
-    sudo pacman -S opencode
-    paru -S opencode-bin
-    ```
-  </TabItem>
-  <TabItem label="Windows">
-    ```powershell
-    choco install opencode
-    scoop install opencode
-    npm install -g opencode-ai
-    mise use -g github:anomalyco/opencode
-    docker run -it --rm ghcr.io/anomalyco/opencode
-    ```
-
-    :::tip
-    WSL is recommended for the best Windows experience.
-    :::
-  </TabItem>
-</Tabs>
+1. **Onboard** — define your knowledge goals and categories (e.g. `agents`, `rag`, `llm-inference`)
+2. **Ingest** — paste links to anything you want to learn from; the AI curator extracts and organizes it
+3. **Browse** — your wiki at `/wiki` reflects everything you've learned, structured by category
+4. **Ask** — chat with the agent and get answers drawn exclusively from your KB
 
 ---
 
-## Configure
+## Core concepts
 
-Run Supadense and use the `/connect` command to configure your LLM provider. You'll be directed to
-`{console}` to authenticate and then prompted to enter your API key.
-
-:::tip
-Use [Supadense Zen](/docs/zen) for a curated set of models with tested defaults.
-:::
-
----
-
-## Initialize
-
-Navigate to your project directory and run Supadense.
-
-```bash
-cd /path/to/my/project
-opencode
-```
-
-Then run the `/init` command to have Supadense analyze your project and create an `AGENTS.md` file.
-This file gives context to the AI on how your project is structured. Commit it to version control.
+| Concept | What it is |
+|---|---|
+| **Workspace** | Your KB root — one workspace per project or learning goal |
+| **Category** | A top-level knowledge domain (e.g. `agents`, `rag`) |
+| **Section** | A named part of a category page (e.g. `key-concepts`, `use-cases`) |
+| **Resource** | A URL or piece of content you've added to the KB |
+| **Placement** | Where a resource's extracted content lands in the wiki |
+| **Group** | A cluster of related concepts across resources in a section |
 
 ---
 
-## Usage
+## Quick links
 
-### Ask questions
-
-Use the `@` key to reference specific files in your project.
-
-```
-How is authentication handled in @packages/functions/src/api/index.ts
-```
-
-### Add features
-
-Use **Plan Mode** (hit `Tab`) to have Supadense layout a plan before writing any code. You can provide
-feedback on the plan before it starts building.
-
-- Hit `Tab` to enter **Plan Mode** before submitting your message
-- Ask for a detailed plan of what you want to build
-- Include images by dragging and dropping them into the chat
-- Hit `Tab` again to switch back to **Build Mode** once you're happy with the plan
-
-### Make changes
-
-When asking Supadense to make changes, providing as much context as possible will help it make
-the right changes. You can reference specific files with `@`.
-
-### Undo changes
-
-Supadense tracks all the changes it makes so you can undo them. Use `/undo` to undo the last set of
-changes or `/redo` to redo them. You can undo multiple times to go back further.
-
----
-
-## Share
-
-Use the `/share` command to generate a link to your current conversation to share with your team.
-
----
-
-## Customize
-
-Check out the following docs to customize Supadense to your liking:
-
-- [Themes](/docs/themes) — change the look and feel
-- [Keybinds](/docs/keybinds) — customize keyboard shortcuts
-- [Formatters](/docs/formatters) — configure code formatters
-- [Config](/docs/config) — full configuration reference
+- [Get Started](/docs/get-started) — onboard and add your first resource
+- [KB Structure](/docs/kb-structure) — understand how your knowledge is stored
+- [Managing Categories](/docs/categories) — create and organize your knowledge domains
+- [Ingestion](/docs/ingestion) — add and remove resources
+- [Groups](/docs/groups) — consolidate key concepts across resources
+- [Workspaces & Sessions](/docs/workspaces) — manage your environment

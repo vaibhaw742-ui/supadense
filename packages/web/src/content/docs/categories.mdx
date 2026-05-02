@@ -1,0 +1,118 @@
+---
+title: Managing Categories
+description: Create, extend, and remove knowledge categories and subcategories.
+---
+
+Categories are the top-level knowledge domains in your KB. Each category gets a folder under `wiki/` with an `overview.md` and `key-concepts.md`. You can extend categories with extra sections and nest topics into subcategories.
+
+---
+
+## Add a category
+
+```
+/add-category Agents
+/add-category RAG @location wiki/
+/add-category Fine-tuning @location wiki/llm/
+```
+
+The agent will:
+1. Ask for a location if none is specified (default: `wiki/`)
+2. Create the folder `wiki/<category-slug>/`
+3. Write `overview.md` and `key-concepts.md` with starter content
+4. Register the category in the database
+
+**Result:**
+```
+wiki/
+  agents/
+    overview.md
+    key-concepts.md
+```
+
+---
+
+## Remove a category
+
+```
+/remove-category Agents
+```
+
+The agent will show you exactly what will be deleted (folder path, number of resource placements) and ask for confirmation before proceeding.
+
+:::caution
+Removing a category deletes the entire folder tree and all placement records for that category. This cannot be undone.
+:::
+
+---
+
+## Add a section
+
+Sections are extra pages within a category (e.g. `use-cases`, `tools`, `benchmarks`).
+
+```
+/add-section use-cases @location wiki/agents/
+/add-section tools
+```
+
+If no location is given, the agent will ask which category the section belongs to.
+
+**Result:**
+```
+wiki/
+  agents/
+    overview.md
+    key-concepts.md
+    use-cases.md      ← new section
+```
+
+The `overview.md` is automatically updated to list the new section.
+
+:::note
+You cannot add sections named `overview` or `key-concepts` — those are protected system sections.
+:::
+
+---
+
+## Remove a section
+
+```
+/remove-section use-cases @location wiki/agents/
+```
+
+The agent will confirm before deleting the file and removing the section from the category's `overview.md`.
+
+:::caution
+Protected sections (`overview`, `key-concepts`) cannot be removed.
+:::
+
+---
+
+## Subcategories
+
+Subcategories let you organize deeper topics within a category. They live in a subfolder:
+
+```
+wiki/
+  agents/
+    advanced/
+      overview.md
+      key-concepts.md
+```
+
+When you run `/group` or other commands, you can target subcategories specifically:
+
+```
+/group Agents > Advanced
+/add-section tool-calling @location wiki/agents/advanced/
+```
+
+---
+
+## Protected sections
+
+The following sections are protected and cannot be removed:
+
+| Section | Why |
+|---|---|
+| `overview` | Auto-generated category summary, rebuilt by the system |
+| `key-concepts` | Primary extraction target — removing it would lose all placed content |

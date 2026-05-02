@@ -1,0 +1,100 @@
+---
+title: Groups
+description: Consolidate and cluster key concepts across resources.
+---
+
+As you add more resources to a category, the `key-concepts` section grows with content from each one. Groups let you cluster these concepts across all resources so that related ideas are shown together — turning a flat list of per-resource extractions into a consolidated conceptual map.
+
+---
+
+## How grouping works
+
+Grouping is a **two-phase process**:
+
+1. **Fetch** — Supadense retrieves all placement content for the target section
+2. **Cluster** — the AI analyzes the concepts and forms groups of semantically related ideas
+3. **Apply** — group assignments are saved and the wiki is rebuilt
+
+The result is a wiki section organized by conceptual theme rather than by resource.
+
+---
+
+## Group a category
+
+```
+/group Agents
+/group RAG
+/group LLM Inference
+```
+
+This groups the `key-concepts` section of the specified category by default.
+
+### Group a subcategory
+
+```
+/group Agents > Advanced
+/group RAG > Hybrid Search
+```
+
+Only the placements for that specific subcategory are analyzed.
+
+### Group a different section
+
+```
+/group Agents > use-cases
+/group RAG > tools
+```
+
+Append the section name as the last segment.
+
+---
+
+## What a group contains
+
+Each group has:
+
+| Field | Description |
+|---|---|
+| **Name** | Short descriptive label (e.g. "Memory Systems", "Context Window Management") |
+| **Definition** | One-sentence synthesis grounded across all member resources |
+| **Members** | Which resources contributed to this group, and which of their concepts map into it |
+
+---
+
+## Grouping rules
+
+- Concepts that are synonyms or sub-variants of the same idea are merged
+- Genuinely distinct themes stay separate
+- The AI aims for the **fewest groups** that preserve all meaningful distinctions
+- Every resource must appear in at least one group
+- A resource **can** belong to multiple groups if its content spans them
+
+---
+
+## After grouping
+
+Once groups are applied, the `key-concepts` wiki page is rebuilt to show concepts organized by group name, with the synthesized definition at the top of each cluster.
+
+To see the effect, open the wiki and navigate to the grouped category's `key-concepts` tab.
+
+---
+
+## Resetting groups
+
+If you want to go back to the ungrouped flat view, ask the agent to reset the groups:
+
+```
+Reset groups for agents key-concepts
+```
+
+This calls `kb_section_group_reset` internally and rebuilds the wiki without group assignments.
+
+---
+
+## When to group
+
+Group a category when:
+- You have **5+ resources** placed in it
+- The key-concepts section feels repetitive or hard to scan
+- You want to see the conceptual landscape of a topic at a glance
+- You're preparing to go deep on a specific sub-theme

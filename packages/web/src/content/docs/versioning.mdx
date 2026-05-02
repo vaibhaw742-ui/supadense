@@ -1,0 +1,115 @@
+---
+title: Versioning
+description: Keep Supadense up to date with the latest changes.
+---
+
+Supadense is built on [OpenCode](https://github.com/anomalyco/opencode) and maintained in a private fork. This page explains how to pull in upstream improvements and manage your own version.
+
+---
+
+## Checking your version
+
+Ask the agent or check the app header for the current version. You can also check the git log:
+
+```bash
+git log --oneline -5
+```
+
+---
+
+## Pulling upstream changes
+
+Supadense periodically syncs improvements from the OpenCode upstream. To get the latest:
+
+```bash
+git fetch upstream
+git checkout development
+git merge upstream/main
+# resolve any conflicts
+git push origin development
+```
+
+Then merge `development` into `main` and deploy:
+
+```bash
+git checkout main
+git merge development
+git push origin main
+```
+
+On your server:
+
+```bash
+bash deployment/deploy-all.sh
+```
+
+---
+
+## Deployment branches
+
+| Branch | Purpose |
+|---|---|
+| `development` | Active development, staging changes |
+| `main` | Production — always deployed to `supadense.com` |
+
+**Always push to `development` first**, then merge into `main`. Never push directly to `main` without going through `development`.
+
+---
+
+## Database migrations
+
+When a new version includes schema changes, migrations run automatically on startup. Migration files live at:
+
+```
+packages/opencode/migration/
+```
+
+If a migration fails, the app will log the error on startup. Check the backend container logs:
+
+```bash
+docker logs deployment-backend-1 --tail 50
+```
+
+---
+
+## Rollback
+
+If a deployment causes issues, roll back by checking out the previous commit and redeploying:
+
+```bash
+git checkout main
+git revert HEAD
+git push origin main
+bash deployment/deploy-all.sh
+```
+
+Or redeploy a specific commit:
+
+```bash
+git checkout <commit-hash>
+bash deployment/deploy-all.sh
+```
+
+---
+
+## Environment and secrets
+
+Secrets (API keys, auth tokens) are stored in `deployment/.env.prod` on the server. This file is never committed to git. When updating, ensure your `.env.prod` has all required variables:
+
+```bash
+cat deployment/.env.prod
+```
+
+Required variables are documented in `deployment/.env.example` (if present) or in the backend startup logs.
+
+---
+
+## Docker image cache
+
+If a deploy doesn't pick up new changes, force a clean rebuild:
+
+```bash
+cd deployment
+docker-compose-v2 -f docker-compose.prod.yml build --no-cache frontend backend
+docker-compose-v2 -f docker-compose.prod.yml up -d
+```

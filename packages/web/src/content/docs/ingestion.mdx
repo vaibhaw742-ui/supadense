@@ -1,0 +1,101 @@
+---
+title: Ingestion
+description: Add and remove resources from your knowledge base.
+---
+
+Ingestion is the process of adding a resource (URL, article, video, tweet) to your KB. Supadense fetches the content, extracts key ideas, maps them to your categories, and updates your wiki automatically.
+
+---
+
+## Add a resource
+
+Use the `/memorize` command:
+
+```
+/memorize https://arxiv.org/abs/2307.09288
+/memorize https://x.com/karpathy/status/1599852921541128192
+/memorize https://www.youtube.com/watch?v=zjkBMFhNj_g
+/memorize https://lilianweng.github.io/posts/2023-06-23-agent/
+```
+
+### What happens
+
+1. **Register** — the resource URL is saved to the database
+2. **Fetch & extract** — the raw text and images are downloaded and saved to disk
+3. **Curate** — the AI curator reads the raw content and decides:
+   - Which categories it belongs to
+   - Which sections to place it in (always at minimum `key-concepts`)
+   - What concepts to extract
+4. **Place** — extracted content is written to the placement table
+5. **Rebuild wiki** — all affected category wiki pages are regenerated
+
+The agent polls until processing is complete and then reports:
+- Which categories/sections received content
+- Key concepts extracted
+- Confirmation that the wiki was updated
+
+### Supported content types
+
+| Type | Notes |
+|---|---|
+| Web articles / blog posts | Full text extraction |
+| Twitter/X threads | Thread content extracted |
+| YouTube videos | Transcript extracted if available |
+| Arxiv papers | Abstract + body extracted |
+| GitHub repos | README and key files |
+| PDFs | Text extracted |
+
+---
+
+## Remove a resource
+
+Use the `/remove-resource` command:
+
+```
+/remove-resource https://arxiv.org/abs/2307.09288
+```
+
+The agent will look up the resource and show you:
+- Title and URL
+- Which categories/sections it was placed into
+- Number of placements
+
+You must confirm with **yes** before anything is deleted.
+
+### What gets deleted
+
+| What | Where |
+|---|---|
+| Raw text file | `raw/<resource-id>.txt` |
+| All extracted images | `assets/<resource-id>/` |
+| All wiki placements | Database rows |
+| Media asset records | Database rows |
+| Skill results | Database rows (cascade) |
+| Soft references | Nulled out in concepts, gaps, roadmap items |
+
+After deletion, all affected wiki pages are rebuilt automatically.
+
+---
+
+## Pipeline internals
+
+The ingestion pipeline runs as a background task. Internally it uses these tools:
+
+| Tool | What it does |
+|---|---|
+| `kb_resource_create` | Registers the URL and fetches raw content |
+| `kb_pipeline_run` | Starts the curator session |
+| `kb_pipeline_status` | Polls for completion |
+| `kb_wiki_build` | Rebuilds wiki pages (called automatically) |
+
+You don't need to call these manually — `/memorize` handles the full flow.
+
+---
+
+## Troubleshooting
+
+**Processing seems stuck** — the curator runs as a background session. If `/memorize` reports completion but the wiki looks unchanged, try running `/group` on the category to verify placements exist.
+
+**Resource wasn't placed anywhere** — the curator couldn't match the content to any of your categories. Consider adding a more relevant category or re-running `/memorize` after adding a better-matched category.
+
+**Duplicate resource** — if you add the same URL twice, the second call will return the existing resource without re-processing.

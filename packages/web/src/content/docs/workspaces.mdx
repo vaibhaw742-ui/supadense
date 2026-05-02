@@ -1,0 +1,66 @@
+---
+title: Workspaces & Sessions
+description: Manage your KB workspace and chat sessions.
+---
+
+## Workspaces
+
+A **workspace** is the root of your knowledge base — the directory where your `wiki/`, `raw/`, and `assets/` folders live. Each workspace has its own categories, resources, and wiki.
+
+### Setting up a workspace
+
+When you first run `/onboard`, Supadense initializes a workspace at the current project directory. The workspace is registered by its path so the agent always knows which KB to read and write.
+
+### Multiple workspaces
+
+You can maintain separate KBs for different learning goals — for example, one for ML research and another for systems engineering. Each is a separate workspace with its own categories and resources.
+
+To switch workspaces, open a new session in the directory for that KB, or ask the agent:
+
+```
+Initialize workspace at /path/to/my/other/kb
+```
+
+### Workspace init
+
+At the start of any KB operation, the agent calls `kb_workspace_init` to locate and validate your workspace. If no workspace is found for the current project, you'll be prompted to run `/onboard` first.
+
+---
+
+## Sessions
+
+A **session** is a single conversation with the agent. Sessions are independent — the agent doesn't carry context between sessions by default.
+
+### Starting a new session
+
+Click **New Session** (or use the keyboard shortcut) to start a fresh conversation. The agent will have access to your KB but no memory of previous conversations.
+
+### Continuing a session
+
+Previously opened sessions appear in the left sidebar. Click any session to resume it with full conversation history.
+
+### Sessions and the KB
+
+Sessions don't affect your KB — adding resources, grouping, and other KB operations are persistent regardless of which session you're in. The KB is shared across all sessions in the same workspace.
+
+---
+
+## Best practices
+
+- **One workspace per learning domain** — keep ML, systems, and web dev knowledge in separate workspaces to avoid cross-contamination
+- **Use `/onboard` once per workspace** — running it again will reconfigure your categories (you'll be prompted before overwriting anything)
+- **Sessions are cheap** — start a new session whenever the conversation gets long or you're switching topics
+- **KB operations are durable** — if a session ends mid-processing, the pipeline continues in the background; your wiki will be updated
+
+---
+
+## Data location
+
+By default, your workspace data lives at:
+
+```
+~/.local/share/opencode/          ← Supadense config and auth
+/workspaces/<your-project>/       ← KB data (wiki, raw, assets)
+```
+
+On the hosted platform, data is stored securely on the server. You can always export your wiki by downloading the `wiki/` folder.

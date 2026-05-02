@@ -1,0 +1,94 @@
+---
+title: KB Structure
+description: How Supadense stores and organizes your knowledge.
+---
+
+Supadense stores your knowledge in three layers: **raw files** on disk, a **SQLite database**, and **wiki markdown files**. Understanding this structure helps you know what happens when you add resources and how to reason about your KB.
+
+---
+
+## Folder structure
+
+```
+<kb-path>/
+  wiki/
+    agents/
+      overview.md        ← auto-generated category summary
+      key-concepts.md    ← extracted concepts, grouped by resource
+      use-cases.md       ← optional extra section
+      advanced/          ← subcategory folder
+        overview.md
+        key-concepts.md
+    rag/
+      overview.md
+      key-concepts.md
+  raw/
+    01HXYZ...abc.txt     ← extracted text from each resource
+  assets/
+    01HXYZ...abc/
+      image-001.png      ← images extracted from the resource
+      image-002.png
+```
+
+---
+
+## Raw content
+
+When you add a resource, Supadense fetches the URL and extracts the full text content. This raw text is saved to `raw/<resource-id>.txt` (or `.md`). It is the source of truth used by the curator to extract key concepts.
+
+- **Purpose:** feed the AI curator with the original content
+- **Location:** `raw/` under your KB path
+- **Lifecycle:** deleted when you run `/remove-resource`
+
+---
+
+## Assets
+
+Images, diagrams, and other media extracted from resources are stored under `assets/<resource-id>/`. These appear in the **Images** panel of your wiki.
+
+- **Purpose:** preserve visual context (architecture diagrams, charts)
+- **Location:** `assets/` under your KB path
+- **Lifecycle:** deleted when you run `/remove-resource`
+
+---
+
+## Wiki pages
+
+Wiki pages are markdown files under `wiki/`. Each category has at minimum:
+
+| File | Contents |
+|---|---|
+| `overview.md` | Auto-generated summary of the category — rebuilt whenever sections are added/removed or resources are placed |
+| `key-concepts.md` | Extracted concepts from all resources placed in this category |
+
+Additional sections (e.g. `use-cases.md`, `tools.md`) are created with `/add-section` and show up as tabs in the wiki UI.
+
+Wiki pages are **rebuilt automatically** every time a resource is processed or a section changes. You never need to edit them manually.
+
+---
+
+## Database
+
+Supadense uses SQLite to track all relationships between resources, categories, sections, and placements. Key tables:
+
+| Table | Stores |
+|---|---|
+| `learning_resource` | Every URL/resource you've added |
+| `learning_category` | Your knowledge categories |
+| `learning_wiki_page` | Each wiki page (overview, key-concepts, custom sections) |
+| `learning_resource_wiki_placement` | Where each resource's content was placed, and what was extracted |
+| `learning_media_asset` | Images extracted from resources |
+| `learning_kb_event` | Audit log of all KB operations |
+
+---
+
+## What gets rebuilt automatically
+
+The following are **always regenerated** — do not manually edit them:
+
+- `overview.md` for any category
+- `key-concepts.md` for any category
+
+The following are yours to own:
+
+- Any custom sections you create with `/add-section`

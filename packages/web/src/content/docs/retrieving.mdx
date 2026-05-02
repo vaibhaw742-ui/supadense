@@ -1,0 +1,74 @@
+---
+title: Retrieving Knowledge
+description: Query your KB through chat and the wiki.
+---
+
+Supadense gives you two ways to access your knowledge: the **chat interface** for natural language questions, and the **wiki** for structured browsing.
+
+---
+
+## Chat
+
+Ask the agent anything and it will answer using only your KB:
+
+```
+What are the key differences between RAG and fine-tuning?
+How does tool use work in LLM agents?
+What did Karpathy say about tokenization?
+```
+
+The agent uses `kb_retrieve` internally to search your placements and construct an answer grounded in your sources. It will never answer from general training knowledge — only from what you've added.
+
+### How retrieval works
+
+1. Your question is embedded and matched against all placement content in the database
+2. The most relevant placements are returned (ranked by semantic similarity)
+3. The agent synthesizes an answer and cites which resources it drew from
+
+### Tips for better retrieval
+
+- Ask specific questions rather than broad ones
+- Reference category names to scope the search: *"In the context of RAG, what is..."*
+- If an answer seems thin, it means you haven't added enough resources on that topic yet — use `/memorize` to add more
+
+---
+
+## Wiki
+
+The wiki at `/wiki` gives you a structured view of your entire KB.
+
+### Navigation
+
+- **Left sidebar** — your category tree. Click a category to open its wiki page
+- **Section tabs** — switch between `overview`, `key-concepts`, and any custom sections
+- **Subcategories** — nested under their parent in the sidebar
+
+### Key concepts view
+
+The `key-concepts` tab shows all extracted concepts from every resource placed in that category. If you've run `/group`, concepts are organized into named clusters — otherwise they appear as a flat list per resource.
+
+### Sources panel
+
+The right panel shows all resources that contributed to this category. Each source links back to the original URL.
+
+### Images panel
+
+Diagrams and visuals extracted from resources appear here. This is particularly useful for architecture diagrams, benchmark charts, and visual explanations.
+
+---
+
+## Roadmaps
+
+Structured learning paths live under `/wiki/roadmap`. The agent builds these based on your goals and depth settings. Each roadmap gives you a curated sequence of topics to work through.
+
+---
+
+## Filtering
+
+In the wiki you can filter the key-concepts view by:
+
+- **Resource** — show only concepts from a specific source
+- **Section** — view one section at a time
+- **Group** — if groups are applied, filter to a specific conceptual cluster
+
+See [Sources & Images](/docs/sources) for more on the sources and images panels.
