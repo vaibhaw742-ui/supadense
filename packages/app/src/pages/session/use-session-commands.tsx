@@ -377,14 +377,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "session.new",
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
-      slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     }),
     sessionCommand({
       id: "session.undo",
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
-      slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: undo,
     }),
@@ -408,7 +406,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "session.fork",
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
-      slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
     }),
@@ -420,7 +417,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.file.open"),
       description: language.t("palette.search.placeholder"),
       keybind: "mod+k,mod+p",
-      slash: "open",
       onSelect: openFile,
     }),
     fileCommand({
@@ -448,7 +444,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
       keybind: "ctrl+`",
-      slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     }),
     viewCommand({
@@ -524,7 +519,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.mcp.toggle"),
       description: language.t("command.mcp.toggle.description"),
       keybind: "mod+;",
-      slash: "mcp",
       onSelect: chooseMcp,
     }),
   ]
@@ -535,7 +529,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle"),
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
-      slash: "agent",
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
