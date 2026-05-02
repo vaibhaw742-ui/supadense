@@ -10,6 +10,8 @@ import { Skill } from "../skill"
 import { Log } from "../util/log"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_ONBOARD from "./template/onboard.txt"
+import PROMPT_MEMORIZE from "./template/memorize.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -63,6 +65,8 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    ONBOARD: "onboard",
+    MEMORIZE: "memorize",
   } as const
 
   export interface Interface {
@@ -101,6 +105,24 @@ export namespace Command {
           },
           subtask: true,
           hints: hints(PROMPT_REVIEW),
+        }
+        commands[Default.ONBOARD] = {
+          name: Default.ONBOARD,
+          description: "set up your knowledge base — goals, categories, depth",
+          source: "command",
+          get template() {
+            return PROMPT_ONBOARD
+          },
+          hints: hints(PROMPT_ONBOARD),
+        }
+        commands[Default.MEMORIZE] = {
+          name: Default.MEMORIZE,
+          description: "add a resource to your knowledge base",
+          source: "command",
+          get template() {
+            return PROMPT_MEMORIZE
+          },
+          hints: hints(PROMPT_MEMORIZE),
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {

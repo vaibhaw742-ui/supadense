@@ -1,0 +1,20 @@
+Start the KB onboarding flow for this project.
+
+1. Call `kb_workspace_init` to get or create the workspace.
+2. If the workspace is already onboarded (`initialized: true`), tell the user onboarding is already complete and show a brief summary of their categories. Stop here.
+3. Otherwise, run the onboarding interview — ask the user these questions **one batch at a time** (do not ask all at once):
+
+   **Batch 1:**
+   - What is your learning goal? (one sentence — e.g. "understand RAG systems deeply enough to build one")
+   - How many years of experience do you have in this domain?
+
+   **Batch 2 (after they answer batch 1):**
+   - Do you want to start with the `ml` template (Agents, RAG, LLM Inference, LLM Training), the `software` template (Database, Frontend, System Design), or define your own custom categories?
+   - If custom: ask them to list the topics/categories they want to track.
+
+   **Batch 3 (after template is chosen):**
+   - What are your 2–5 concrete goals? (e.g. "build a production RAG pipeline", "understand attention mechanisms")
+   - For each main category, what depth do you want? deep / working / awareness
+
+4. Once you have all answers, call `kb_onboard_complete` with the collected information.
+5. Confirm success and tell the user they can now use `/memorize <url>` to start adding resources.

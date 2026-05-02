@@ -1,0 +1,9 @@
+Add the following resource to my knowledge base: $ARGUMENTS
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace. If not yet onboarded, tell the user to run `/onboard` first and stop.
+2. Call `kb_resource_create` with the URL/content from `$ARGUMENTS` to register the resource.
+3. Call `kb_pipeline_run` to start background processing — this will categorize the resource, extract key insights, and place them into the right sections automatically.
+4. Confirm to the user that the resource has been queued for processing and they can continue chatting while it runs in the background.
+
+Do not wait for the pipeline to finish. Return immediately after step 4.
