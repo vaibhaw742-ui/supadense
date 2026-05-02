@@ -1,0 +1,14 @@
+Add a new category to the knowledge base.
+
+Arguments: $ARGUMENTS
+(Provide the category name. Optionally include a description after a dash, e.g. "Transformers - Attention mechanisms and transformer architectures")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace. If not onboarded, tell the user to run `/onboard` first and stop.
+2. Parse $ARGUMENTS to extract:
+   - category name (required)
+   - description (optional, everything after " - " or " — ")
+3. Call `kb_category_manage` with action `add_category`, providing:
+   - category_name from the parsed name
+   - category_description if provided
+4. Confirm the category was created and mention the user can now use `/add-section` to add sections to it.

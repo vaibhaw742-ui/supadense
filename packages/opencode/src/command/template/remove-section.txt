@@ -1,0 +1,16 @@
+Remove a section from a category or subcategory in the knowledge base.
+
+Arguments: $ARGUMENTS
+(Format: "Category Name > Section Name" or "Category Name > Subcategory Name > Section Name")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace.
+2. Parse $ARGUMENTS to determine category_slug, optional subcategory_slug, and section_slug.
+3. IMPORTANT — refuse and stop if the section_slug is any of these protected names:
+   - overview
+   - key-concepts
+   - key_concepts
+   Tell the user these sections are protected and cannot be removed.
+4. Confirm with the user which section will be deleted before proceeding.
+5. Call `kb_category_manage` with action `remove_section`, providing category_slug, subcategory_slug (if any), and section_slug.
+6. Confirm the section has been removed.

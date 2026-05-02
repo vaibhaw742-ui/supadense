@@ -12,6 +12,10 @@ import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import PROMPT_ONBOARD from "./template/onboard.txt"
 import PROMPT_MEMORIZE from "./template/memorize.txt"
+import PROMPT_ADD_CATEGORY from "./template/add-category.txt"
+import PROMPT_REMOVE_CATEGORY from "./template/remove-category.txt"
+import PROMPT_ADD_SECTION from "./template/add-section.txt"
+import PROMPT_REMOVE_SECTION from "./template/remove-section.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -67,6 +71,10 @@ export namespace Command {
     REVIEW: "review",
     ONBOARD: "onboard",
     MEMORIZE: "memorize",
+    ADD_CATEGORY: "add-category",
+    REMOVE_CATEGORY: "remove-category",
+    ADD_SECTION: "add-section",
+    REMOVE_SECTION: "remove-section",
   } as const
 
   export interface Interface {
@@ -123,6 +131,42 @@ export namespace Command {
             return PROMPT_MEMORIZE
           },
           hints: hints(PROMPT_MEMORIZE),
+        }
+        commands[Default.ADD_CATEGORY] = {
+          name: Default.ADD_CATEGORY,
+          description: "add a new category to your knowledge base",
+          source: "command",
+          get template() {
+            return PROMPT_ADD_CATEGORY
+          },
+          hints: hints(PROMPT_ADD_CATEGORY),
+        }
+        commands[Default.REMOVE_CATEGORY] = {
+          name: Default.REMOVE_CATEGORY,
+          description: "remove a category from your knowledge base",
+          source: "command",
+          get template() {
+            return PROMPT_REMOVE_CATEGORY
+          },
+          hints: hints(PROMPT_REMOVE_CATEGORY),
+        }
+        commands[Default.ADD_SECTION] = {
+          name: Default.ADD_SECTION,
+          description: "add a section to a category or subcategory",
+          source: "command",
+          get template() {
+            return PROMPT_ADD_SECTION
+          },
+          hints: hints(PROMPT_ADD_SECTION),
+        }
+        commands[Default.REMOVE_SECTION] = {
+          name: Default.REMOVE_SECTION,
+          description: "remove a section (overview and key concepts are protected)",
+          source: "command",
+          get template() {
+            return PROMPT_REMOVE_SECTION
+          },
+          hints: hints(PROMPT_REMOVE_SECTION),
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {

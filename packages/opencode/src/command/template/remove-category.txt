@@ -1,0 +1,11 @@
+Remove a category from the knowledge base.
+
+Arguments: $ARGUMENTS
+(Provide the category name or slug to remove, e.g. "Agents" or "agents")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace.
+2. List the current categories from the workspace so you can match $ARGUMENTS to the correct category_slug.
+3. Confirm with the user which category will be deleted and warn that ALL its content (sections, subcategories, wiki files) will be permanently removed.
+4. Once confirmed, call `kb_category_manage` with action `remove_category` and the matched category_slug.
+5. Confirm the category has been removed.

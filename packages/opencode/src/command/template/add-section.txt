@@ -1,0 +1,15 @@
+Add a new section to a category or subcategory in the knowledge base.
+
+Arguments: $ARGUMENTS
+(Format: "Category Name > Section Name" or "Category Name > Subcategory Name > Section Name"
+ Examples: "Agents > Tool Use", "RAG > Advanced > Hybrid Search")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace.
+2. Parse $ARGUMENTS to determine:
+   - category_slug (required)
+   - subcategory_slug (optional, if a middle segment was provided)
+   - section_slug — derive as kebab-case from the section name
+   - section_heading — the display name for the section
+3. Call `kb_category_manage` with action `add_section`, providing category_slug, subcategory_slug (if any), section_slug, and section_heading. Set section_description to a one-line description of what content this section will contain.
+4. Confirm the section was added.
