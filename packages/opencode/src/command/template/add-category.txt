@@ -1,14 +1,26 @@
 Add a new category to the knowledge base.
 
 Arguments: $ARGUMENTS
-(Provide the category name. Optionally include a description after a dash, e.g. "Transformers - Attention mechanisms and transformer architectures")
+(Format: "Category Name" or "Category Name - description" or "Category Name @parent/path"
+ Examples: "Agents", "RAG - Retrieval-Augmented Generation techniques", "Transformers @research/nlp")
 
 Steps:
 1. Call `kb_workspace_init` to get the workspace. If not onboarded, tell the user to run `/onboard` first and stop.
 2. Parse $ARGUMENTS to extract:
    - category name (required)
    - description (optional, everything after " - " or " — ")
-3. Call `kb_category_manage` with action `add_category`, providing:
-   - category_name from the parsed name
+   - location (optional, everything after "@" — the parent folder path where the category folder will be created, e.g. "research/ai")
+3. If no location was provided in $ARGUMENTS, ask the user:
+   "Where should I create the `<category-slug>/` folder? Enter a path (e.g. `research/ai`) or leave blank for the default `wiki/` folder."
+   Wait for the user's reply. If they leave it blank or say nothing specific, use `wiki` as the parent_path.
+4. Derive category_slug as kebab-case from the category name.
+5. Call `kb_category_manage` with action `add_category`, providing:
+   - category_slug (kebab-case)
+   - category_name (the display name)
    - category_description if provided
-4. Confirm the category was created and mention the user can now use `/add-section` to add sections to it.
+   - parent_path (the location from step 2 or 3, without trailing slash)
+6. Confirm the category was created. Show the folder structure:
+   📁 <parent_path>/<category_slug>/
+      overview.md
+      key-concepts.md
+   Mention the user can now use `/add-section` to add more sections to it.

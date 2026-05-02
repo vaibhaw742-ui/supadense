@@ -2,11 +2,13 @@
  * kb_category_manage — Add or remove categories and subcategories from the KB.
  *
  * Supports:
- *   - add_category: create a new top-level category + its wiki page
+ *   - add_category: create a new top-level category folder + overview.md + key-concepts.md
  *   - remove_category: delete a category + all its wiki pages and placements
  *   - add_subcategory: add a subcategory page under an existing category
  *   - remove_subcategory: delete a subcategory page and its placements
  */
+import path from "path"
+import { mkdirSync, writeFileSync } from "fs"
 import z from "zod"
 import { ulid } from "ulid"
 import { eq, and } from "drizzle-orm"
@@ -20,7 +22,7 @@ import {
   LearningWikiPageTable,
   LearningResourceWikiPlacementTable,
 } from "../../learning/schema.sql"
-import { DEFAULT_SUBCATEGORIES, DEFAULT_SECTIONS } from "../../learning/kb-schema"
+import { DEFAULT_SECTIONS } from "../../learning/kb-schema"
 
 export const KbCategoryManageTool = Tool.define("kb_category_manage", {
   description: [
@@ -47,6 +49,7 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     category_description: z.string().optional().describe("One-line description (optional)"),
     category_depth: z.enum(["deep", "working", "awareness"]).optional().describe("Depth preference (default: working)"),
     category_icon: z.string().optional().describe("Emoji icon, e.g. '🧠'"),
+    parent_path: z.string().optional().describe("Parent folder path relative to kb_path where the category folder will be created, e.g. 'wiki' (default) or 'research/rag'. Do not include trailing slash."),
 
     // For add_subcategory / remove_subcategory
     subcategory_slug: z.string().optional().describe("Kebab-case slug, e.g. 'key-concepts' (required for subcategory actions)"),
@@ -73,11 +76,16 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     if (params.action === "add_category") {
       if (!params.category_name) throw new Error("category_name is required for add_category")
 
+      const parentPath = (params.parent_path ?? "wiki").replace(/\/+$/, "")
+      const folderRelPath = `${parentPath}/${params.category_slug}`
+      const overviewRelPath = `${folderRelPath}/overview.md`
+      const kcRelPath = `${folderRelPath}/key-concepts.md`
+
       await ctx.ask({
         permission: "edit",
-        patterns: [`wiki/${params.category_slug}.md`, "wiki/index.md", "supadense.md"],
+        patterns: [overviewRelPath, kcRelPath, "wiki/index.md", "supadense.md"],
         always: ["*"],
-        metadata: { filepath: `wiki/${params.category_slug}.md`, diff: `Add category: ${params.category_name}` },
+        metadata: { filepath: overviewRelPath, diff: `Add category: ${params.category_name}` },
       })
 
       // Check for existing
@@ -94,6 +102,40 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         db.select().from(LearningCategoryTable).where(eq(LearningCategoryTable.workspace_id, workspaceId)).all(),
       ).length
 
+      // Create the category folder + default files
+      const absFolder = path.join(workspace.kb_path, folderRelPath)
+      mkdirSync(absFolder, { recursive: true })
+
+      const overviewContent = [
+        `# ${params.category_name}`,
+        "",
+        "> This file is maintained by Supadense. Do not edit directly.",
+        "",
+        params.category_description ?? `Overview of ${params.category_name}.`,
+        "",
+        "## Sections",
+        "",
+        "_No sections yet — create one to get started._",
+        "",
+      ].join("\n")
+      writeFileSync(path.join(workspace.kb_path, overviewRelPath), overviewContent, "utf8")
+
+      const humanName = params.category_slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      const kcContent = [
+        `# Key Concepts`,
+        "",
+        "> This file is maintained by Supadense. Do not edit directly.",
+        "",
+        `Core concepts for ${humanName}.`,
+        "",
+        "## Key Concepts",
+        "",
+        "_No content yet — add resources to fill this in._",
+        "",
+      ].join("\n")
+      writeFileSync(path.join(workspace.kb_path, kcRelPath), kcContent, "utf8")
+
+      // Insert DB records
       const categoryId = ulid()
       Database.use((db) =>
         db.insert(LearningCategoryTable).values({
@@ -110,18 +152,19 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
-      const catPageId = ulid()
+      const overviewPageId = ulid()
       Database.use((db) =>
         db.insert(LearningWikiPageTable).values({
-          id: catPageId,
+          id: overviewPageId,
           workspace_id: workspaceId,
           category_id: categoryId,
+          type: "overview",
           page_type: "category",
           category_slug: params.category_slug,
-          slug: params.category_slug,
+          slug: "overview",
           title: params.category_name!,
           description: params.category_description,
-          file_path: `wiki/${params.category_slug}.md`,
+          file_path: overviewRelPath,
           sections: DEFAULT_SECTIONS,
           resource_count: 0,
           word_count: 0,
@@ -130,44 +173,42 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         }).run(),
       )
 
-      // Apply default subcategories
-      const existingSubcats = DEFAULT_SUBCATEGORIES
-      for (const sub of existingSubcats) {
-        Database.use((db) =>
-          db.insert(LearningWikiPageTable).values({
-            id: ulid(),
-            workspace_id: workspaceId,
-            category_id: categoryId,
-            parent_page_id: catPageId,
-            page_type: "subcategory",
-            category_slug: params.category_slug,
-            subcategory_slug: sub.slug,
-            slug: sub.slug,
-            title: `${params.category_name} — ${sub.name}`,
-            file_path: `wiki/${params.category_slug}--${sub.slug}.md`,
-            sections: sub.sections.map((s) => ({ slug: s.slug, heading: s.heading, description: s.description })),
-            resource_count: 0,
-            word_count: 0,
-            time_created: now,
-            time_updated: now,
-          }).run(),
-        )
-      }
-
-      WikiBuilder.buildAll(workspaceId)
-      WikiBuilder.buildSupadenseMd(workspace)
+      Database.use((db) =>
+        db.insert(LearningWikiPageTable).values({
+          id: ulid(),
+          workspace_id: workspaceId,
+          category_id: categoryId,
+          parent_page_id: overviewPageId,
+          type: "section",
+          page_type: "category",
+          category_slug: params.category_slug,
+          subcategory_slug: "key-concepts",
+          slug: "key-concepts",
+          title: "Key Concepts",
+          file_path: kcRelPath,
+          sections: DEFAULT_SECTIONS,
+          resource_count: 0,
+          word_count: 0,
+          time_created: now,
+          time_updated: now,
+        }).run(),
+      )
 
       Workspace.logEvent(workspaceId, {
         event_type: "category_added",
         summary: `Added category: ${params.category_name}`,
-        payload: { slug: params.category_slug },
+        payload: { slug: params.category_slug, folder: folderRelPath },
       })
-      WikiBuilder.buildLogFile(workspace)
 
       return {
         title: `Category added: ${params.category_name}`,
-        metadata: { category_slug: params.category_slug } as M,
-        output: `Added category '${params.category_name}' → wiki/${params.category_slug}.md`,
+        metadata: { category_slug: params.category_slug, file_path: folderRelPath } as M,
+        output: [
+          `Added category '${params.category_name}':`,
+          `  📁 ${folderRelPath}/`,
+          `     overview.md`,
+          `     key-concepts.md`,
+        ].join("\n"),
       }
     }
 
