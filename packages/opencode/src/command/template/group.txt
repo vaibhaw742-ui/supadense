@@ -1,0 +1,25 @@
+Group and consolidate the key-concepts section of a category or subcategory.
+
+Arguments: $ARGUMENTS
+(Format: "Category Name" or "Category Name > Subcategory Name"
+ Optionally append a section name to group a different section: "Category Name > section-name"
+ Examples: "Agents", "RAG > Advanced", "Agents > tool-use")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace.
+2. Parse $ARGUMENTS to determine:
+   - category_slug (required, kebab-case from the first segment)
+   - subcategory_slug (optional, kebab-case from second segment if two segments given)
+   - section_slug (default: "key-concepts" — only override if the last segment is clearly a section name, not a subcategory)
+3. Tell the user: "Fetching placements for `<target>/<section_slug>`..."
+4. Phase 1 — call `kb_section_group` with category_slug, subcategory_slug (if any), and section_slug. Do NOT pass groups yet.
+5. Analyse the returned placements: cluster concepts that express the same core idea into groups.
+   - Merge synonyms and sub-variants of the same idea into one group
+   - Keep genuinely distinct themes separate
+   - Aim for the fewest groups that preserve all meaningful distinctions
+   - Every resource must appear in at least one group
+6. Phase 2 — call `kb_section_group` again with the same category_slug, subcategory_slug, section_slug, plus the computed `groups` array.
+7. Report the result:
+   - How many groups were created
+   - Each group name and how many resources it contains
+   - Confirm the wiki has been rebuilt

@@ -79,7 +79,8 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
 
   parameters: z.object({
     category_slug: z.string().describe("Category slug, e.g. 'rag', 'agents'"),
-    section_slug: z.string().describe("Section slug, e.g. 'key-concepts', 'use-cases'"),
+    subcategory_slug: z.string().optional().describe("Subcategory slug, e.g. 'advanced'. When provided, groups only that subcategory's section."),
+    section_slug: z.string().describe("Section slug to group, e.g. 'key-concepts', 'use-cases'. Defaults to 'key-concepts'."),
     groups: z
       .array(GroupSchema)
       .optional()
@@ -102,26 +103,43 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
     )
     if (!category) throw new Error(`Category '${params.category_slug}' not found. Check available categories.`)
 
-    // ── Find wiki pages for this category ─────────────────────────────────────
-    const pages = Database.use((db) =>
-      db.select().from(LearningWikiPageTable)
-        .where(and(
-          eq(LearningWikiPageTable.workspace_id, workspace.id),
-          eq(LearningWikiPageTable.category_id, category.id),
-        ))
-        .all(),
-    )
-    if (pages.length === 0) throw new Error(`No wiki pages found for category '${params.category_slug}'.`)
+    // ── Find target page(s) ───────────────────────────────────────────────────
+    // If subcategory_slug is given, scope to that specific page only.
+    // Otherwise gather all pages in the category.
+    let pages: (typeof LearningWikiPageTable.$inferSelect)[]
 
-    // ── Find placements for the requested section across all pages in category ─
+    if (params.subcategory_slug) {
+      const subPage = Database.use((db) =>
+        db.select().from(LearningWikiPageTable)
+          .where(and(
+            eq(LearningWikiPageTable.workspace_id, workspace.id),
+            eq(LearningWikiPageTable.category_id, category.id),
+            eq(LearningWikiPageTable.subcategory_slug, params.subcategory_slug!),
+          ))
+          .get(),
+      )
+      if (!subPage) throw new Error(`Subcategory '${params.subcategory_slug}' not found under '${params.category_slug}'.`)
+      pages = [subPage]
+    } else {
+      pages = Database.use((db) =>
+        db.select().from(LearningWikiPageTable)
+          .where(and(
+            eq(LearningWikiPageTable.workspace_id, workspace.id),
+            eq(LearningWikiPageTable.category_id, category.id),
+          ))
+          .all(),
+      )
+      if (pages.length === 0) throw new Error(`No wiki pages found for category '${params.category_slug}'.`)
+    }
+
+    // ── Find placements for the requested section ─────────────────────────────
     const allPlacements: (typeof LearningResourceWikiPlacementTable.$inferSelect)[] = []
-    const pageIds = pages.map((p) => p.id)
 
-    for (const pageId of pageIds) {
+    for (const page of pages) {
       const rows = Database.use((db) =>
         db.select().from(LearningResourceWikiPlacementTable)
           .where(and(
-            eq(LearningResourceWikiPlacementTable.wiki_page_id, pageId),
+            eq(LearningResourceWikiPlacementTable.wiki_page_id, page.id),
             eq(LearningResourceWikiPlacementTable.section_slug, params.section_slug),
           ))
           .all(),
@@ -129,9 +147,13 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
       allPlacements.push(...rows)
     }
 
+    const target = params.subcategory_slug
+      ? `${params.category_slug}/${params.subcategory_slug}`
+      : params.category_slug
+
     if (allPlacements.length === 0) {
       throw new Error(
-        `No placements found for section '${params.section_slug}' in category '${params.category_slug}'. ` +
+        `No placements found for section '${params.section_slug}' in '${target}'. ` +
         `Check that resources have been placed into this section.`,
       )
     }
@@ -182,9 +204,10 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
       const totalConcepts = groups.reduce((n, g) => n + g.members.reduce((m, r) => m + r.concepts.length, 0), 0)
 
       return {
-        title: `Grouped '${params.section_slug}' in ${params.category_slug} → ${groups.length} groups`,
+        title: `Grouped '${params.section_slug}' in ${target} → ${groups.length} groups`,
         metadata: {
           category_slug: params.category_slug,
+          subcategory_slug: params.subcategory_slug,
           section_slug: params.section_slug,
           phase: "apply",
           groups_created: groups.length,
@@ -192,7 +215,7 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
           total_concepts_grouped: totalConcepts,
         } as Record<string, unknown>,
         output: [
-          `Section '${params.section_slug}' in '${params.category_slug}' grouped successfully.`,
+          `Section '${params.section_slug}' in '${target}' grouped successfully.`,
           ``,
           `Groups (${groups.length}):`,
           ...groupSummaryLines,
@@ -249,9 +272,10 @@ export const KbSectionGroupTool = Tool.define("kb_section_group", {
     }
 
     return {
-      title: `Fetched ${allPlacements.length} placements for '${params.section_slug}' in '${params.category_slug}'`,
+      title: `Fetched ${allPlacements.length} placements for '${params.section_slug}' in '${target}'`,
       metadata: {
         category_slug: params.category_slug,
+        subcategory_slug: params.subcategory_slug,
         section_slug: params.section_slug,
         phase: "fetch",
         placement_count: allPlacements.length,

@@ -16,6 +16,7 @@ import PROMPT_ADD_CATEGORY from "./template/add-category.txt"
 import PROMPT_REMOVE_CATEGORY from "./template/remove-category.txt"
 import PROMPT_ADD_SECTION from "./template/add-section.txt"
 import PROMPT_REMOVE_SECTION from "./template/remove-section.txt"
+import PROMPT_GROUP from "./template/group.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -75,6 +76,7 @@ export namespace Command {
     REMOVE_CATEGORY: "remove-category",
     ADD_SECTION: "add-section",
     REMOVE_SECTION: "remove-section",
+    GROUP: "group",
   } as const
 
   export interface Interface {
@@ -148,6 +150,15 @@ export namespace Command {
             return PROMPT_REMOVE_SECTION
           },
           hints: hints(PROMPT_REMOVE_SECTION),
+        }
+        commands[Default.GROUP] = {
+          name: Default.GROUP,
+          description: "group and consolidate key-concepts for a category or subcategory",
+          source: "command",
+          get template() {
+            return PROMPT_GROUP
+          },
+          hints: hints(PROMPT_GROUP),
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
