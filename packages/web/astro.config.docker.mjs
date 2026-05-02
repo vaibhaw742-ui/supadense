@@ -13,6 +13,7 @@ export default defineConfig({
   base: "/docs",
   output: "static",
   devToolbar: { enabled: false },
+  image: { service: { entrypoint: "astro/assets/services/noop" } },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },
