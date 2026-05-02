@@ -566,56 +566,85 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
     if (params.action === "remove_section") {
       if (!params.section_slug) throw new Error("section_slug is required for remove_section")
 
+      const sectionSlug2 = params.section_slug!
+
+      // Block protected sections
+      const PROTECTED = ["overview", "key-concepts", "key_concepts"]
+      if (PROTECTED.includes(sectionSlug2)) {
+        throw new Error(`Section '${sectionSlug2}' is protected and cannot be removed.`)
+      }
+
+      // Find the section's own wiki page (the .md file record)
       const allPages2 = Workspace.getWikiPages(workspaceId)
-      const targetPage = params.subcategory_slug
-        ? allPages2.find((p) => p.category_slug === params.category_slug && p.subcategory_slug === params.subcategory_slug) ??
-          allPages2.find((p) => p.category_slug === params.subcategory_slug && !p.subcategory_slug)
-        : allPages2.find((p) => p.category_slug === params.category_slug && !p.subcategory_slug)
-      if (!targetPage) throw new Error(`Page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check kb_workspace_init.`)
+      const sectionPage = allPages2.find(
+        (p) => p.category_slug === params.category_slug && p.subcategory_slug === sectionSlug2,
+      )
 
-      const currentSections = targetPage.sections ?? []
-      const section = currentSections.find((s) => s.slug === params.section_slug)
-      // section may not be in the DB array if it was created dynamically via placements — proceed anyway
+      // Find the parent page to update its sections list
+      const parentPage2 = params.subcategory_slug
+        ? allPages2.find((p) => p.category_slug === params.category_slug && p.subcategory_slug === params.subcategory_slug)
+          ?? allPages2.find((p) => p.category_slug === params.subcategory_slug && !p.subcategory_slug)
+        : allPages2.find((p) => p.category_slug === params.category_slug && (p.type === "overview" || p.slug === "overview"))
+          ?? allPages2.find((p) => p.category_slug === params.category_slug && !p.subcategory_slug)
 
-      // Remove from page's sections array if present
-      if (section) {
+      if (!sectionPage && !parentPage2) {
+        throw new Error(`Section '${sectionSlug2}' not found under category '${params.category_slug}'.`)
+      }
+
+      const fileRelPath2 = sectionPage?.file_path ?? `wiki/${params.category_slug}/${sectionSlug2}.md`
+
+      await ctx.ask({
+        permission: "edit",
+        patterns: [fileRelPath2],
+        always: ["*"],
+        metadata: { filepath: fileRelPath2, diff: `Remove section: ${sectionSlug2}` },
+      })
+
+      // Delete the section wiki page record and its placements
+      if (sectionPage) {
         Database.use((db) =>
-          db.update(LearningWikiPageTable)
-            .set({
-              sections: currentSections.filter((s) => s.slug !== params.section_slug),
-              time_updated: now,
-            })
-            .where(eq(LearningWikiPageTable.id, targetPage.id))
+          db.delete(LearningResourceWikiPlacementTable)
+            .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, sectionPage.id))
+            .run(),
+        )
+        Database.use((db) =>
+          db.delete(LearningWikiPageTable)
+            .where(eq(LearningWikiPageTable.id, sectionPage.id))
             .run(),
         )
       }
 
-      // Delete all placements for this section so the wiki file stops rendering it
-      Database.use((db) =>
-        db.delete(LearningResourceWikiPlacementTable)
-          .where(and(
-            eq(LearningResourceWikiPlacementTable.wiki_page_id, targetPage.id),
-            eq(LearningResourceWikiPlacementTable.section_slug, params.section_slug!),
-          ))
-          .run(),
-      )
+      // Remove from parent page's sections list
+      if (parentPage2) {
+        const currentSections2 = parentPage2.sections ?? []
+        if (currentSections2.some((s) => s.slug === sectionSlug2)) {
+          Database.use((db) =>
+            db.update(LearningWikiPageTable)
+              .set({
+                sections: currentSections2.filter((s) => s.slug !== sectionSlug2),
+                time_updated: now,
+              })
+              .where(eq(LearningWikiPageTable.id, parentPage2.id))
+              .run(),
+          )
+        }
+      }
 
-      WikiBuilder.buildAll(workspaceId)
-
-      const sectionLabel = section?.heading ?? params.section_slug!
+      // Delete the .md file
+      const { unlinkSync, existsSync } = await import("fs")
+      const absFilePath = path.join(workspace.kb_path, fileRelPath2)
+      if (existsSync(absFilePath)) unlinkSync(absFilePath)
 
       Workspace.logEvent(workspaceId, {
         event_type: "section_removed",
-        summary: `Removed section '${sectionLabel}' from ${targetPage.file_path}`,
-        payload: { section_slug: params.section_slug, file_path: targetPage.file_path },
+        summary: `Removed section '${sectionSlug2}' — deleted ${fileRelPath2}`,
+        payload: { section_slug: sectionSlug2, file_path: fileRelPath2 },
       })
 
       return {
-        title: `Section removed: ${sectionLabel}`,
-        metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
-        output: [
-          `Removed section '${sectionLabel}' from ${targetPage.file_path}.`,
-        ].join("\n"),
+        title: `Section removed: ${sectionSlug2}`,
+        metadata: { category_slug: params.category_slug, file_path: fileRelPath2 } as M,
+        output: `Removed section '${sectionSlug2}' and deleted ${fileRelPath2}.`,
       }
     }
 

@@ -1,4 +1,4 @@
-Remove a section from a category or subcategory in the knowledge base.
+Remove a section .md file from a category or subcategory folder in the knowledge base.
 
 Arguments: $ARGUMENTS
 (Format: "Category Name > Section Name" or "Category Name > Subcategory Name > Section Name")
@@ -6,11 +6,20 @@ Arguments: $ARGUMENTS
 Steps:
 1. Call `kb_workspace_init` to get the workspace.
 2. Parse $ARGUMENTS to determine category_slug, optional subcategory_slug, and section_slug.
-3. IMPORTANT — refuse and stop if the section_slug is any of these protected names:
+3. IMPORTANT — refuse and stop immediately if the section_slug is any of these protected names:
    - overview
    - key-concepts
    - key_concepts
-   Tell the user these sections are protected and cannot be removed.
-4. Confirm with the user which section will be deleted before proceeding.
-5. Call `kb_category_manage` with action `remove_section`, providing category_slug, subcategory_slug (if any), and section_slug.
-6. Confirm the section has been removed.
+   Tell the user these files are protected and cannot be removed.
+4. Look up the section's wiki page to find its file path (e.g., `wiki/agents/tool-use.md`).
+5. Ask the user for explicit confirmation before proceeding. Show them exactly what will be deleted:
+
+   "⚠️ This will permanently delete:
+      📄 <file_path>
+   All DB records and resource placements for this section will also be removed.
+   Type **yes** to confirm, or anything else to cancel."
+
+   Wait for the user's reply. Only proceed if they confirm with "yes" (case-insensitive). Otherwise stop and tell them the operation was cancelled.
+
+6. Call `kb_category_manage` with action `remove_section`, providing category_slug, subcategory_slug (if any), and section_slug.
+7. Confirm the section has been removed and the file deleted.
