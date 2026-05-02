@@ -153,7 +153,7 @@ function DocsButton() {
       <Button
         variant="ghost"
         class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
-        onClick={() => window.open("https://docs.supadense.com", "_blank")}
+        onClick={() => window.open("https://supadense.com/docs", "_blank")}
         aria-label="Docs"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

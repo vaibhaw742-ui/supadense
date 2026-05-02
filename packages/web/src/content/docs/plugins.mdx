@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Write your own plugins to extend OpenCode.
+description: Write your own plugins to extend Supadense.
 ---
 
-Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
+Plugins allow you to extend Supadense by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify Supadense's default behavior.
 
 For examples, check out the [plugins](/docs/ecosystem#plugins) created by the community.
 
@@ -32,7 +32,7 @@ Specify npm packages in your config file.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://supadense.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -83,7 +83,7 @@ Local plugins and custom tools can use external npm packages. Add a `package.jso
 }
 ```
 
-OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+Supadense runs `bun install` at startup to install these. Your plugins and tools can then import them.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
 
 :::note
-If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
+If you’re using the Supadense desktop app, it can send system notifications automatically when a response is ready or when a session errors.
 :::
 
 ---
@@ -331,7 +331,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://opencode.ai/docs/sdk) for details.
+Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://supadense.com/docs/sdk) for details.
 
 ---
 

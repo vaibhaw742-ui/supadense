@@ -7,88 +7,136 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../config.mjs"
 export const console = config.console
 
-[**Supadense**](/) is your agentic second brain for engineers — it helps you upskill, learn, and stay in the top 1%.
-
-It's available as a web app that you access through your browser.
-
----
-
-## Getting Started
-
-Supadense is a hosted web application. To get started:
-
-1. **Sign up** — head to the app and request early access.
-2. **Set up your Knowledge Base** — the agent will walk you through a quick onboarding to understand your goals and experience level.
-3. **Add resources** — paste links to articles, YouTube videos, PDFs, or any learning material you want to retain.
+[**Supadense**](/) is an open source AI coding agent. It's available across:
+terminal (TUI), desktop app (Mac/Windows), web app, and IDE extensions (VS Code, JetBrains).
 
 ---
 
-## Knowledge Base
+## Prerequisites
 
-Your KB is the core of Supadense. It's a structured, AI-powered repository of everything you've learned.
+To use Supadense in your terminal, you'll need a modern terminal emulator such as:
 
-### Categories
+- [WezTerm](https://wezfurlong.org/wezterm/) (cross-platform)
+- [Alacritty](https://github.com/alacritty/alacritty) (cross-platform)
+- [Ghostty](https://github.com/ghostty-org/ghostty) (Linux and macOS)
+- [Kitty](https://sw.kovidgoyal.net/kitty/) (Linux and macOS)
 
-When you onboard, you define 2–6 knowledge categories (e.g. `agents`, `rag`, `llm inference`). Each category gets its own wiki page with:
-
-- Key concepts
-- Sources and references
-- Images and diagrams
-- Subcategories for deeper dives
-
-### Adding Resources
-
-You can add a resource at any time by sharing a URL or content with the agent. Supadense will:
-
-1. Extract the key ideas
-2. Map them to your knowledge categories
-3. Update your wiki page automatically
+You'll also need an API key from at least one LLM provider, or you can use [Supadense Zen](/docs/zen) which provides a curated set of models.
 
 ---
 
-## Wiki
+## Install
 
-Every knowledge category gets a dedicated wiki page at `/wiki`. You can:
+<Tabs>
+  <TabItem label="Script">
+    ```bash
+    curl -fsSL https://supadense.com/install | bash
+    ```
+  </TabItem>
+  <TabItem label="Node.js">
+    ```bash
+    npm install -g opencode-ai
+    bun install -g opencode-ai
+    pnpm install -g opencode-ai
+    yarn global add opencode-ai
+    ```
+  </TabItem>
+  <TabItem label="macOS">
+    ```bash
+    brew install anomalyco/tap/opencode
+    ```
+  </TabItem>
+  <TabItem label="Arch Linux">
+    ```bash
+    sudo pacman -S opencode
+    paru -S opencode-bin
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```powershell
+    choco install opencode
+    scoop install opencode
+    npm install -g opencode-ai
+    mise use -g github:anomalyco/opencode
+    docker run -it --rm ghcr.io/anomalyco/opencode
+    ```
 
-- Browse concepts by section tab
-- View all sources and images in the right panel
-- Navigate between categories and subcategories from the sidebar
+    :::tip
+    WSL is recommended for the best Windows experience.
+    :::
+  </TabItem>
+</Tabs>
 
 ---
 
-## Chat
+## Configure
 
-The chat interface is your primary way to interact with Supadense. You can:
-
-- Ask questions — answers come exclusively from your KB
-- Add new resources — paste a URL and the agent processes it
-- Explore connections — ask how concepts relate to each other
+Run Supadense and use the `/connect` command to configure your LLM provider. You'll be directed to
+`{console}` to authenticate and then prompted to enter your API key.
 
 :::tip
-Use `kb_retrieve` under the hood to search your KB. The agent will never answer from general training knowledge — only from what you've added.
+Use [Supadense Zen](/docs/zen) for a curated set of models with tested defaults.
 :::
 
 ---
 
-## Roadmaps
+## Initialize
 
-Structured learning paths live under `/wiki/roadmap`. Each roadmap gives you a curated sequence of topics to work through based on your goals and depth level.
+Navigate to your project directory and run Supadense.
+
+```bash
+cd /path/to/my/project
+opencode
+```
+
+Then run the `/init` command to have Supadense analyze your project and create an `AGENTS.md` file.
+This file gives context to the AI on how your project is structured. Commit it to version control.
+
+---
+
+## Usage
+
+### Ask questions
+
+Use the `@` key to reference specific files in your project.
+
+```
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+### Add features
+
+Use **Plan Mode** (hit `Tab`) to have Supadense layout a plan before writing any code. You can provide
+feedback on the plan before it starts building.
+
+- Hit `Tab` to enter **Plan Mode** before submitting your message
+- Ask for a detailed plan of what you want to build
+- Include images by dragging and dropping them into the chat
+- Hit `Tab` again to switch back to **Build Mode** once you're happy with the plan
+
+### Make changes
+
+When asking Supadense to make changes, providing as much context as possible will help it make
+the right changes. You can reference specific files with `@`.
+
+### Undo changes
+
+Supadense tracks all the changes it makes so you can undo them. Use `/undo` to undo the last set of
+changes or `/redo` to redo them. You can undo multiple times to go back further.
+
+---
+
+## Share
+
+Use the `/share` command to generate a link to your current conversation to share with your team.
 
 ---
 
 ## Customize
 
-To make Supadense yours:
+Check out the following docs to customize Supadense to your liking:
 
-- **Adjust depth** — set each category to `deep`, `working`, or `awareness`
-- **Add trusted sources** — tell the agent which platforms you prefer (e.g. Andrej Karpathy, Arxiv, Hugging Face)
-- **Edit your goals** — update your onboarding profile at any time by asking the agent
-
----
-
-## From the Creator
-
-<blockquote class="twitter-tweet" data-dnt="true" data-theme="dark">
-  <a href="https://x.com/vaibhawkhemka6/status/2045132112374964620"></a>
-</blockquote>
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+- [Themes](/docs/themes) — change the look and feel
+- [Keybinds](/docs/keybinds) — customize keyboard shortcuts
+- [Formatters](/docs/formatters) — configure code formatters
+- [Config](/docs/config) — full configuration reference
