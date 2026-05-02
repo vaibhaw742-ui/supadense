@@ -66,6 +66,7 @@ export default defineConfig({
         { label: "Introduction", link: "" },
         { label: "Get Started", link: "get-started" },
         { label: "KB Structure", link: "kb-structure" },
+        { label: "Wiki Page", link: "wiki" },
         {
           label: "Knowledge Base",
           items: [
@@ -80,7 +81,6 @@ export default defineConfig({
           label: "Platform",
           items: [
             { label: "Workspaces & Sessions", link: "workspaces" },
-            { label: "Wiki", link: "wiki" },
           ],
         },
       ],
