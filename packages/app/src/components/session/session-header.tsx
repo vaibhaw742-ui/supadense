@@ -11,7 +11,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -128,7 +128,6 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 }
 
 function WikiButton() {
-  const navigate = useNavigate()
   const params = useParams<{ dir: string }>()
   return (
     <Tooltip placement="bottom" value="Open Wiki">
@@ -143,6 +142,26 @@ function WikiButton() {
           <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
         </svg>
         <span class="text-xs">Open Wiki</span>
+      </Button>
+    </Tooltip>
+  )
+}
+
+function DocsButton() {
+  return (
+    <Tooltip placement="bottom" value="Docs">
+      <Button
+        variant="ghost"
+        class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
+        onClick={() => window.open("https://docs.supadense.com", "_blank")}
+        aria-label="Docs"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+        <span class="text-xs">Docs</span>
       </Button>
     </Tooltip>
   )
@@ -378,6 +397,7 @@ export function SessionHeader() {
               </Show>
               <div class="flex items-center gap-1">
                 <WikiButton />
+                <DocsButton />
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
