@@ -29,21 +29,12 @@ export const KbWikiBuildTool = Tool.define("kb_wiki_build", {
     category_id: z.string().optional().describe("Rebuild all pages in this category"),
     workspace_id: z.string().optional().describe("Rebuild all pages in this workspace (including supadense.md and log.md)"),
   }),
-  async execute(params, ctx) {
+  async execute(params, _ctx) {
     if (!params.page_id && !params.category_id && !params.workspace_id) {
       throw new Error("Provide one of: page_id, category_id, or workspace_id")
     }
 
-    await ctx.ask({
-      permission: "edit",
-      patterns: ["wiki/**", "supadense.md", "log.md"],
-      always: ["*"],
-      metadata: {
-        filepath: params.page_id ?? params.category_id ?? params.workspace_id ?? "",
-        diff: "Regenerating wiki files from DB state",
-      },
-    })
-
+    // Wiki files are system-managed build artifacts — no user permission gate needed.
     const built: string[] = []
 
     if (params.page_id) {
