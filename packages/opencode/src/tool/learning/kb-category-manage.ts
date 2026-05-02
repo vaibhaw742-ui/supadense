@@ -549,6 +549,9 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
         )
       }
 
+      // Refresh overview.md to include the new section
+      if (categoryRecord?.id) Workspace.refreshOverview(workspaceId, categoryRecord.id)
+
       Workspace.logEvent(workspaceId, {
         event_type: "section_added",
         summary: `Added section '${sectionName}' at ${fileRelPath}`,
@@ -634,6 +637,10 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       const { unlinkSync, existsSync } = await import("fs")
       const absFilePath = path.join(workspace.kb_path, fileRelPath2)
       if (existsSync(absFilePath)) unlinkSync(absFilePath)
+
+      // Refresh overview.md to reflect the removed section
+      const removedCatId = sectionPage?.category_id ?? parentPage2?.category_id
+      if (removedCatId) Workspace.refreshOverview(workspaceId, removedCatId)
 
       Workspace.logEvent(workspaceId, {
         event_type: "section_removed",
