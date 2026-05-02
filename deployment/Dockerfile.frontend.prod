@@ -37,6 +37,7 @@ COPY packages/console/resource/package.json packages/console/resource/
 
 RUN bun install --ignore-scripts
 
+# ── Build SPA ────────────────────────────────────────────────────────────────
 COPY packages/app/index.html packages/app/index.html
 COPY packages/app/src       packages/app/src
 COPY packages/app/public    packages/app/public
@@ -46,16 +47,32 @@ COPY packages/util/src      packages/util/src
 
 RUN cd packages/app && bun run build
 
-# ── Serve static build with nginx ────────────────────────────────────────────
+# ── Build docs (static) ───────────────────────────────────────────────────────
+COPY packages/web/ packages/web/
+
+RUN SST_STAGE=production cd packages/web && bun astro build --config astro.config.docker.mjs
+
+# ── Serve both with nginx ─────────────────────────────────────────────────────
 FROM nginx:alpine
 
+# SPA at root
 COPY --from=builder /app/packages/app/dist /usr/share/nginx/html
 
-# SPA fallback: all routes serve index.html
+# Docs at /docs — Astro static output with base "/docs" produces files that
+# must be served from /docs, so we copy dist/ into html/docs/
+COPY --from=builder /app/packages/web/dist /usr/share/nginx/html/docs
+
 RUN printf 'server {\n\
     listen 3000;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+\n\
+    # Docs: serve static files directly (no SPA fallback)\n\
+    location /docs {\n\
+        try_files $uri $uri/ $uri.html =404;\n\
+    }\n\
+\n\
+    # SPA: fallback to index.html\n\
     location / {\n\
         try_files $uri $uri/ /index.html;\n\
     }\n\

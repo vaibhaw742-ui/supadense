@@ -1,9 +1,8 @@
 // @ts-check
-// Docker-specific Astro config — uses Node.js adapter instead of Cloudflare
+// Docker/static build config — outputs plain HTML/CSS/JS, no SSR adapter needed
 import { defineConfig } from "astro/config"
 import starlight from "@astrojs/starlight"
 import solidJs from "@astrojs/solid-js"
-import node from "@astrojs/node"
 import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
@@ -12,10 +11,8 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings"
 export default defineConfig({
   site: "https://supadense.com",
   base: "/docs",
-  output: "server",
-  adapter: node({ mode: "standalone" }),
+  output: "static",
   devToolbar: { enabled: false },
-  server: { host: "0.0.0.0", port: 4097 },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },

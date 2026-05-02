@@ -26,14 +26,6 @@ services:
     depends_on:
       - backend
 
-  # ── Web (docs): Astro/Starlight SSR served via Node ───────────────────────
-  web:
-    build:
-      context: ..
-      dockerfile: deployment/Dockerfile.web.prod
-    # NO ports — served through nginx
-    restart: unless-stopped
-
   # ── nginx: only public-facing service ─────────────────────────────────────
   nginx:
     image: nginx:alpine
@@ -47,7 +39,6 @@ services:
     depends_on:
       - frontend
       - backend
-      - web
     restart: unless-stopped
 
   # ── Certbot: renews SSL certs automatically ────────────────────────────────
