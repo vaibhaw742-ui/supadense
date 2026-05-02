@@ -1,0 +1,24 @@
+Remove a resource and all its content from the knowledge base.
+
+Arguments: $ARGUMENTS
+(Provide the resource URL, e.g. "https://x.com/user/status/123")
+
+Steps:
+1. Call `kb_workspace_init` to get the workspace.
+2. Look up the resource by URL from $ARGUMENTS in the workspace resource list to confirm it exists and show the user:
+   - Title
+   - Which categories/sections it was placed into
+   - Number of placements
+3. Ask the user for explicit confirmation before proceeding:
+
+   "⚠️ This will permanently remove:
+      📄 <title>
+      🔗 <url>
+      <N> placement(s) across: <categories>
+   All extracted content, wiki placements, and raw files for this resource will be deleted.
+   Type **yes** to confirm, or anything else to cancel."
+
+   Wait for the user's reply. Only proceed if they confirm with "yes" (case-insensitive). Otherwise stop and tell them the operation was cancelled.
+
+4. Call `kb_remove_resource` with the URL.
+5. Confirm the resource has been removed, showing what was cleaned up (placements removed, files deleted, wiki pages rebuilt).

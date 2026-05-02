@@ -17,6 +17,7 @@ import PROMPT_REMOVE_CATEGORY from "./template/remove-category.txt"
 import PROMPT_ADD_SECTION from "./template/add-section.txt"
 import PROMPT_REMOVE_SECTION from "./template/remove-section.txt"
 import PROMPT_GROUP from "./template/group.txt"
+import PROMPT_REMOVE_RESOURCE from "./template/remove-resource.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -77,6 +78,7 @@ export namespace Command {
     ADD_SECTION: "add-section",
     REMOVE_SECTION: "remove-section",
     GROUP: "group",
+    REMOVE_RESOURCE: "remove-resource",
   } as const
 
   export interface Interface {
@@ -159,6 +161,15 @@ export namespace Command {
             return PROMPT_GROUP
           },
           hints: hints(PROMPT_GROUP),
+        }
+        commands[Default.REMOVE_RESOURCE] = {
+          name: Default.REMOVE_RESOURCE,
+          description: "remove a resource and all its content from the knowledge base",
+          source: "command",
+          get template() {
+            return PROMPT_REMOVE_RESOURCE
+          },
+          hints: hints(PROMPT_REMOVE_RESOURCE),
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
