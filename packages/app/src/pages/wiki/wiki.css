@@ -1,29 +1,29 @@
 /* ── Fonts ───────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* ── Design tokens (orange + white theme) ────────────────────────────────── */
+/* ── Design tokens — aligned to docs theme (hsl warm palette) ───────────── */
 :root {
   /* Backgrounds */
-  --wk-bg:              #ffffff;
-  --wk-bg-sidebar:      #faf9f8;
-  --wk-bg-hover:        #f5f0ee;
-  --wk-bg-active:       #ede8e5;
-  --wk-bg-subtle:       #f7f4f2;
-  --wk-bg-inset:        #ede8e5;
+  --wk-bg:              hsl(0, 20%, 99%);
+  --wk-bg-sidebar:      hsl(20, 10%, 97%);
+  --wk-bg-hover:        hsl(20, 10%, 94%);
+  --wk-bg-active:       hsl(20, 8%, 88%);
+  --wk-bg-subtle:       hsl(20, 10%, 97%);
+  --wk-bg-inset:        hsl(20, 8%, 92%);
 
-  /* Borders */
-  --wk-border:          rgba(196, 74, 14, 0.12);
-  --wk-border-muted:    rgba(196, 74, 14, 0.06);
+  /* Borders — solid warm gray matching docs */
+  --wk-border:          hsl(20, 8%, 82%);
+  --wk-border-muted:    hsl(20, 8%, 86%);
 
-  /* Text */
-  --wk-text:            #1a1210;
-  --wk-text-muted:      #7a6860;
-  --wk-text-faint:      #b8a89e;
+  /* Text — warm gray scale from docs */
+  --wk-text:            hsl(20, 10%, 12%);
+  --wk-text-muted:      hsl(20, 4%, 38%);
+  --wk-text-faint:      hsl(20, 4%, 76%);
 
-  /* Accent — orange */
-  --wk-accent:          #c44a0e;
-  --wk-accent-hover:    #a33a08;
-  --wk-accent-light:    rgba(196, 74, 14, 0.08);
+  /* Accent — orange matching docs exactly */
+  --wk-accent:          hsl(20, 87%, 52%);
+  --wk-accent-hover:    hsl(20, 87%, 40%);
+  --wk-accent-light:    hsl(20, 85%, 93%);
 
   /* Semantic */
   --wk-green:           #2d6a4f;
@@ -31,7 +31,7 @@
   --wk-amber:           #d97706;
   --wk-blue:            #0f7488;
   --wk-purple:          #6940a5;
-  --wk-yellow-tint:     #fff7f4;
+  --wk-yellow-tint:     hsl(20, 85%, 93%);
 }
 
 /* ── Wiki root layout ─────────────────────────────────────────────────────── */
@@ -88,9 +88,9 @@
 }
 
 .wk-search:focus {
-  border-color: rgba(55, 53, 47, 0.3);
+  border-color: hsl(20, 8%, 70%);
   background: var(--wk-bg);
-  box-shadow: 0 0 0 2px rgba(55, 53, 47, 0.08);
+  box-shadow: 0 0 0 2px hsl(20, 8%, 88%);
 }
 
 .wk-search::placeholder {
@@ -159,7 +159,7 @@
   flex-shrink: 0;
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 8px 0 0;
   display: flex;
   flex-direction: column;
@@ -523,7 +523,7 @@
   padding: 32px 40px;
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 12px;
+  border-radius: 8px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -663,7 +663,7 @@
 }
 
 .wk-card:hover {
-  box-shadow: 0 1px 3px rgba(55, 53, 47, 0.06);
+  box-shadow: 0 1px 3px hsl(20, 8%, 80%);
 }
 
 .wk-card-title {
@@ -817,7 +817,7 @@
 }
 
 .wk-prose h2, .wk-prose .wk-h2 {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
@@ -827,7 +827,7 @@
 }
 
 .wk-prose h3, .wk-prose .wk-h3 {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--wk-text);
@@ -934,7 +934,7 @@
   padding: 1px 5px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
-  color: #c0392b;
+  color: var(--wk-accent-hover);
 }
 
 .wk-prose pre code {
@@ -1170,7 +1170,7 @@
   flex-shrink: 0;
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1229,7 +1229,7 @@
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: 0 2px 8px rgba(55, 53, 47, 0.12);
+  box-shadow: 0 2px 8px var(--wk-border);
 }
 
 .wk-graph-fit-btn {
@@ -1287,7 +1287,7 @@
   flex-shrink: 0;
   background: var(--wk-bg);
   border: 1px solid var(--wk-border);
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1497,7 +1497,7 @@ a.wk-resource-title:hover {
 }
 
 .wk-image-card:hover {
-  box-shadow: 0 2px 10px rgba(55, 53, 47, 0.12);
+  box-shadow: 0 2px 10px var(--wk-border);
 }
 
 .wk-image-thumb {
