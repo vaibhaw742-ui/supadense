@@ -80,7 +80,7 @@ export default defineConfig({
           label: "Platform",
           items: [
             { label: "Workspaces & Sessions", link: "workspaces" },
-            { label: "Versioning", link: "versioning" },
+            { label: "Wiki", link: "wiki" },
           ],
         },
       ],

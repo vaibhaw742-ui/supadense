@@ -1,0 +1,91 @@
+---
+title: Wiki
+description: Understand what the wiki is, how to open it, and how KB content becomes wiki pages.
+---
+
+The **wiki** is the readable, organized output of your knowledge base. Every resource you ingest gets processed and placed into structured wiki pages — one per category — that you can open, read, and navigate directly from the app.
+
+---
+
+## What the wiki is
+
+The wiki is a set of markdown pages, one per category (and one per subcategory), automatically generated from the content you've added. Each wiki page organizes the extracted knowledge under sections like `key-concepts`, `use-cases`, `tools`, and `resources`.
+
+You never write wiki pages manually. Supadense builds them for you as you ingest resources.
+
+---
+
+## Opening the wiki
+
+Click **Open Wiki** in the session header to open the wiki viewer. It opens in your browser and shows all categories currently in your KB.
+
+You can also navigate directly to a category's wiki page from the chat by asking:
+
+```
+Open the wiki for Agents
+Show me the RAG wiki
+```
+
+---
+
+## Navigating the wiki
+
+### Category sidebar
+
+The left panel lists every category in your workspace. Click any category to open its wiki page.
+
+### Section tabs
+
+Each category page has tabs for the sections defined in that category:
+
+- **key-concepts** — the main extracted knowledge, organized by concept or group
+- **use-cases** — practical applications and example patterns
+- **tools** — libraries, frameworks, and services mentioned
+- **resources** — links and titles of the ingested resources
+
+Click a tab to jump to that section.
+
+### Sources panel
+
+The right sidebar shows the **Sources** panel — a list of every resource that contributed content to the current category. Each entry shows:
+
+- The resource title and URL
+- Which sections it contributed to
+- How many concepts were extracted from it
+
+Click any source to open the original URL.
+
+### Images panel
+
+Also in the right sidebar, the **Images** panel shows all visuals extracted from resources in the current category — architecture diagrams, benchmark charts, paper figures. Click any image to expand it.
+
+---
+
+## How KB content becomes wiki pages
+
+When you run `/memorize <url>`, the ingestion pipeline:
+
+1. **Fetches and extracts** raw content from the URL (article text, YouTube transcript, paper PDF)
+2. **Runs the AI pipeline** — extracts key concepts, use-cases, tools, and resources, mapped to your category's sections
+3. **Creates placements** — each extracted item is stored as a placement linking the resource to a section in a category
+4. **Builds the wiki** — `WikiBuilder` reads all placements for a category, renders them into markdown, and writes the wiki page to `wiki/<category>.md` in your KB directory
+
+Every time you add or remove a resource, the affected category's wiki page is rebuilt automatically.
+
+### Groups and the wiki
+
+When you run `/group <category>`, Supadense re-renders the `key-concepts` section by clustering all placements into semantic groups. The wiki page is rebuilt to show concepts organized by group name rather than by resource.
+
+See [Groups](/docs/groups) for details.
+
+---
+
+## Wiki files on disk
+
+Wiki pages live at:
+
+```
+<workspace>/wiki/<category-slug>.md
+```
+
+You can read them directly, copy them, or version them with git. The files are plain markdown and stay in sync with your KB — every ingestion or group operation rewrites the relevant file.
