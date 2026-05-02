@@ -1612,6 +1612,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         const templateParts = yield* resolvePromptParts(template)
         const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
+
+        // Mark all template text parts as synthetic so the raw template isn't
+        // shown in chat. A short display part (the original command invocation)
+        // is prepended so the user sees e.g. "/memorize https://..." instead.
+        const syntheticTemplateParts = templateParts.map((p) =>
+          p.type === "text" ? { ...p, synthetic: true } : p,
+        )
+        const displayLabel = input.arguments?.trim()
+          ? `/${input.command} ${input.arguments.trim()}`
+          : `/${input.command}`
+        const displayPart = {
+          type: "text" as const,
+          id: PartID.ascending(),
+          messageID: input.messageID ?? "",
+          sessionID: input.sessionID,
+          text: displayLabel,
+        }
+
         const parts = isSubtask
           ? [
               {
@@ -1623,7 +1641,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
               },
             ]
-          : [...templateParts, ...(input.parts ?? [])]
+          : [displayPart, ...syntheticTemplateParts, ...(input.parts ?? [])]
 
         const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
         const userModel = isSubtask
