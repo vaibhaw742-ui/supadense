@@ -451,56 +451,114 @@ export const KbCategoryManageTool = Tool.define("kb_category_manage", {
       if (!params.section_slug) throw new Error("section_slug is required for add_section")
       if (!params.section_heading) throw new Error("section_heading is required for add_section")
 
-      // Resolve target page: section page if subcategory_slug given, else the category overview
+      // Resolve parent page (category overview or subcategory overview)
       const allPages = Workspace.getWikiPages(workspaceId)
-      const targetPage = params.subcategory_slug
-        ? allPages.find((p) =>
-            p.category_slug === params.category_slug &&
-            p.subcategory_slug === params.subcategory_slug,
-          ) ??
-          // also try: subcategory_slug IS the category_slug (sub-category overview)
-          allPages.find((p) =>
-            p.category_slug === params.subcategory_slug && !p.subcategory_slug,
-          )
-        : allPages.find((p) =>
-            p.category_slug === params.category_slug && !p.subcategory_slug,
-          )
-      if (!targetPage) throw new Error(`Page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check the nav_slug list from kb_workspace_init.`)
+      const parentPage = params.subcategory_slug
+        ? allPages.find((p) => p.category_slug === params.category_slug && p.subcategory_slug === params.subcategory_slug)
+          ?? allPages.find((p) => p.category_slug === params.subcategory_slug && !p.subcategory_slug)
+        : allPages.find((p) => p.category_slug === params.category_slug && (p.type === "overview" || p.slug === "overview"))
+          ?? allPages.find((p) => p.category_slug === params.category_slug && !p.subcategory_slug)
+      if (!parentPage) throw new Error(`Category/subcategory page not found for "${params.category_slug}"${params.subcategory_slug ? ` / "${params.subcategory_slug}"` : ""}. Check kb_workspace_init.`)
 
-      const currentSections = targetPage.sections ?? []
-      if (currentSections.some((s) => s.slug === params.section_slug)) {
-        throw new Error(`Section '${params.section_slug}' already exists on this page.`)
+      // Determine the folder: use parent_path if given, else derive from the parent page's directory
+      const folderRelPath = params.parent_path
+        ? params.parent_path.replace(/\/+$/, "")
+        : path.dirname(parentPage.file_path)
+
+      const fileRelPath = `${folderRelPath}/${params.section_slug}.md`
+
+      // Check for duplicate
+      if (allPages.some((p) => p.file_path === fileRelPath)) {
+        throw new Error(`Section file '${fileRelPath}' already exists.`)
       }
 
-      const newSection = {
-        slug: params.section_slug,
-        heading: params.section_heading,
-        description: params.section_description ?? `Content about ${params.section_slug.replace(/-/g, " ")}.`,
-        updated_at: now,
-      }
+      await ctx.ask({
+        permission: "edit",
+        patterns: [fileRelPath],
+        always: ["*"],
+        metadata: { filepath: fileRelPath, diff: `Add section: ${params.section_heading}` },
+      })
 
-      Database.use((db) =>
-        db.update(LearningWikiPageTable)
-          .set({ sections: [...currentSections, newSection], time_updated: now })
-          .where(eq(LearningWikiPageTable.id, targetPage.id))
-          .run(),
+      // Create the section .md file
+      const sectionName = params.section_slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      const description = params.section_description ?? `Content about ${sectionName}.`
+      const sectionContent = [
+        `# ${sectionName}`,
+        "",
+        "> This file is maintained by Supadense. Do not edit directly.",
+        "",
+        description,
+        "",
+        "## Key Concepts",
+        "",
+        "_No content yet — add resources to fill this in._",
+        "",
+      ].join("\n")
+
+      mkdirSync(path.join(workspace.kb_path, folderRelPath), { recursive: true })
+      writeFileSync(path.join(workspace.kb_path, fileRelPath), sectionContent, "utf8")
+
+      // Insert a wiki page record for this section
+      const categoryRecord = Database.use((db) =>
+        db.select().from(LearningCategoryTable)
+          .where(and(eq(LearningCategoryTable.workspace_id, workspaceId), eq(LearningCategoryTable.slug, params.category_slug)))
+          .get(),
       )
 
-      WikiBuilder.buildAll(workspaceId)
+      const sectionSlug = params.section_slug!
+      const catId: string | null = categoryRecord?.id ?? parentPage.category_id ?? null
+
+      Database.use((db) =>
+        db.insert(LearningWikiPageTable).values({
+          id: ulid(),
+          workspace_id: workspaceId,
+          category_id: catId,
+          parent_page_id: parentPage.id,
+          type: "section",
+          page_type: parentPage.page_type as "category" | "subcategory",
+          category_slug: params.category_slug,
+          subcategory_slug: sectionSlug,
+          slug: sectionSlug,
+          title: sectionName,
+          description,
+          file_path: fileRelPath,
+          sections: DEFAULT_SECTIONS,
+          resource_count: 0,
+          word_count: 0,
+          time_created: now,
+          time_updated: now,
+        }).run(),
+      )
+
+      // Register section on the parent page's sections list
+      const currentSections = parentPage.sections ?? []
+      if (!currentSections.some((s) => s.slug === params.section_slug)) {
+        Database.use((db) =>
+          db.update(LearningWikiPageTable)
+            .set({
+              sections: [...currentSections, {
+                slug: params.section_slug!,
+                heading: params.section_heading!,
+                description,
+                updated_at: now,
+              }],
+              time_updated: now,
+            })
+            .where(eq(LearningWikiPageTable.id, parentPage.id))
+            .run(),
+        )
+      }
 
       Workspace.logEvent(workspaceId, {
         event_type: "section_added",
-        summary: `Added section '${params.section_heading}' to ${targetPage.file_path}`,
-        payload: { section_slug: params.section_slug, file_path: targetPage.file_path },
+        summary: `Added section '${sectionName}' at ${fileRelPath}`,
+        payload: { section_slug: params.section_slug, file_path: fileRelPath },
       })
 
       return {
-        title: `Section added: ${params.section_heading}`,
-        metadata: { category_slug: params.category_slug, file_path: targetPage.file_path } as M,
-        output: [
-          `Added section '${params.section_heading}' to ${targetPage.file_path}.`,
-          `Note: section will appear in the wiki once content is placed into it.`,
-        ].join("\n"),
+        title: `Section added: ${sectionName}`,
+        metadata: { category_slug: params.category_slug, file_path: fileRelPath } as M,
+        output: `Added section '${sectionName}' → ${fileRelPath}`,
       }
     }
 

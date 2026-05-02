@@ -1,15 +1,28 @@
-Add a new section to a category or subcategory in the knowledge base.
+Add a new section .md file to a category or subcategory folder in the knowledge base.
 
 Arguments: $ARGUMENTS
 (Format: "Category Name > Section Name" or "Category Name > Subcategory Name > Section Name"
- Examples: "Agents > Tool Use", "RAG > Advanced > Hybrid Search")
+ Optionally append @folder/path to specify where to create the file.
+ Examples: "Agents > Tool Use", "RAG > Advanced > Hybrid Search", "Agents > Prompting @wiki/agents")
 
 Steps:
 1. Call `kb_workspace_init` to get the workspace.
 2. Parse $ARGUMENTS to determine:
-   - category_slug (required)
-   - subcategory_slug (optional, if a middle segment was provided)
-   - section_slug — derive as kebab-case from the section name
+   - category_slug (required, kebab-case from the first segment)
+   - subcategory_slug (optional, kebab-case from the middle segment if three segments)
+   - section_slug — derive as kebab-case from the last segment
    - section_heading — the display name for the section
-3. Call `kb_category_manage` with action `add_section`, providing category_slug, subcategory_slug (if any), section_slug, and section_heading. Set section_description to a one-line description of what content this section will contain.
-4. Confirm the section was added.
+   - location (optional, everything after "@" — the folder path where the .md file will be created)
+3. If no location was provided in $ARGUMENTS:
+   - Look up the category (and subcategory if given) in the workspace to find its existing folder path (the directory of the overview page).
+   - If no folder is found for that category, ask the user:
+     "Where should I create `<section_slug>.md`? Enter a folder path (e.g. `wiki/agents`) or leave blank to use the default `wiki/` folder."
+     Wait for their reply. Use `wiki` if they leave it blank.
+4. Call `kb_category_manage` with action `add_section`, providing:
+   - category_slug
+   - subcategory_slug (if any)
+   - section_slug
+   - section_heading
+   - section_description (one-line description of what content this section will contain)
+   - parent_path (the resolved folder from step 2 or 3, without trailing slash)
+5. Confirm the section was added, showing the file path created (e.g., `wiki/agents/tool-use.md`).
