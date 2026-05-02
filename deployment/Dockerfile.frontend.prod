@@ -69,7 +69,7 @@ RUN printf 'server {\n\
     listen 3000;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
-    port_in_redirect off;\n\
+    absolute_redirect off;\n\
 \n\
     # Docs: serve static files directly (no SPA fallback)\n\
     location /docs {\n\
