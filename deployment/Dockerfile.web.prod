@@ -1,0 +1,50 @@
+FROM oven/bun:1.3.12-debian AS builder
+
+WORKDIR /app
+
+COPY package.json bun.lock bunfig.toml tsconfig.json ./
+COPY patches ./patches/
+
+COPY packages/web/package.json         packages/web/
+COPY packages/opencode/package.json    packages/opencode/
+COPY packages/opencode/tsconfig.json   packages/opencode/
+COPY packages/opencode/script          packages/opencode/script
+COPY packages/ui/package.json          packages/ui/
+COPY packages/sdk/js/package.json      packages/sdk/js/
+COPY packages/util/package.json        packages/util/
+COPY packages/plugin/package.json      packages/plugin/
+COPY packages/script/package.json      packages/script/
+COPY packages/app/package.json         packages/app/
+COPY packages/desktop/package.json     packages/desktop/
+COPY packages/desktop-electron/package.json packages/desktop-electron/
+COPY packages/enterprise/package.json  packages/enterprise/
+COPY packages/function/package.json    packages/function/
+COPY packages/slack/package.json       packages/slack/
+COPY packages/storybook/package.json   packages/storybook/
+COPY packages/console/app/package.json     packages/console/app/
+COPY packages/console/core/package.json    packages/console/core/
+COPY packages/console/function/package.json packages/console/function/
+COPY packages/console/mail/package.json    packages/console/mail/
+COPY packages/console/resource/package.json packages/console/resource/
+
+RUN bun install --ignore-scripts
+
+COPY packages/web/ packages/web/
+
+RUN SST_STAGE=production cd packages/web && bun astro build --config astro.config.docker.mjs
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+FROM oven/bun:1.3.12-debian
+
+WORKDIR /app
+
+COPY --from=builder /app/packages/web/dist ./dist
+COPY --from=builder /app/packages/web/package.json ./package.json
+
+ENV HOST=0.0.0.0
+ENV PORT=4097
+ENV NODE_ENV=production
+
+EXPOSE 4097
+
+CMD ["node", "./dist/server/entry.mjs"]
