@@ -100,11 +100,14 @@ export namespace KbGitSync {
     const remoteResult = run(["remote", "get-url", "origin"], kbPath)
     if (!remoteResult.ok) return { ok: false, message: "No remote configured. Add a GitHub repo first." }
 
-    // Try push; if upstream not set yet, set it
-    let pushResult = run(["push", "origin", "main"], kbPath)
-    if (!pushResult.ok && pushResult.stderr.includes("no upstream")) {
-      pushResult = run(["push", "--set-upstream", "origin", "main"], kbPath)
+    // Auto-commit if there are no commits yet (main branch doesn't exist until first commit)
+    const headResult = run(["rev-parse", "HEAD"], kbPath)
+    if (!headResult.ok) {
+      const autoCommit = commit(kbPath)
+      if (!autoCommit.ok) return autoCommit
     }
+
+    let pushResult = run(["push", "--set-upstream", "origin", "main"], kbPath)
     if (!pushResult.ok) return { ok: false, message: pushResult.stderr || "Push failed" }
 
     return { ok: true, message: "Pushed to GitHub" }
