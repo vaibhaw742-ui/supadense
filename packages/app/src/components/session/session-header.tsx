@@ -312,55 +312,159 @@ function GitHubButton(props: { directory: string }) {
       {/* GitHub repo setup modal */}
       <Show when={modalOpen()}>
         <div
-          class="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.4)" }}
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)", "backdrop-filter": "blur(2px)" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false) }}
         >
           <div
-            class="bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
-            style={{ "font-family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" }}
+            class="w-full max-w-sm rounded-xl shadow-2xl overflow-hidden"
+            style={{
+              background: "var(--color-background)",
+              border: "1px solid var(--color-border)",
+              "font-family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+            }}
           >
-            <h2 class="text-sm font-medium text-[var(--color-text-strong)] mb-1">Connect GitHub repo</h2>
-            <p class="text-xs text-[var(--color-text-weak)] mb-4">
-              Your KB files (wiki, assets, raw) will be pushed to this repo.
-            </p>
-            <div class="flex flex-col gap-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-[var(--color-text-weak)]">Repository URL</label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/your-user/your-kb"
-                  value={repoUrl()}
-                  onInput={(e) => setRepoUrl(e.currentTarget.value)}
-                  class="w-full px-3 py-2 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background-weak)] text-[var(--color-text-strong)] outline-none focus:border-[var(--sl-color-accent)]"
-                />
+            {/* Header */}
+            <div
+              class="flex items-center gap-3 px-5 py-4"
+              style={{ "border-bottom": "1px solid var(--color-border-weak)" }}
+            >
+              <div
+                class="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0"
+                style={{ background: "var(--color-background-weak)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--color-text-strong)">
+                  <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.647.35-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                </svg>
               </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-[var(--color-text-weak)]">Personal Access Token (PAT)</label>
-                <input
-                  type="password"
-                  placeholder="ghp_xxxxxxxxxxxx"
-                  value={pat()}
-                  onInput={(e) => setPat(e.currentTarget.value)}
-                  class="w-full px-3 py-2 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background-weak)] text-[var(--color-text-strong)] outline-none focus:border-[var(--sl-color-accent)]"
-                />
-                <p class="text-xs text-[var(--color-text-weaker)]">
-                  Needs <strong>repo</strong> scope. Stored locally on this device only.
+              <div class="min-w-0">
+                <p class="text-sm font-medium" style={{ color: "var(--color-text-strong)", "line-height": "1.3" }}>
+                  Connect GitHub repo
+                </p>
+                <p class="text-xs" style={{ color: "var(--color-text-weak)", "margin-top": "1px" }}>
+                  Push wiki, assets &amp; raw files
                 </p>
               </div>
+              <button
+                class="ml-auto flex items-center justify-center w-6 h-6 rounded-md"
+                style={{ background: "transparent", border: "none", color: "var(--color-text-weak)", cursor: "pointer" }}
+                onClick={() => setModalOpen(false)}
+                aria-label="Close"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
             </div>
-            <div class="flex justify-end gap-2 mt-5">
+
+            {/* Body */}
+            <div class="px-5 py-4 flex flex-col gap-4">
+              {/* Repo URL */}
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium" style={{ color: "var(--color-text-weak)" }}>
+                  Repository URL
+                </label>
+                <div class="relative">
+                  <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--color-text-weaker)" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.647.35-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                    </svg>
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="https://github.com/you/your-kb"
+                    value={repoUrl()}
+                    onInput={(e) => setRepoUrl(e.currentTarget.value)}
+                    style={{
+                      width: "100%",
+                      "box-sizing": "border-box",
+                      "padding-left": "32px",
+                      "padding-right": "12px",
+                      "padding-top": "8px",
+                      "padding-bottom": "8px",
+                      "font-size": "13px",
+                      "border-radius": "6px",
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-background-weak)",
+                      color: "var(--color-text-strong)",
+                      outline: "none",
+                      "font-family": "inherit",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "var(--sl-color-accent)")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                  />
+                </div>
+              </div>
+
+              {/* PAT */}
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium" style={{ color: "var(--color-text-weak)" }}>
+                  Personal Access Token
+                </label>
+                <div class="relative">
+                  <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--color-text-weaker)" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    value={pat()}
+                    onInput={(e) => setPat(e.currentTarget.value)}
+                    style={{
+                      width: "100%",
+                      "box-sizing": "border-box",
+                      "padding-left": "32px",
+                      "padding-right": "12px",
+                      "padding-top": "8px",
+                      "padding-bottom": "8px",
+                      "font-size": "13px",
+                      "border-radius": "6px",
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-background-weak)",
+                      color: "var(--color-text-strong)",
+                      outline: "none",
+                      "font-family": "inherit",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "var(--sl-color-accent)")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                  />
+                </div>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ color: "var(--color-text-weaker)", "flex-shrink": "0" }}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <span class="text-xs" style={{ color: "var(--color-text-weaker)" }}>
+                    Needs <strong style={{ color: "var(--color-text-weak)" }}>repo</strong> scope · stored locally only
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              class="flex items-center justify-end gap-2 px-5 py-3"
+              style={{ "border-top": "1px solid var(--color-border-weak)" }}
+            >
               <Button variant="ghost" class="text-xs h-7 px-3" onClick={() => setModalOpen(false)}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                class="text-xs h-7 px-3"
+                class="text-xs h-7 px-3 gap-1.5"
                 disabled={saving() || !repoUrl().trim() || !pat().trim()}
                 onClick={handleSaveRemote}
               >
-                <Show when={saving()} fallback="Save & connect">
-                  <Spinner class="size-3 mr-1" />Saving…
+                <Show when={saving()} fallback={
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.647.35-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                    </svg>
+                    Connect
+                  </>
+                }>
+                  <Spinner class="size-3" />Connecting…
                 </Show>
               </Button>
             </div>
