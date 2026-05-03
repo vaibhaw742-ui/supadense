@@ -21,6 +21,7 @@ import { useSync } from "@/context/sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
+import { getAuthToken } from "@/utils/server"
 import { Persist, persisted } from "@/utils/persist"
 
 
@@ -147,8 +148,10 @@ function GitHubButton(props: { directory: string }) {
 
   const loadStatus = async () => {
     try {
+      const token = getAuthToken()
       const res = await fetch(
         `${kbApiBase()}/kb/git/status?directory=${encodeURIComponent(props.directory)}`,
+        { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } },
       )
       if (!res.ok) return
       const data = await res.json() as {
@@ -166,9 +169,10 @@ function GitHubButton(props: { directory: string }) {
     setCommitting(true)
     setMenuOpen(false)
     try {
+      const token = getAuthToken()
       const res = await fetch(`${kbApiBase()}/kb/git/commit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ directory: props.directory }),
       })
       const data = await res.json() as { message?: string; error?: string }
@@ -194,9 +198,10 @@ function GitHubButton(props: { directory: string }) {
     setPushing(true)
     setMenuOpen(false)
     try {
+      const token = getAuthToken()
       const res = await fetch(`${kbApiBase()}/kb/git/push`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ directory: props.directory }),
       })
       const data = await res.json() as { message?: string; error?: string }
@@ -217,9 +222,10 @@ function GitHubButton(props: { directory: string }) {
     if (!repoUrl().trim() || !pat().trim()) return
     setSaving(true)
     try {
+      const token = getAuthToken()
       const res = await fetch(`${kbApiBase()}/kb/git/remote`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           directory: props.directory,
           remote_url: repoUrl().trim(),
