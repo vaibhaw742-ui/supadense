@@ -71,6 +71,7 @@ export default defineConfig({
             { label: "Retrieving", link: "retrieving" },
             { label: "Groups", link: "groups" },
             { label: "Sources & Images", link: "sources" },
+            { label: "GitHub Sync", link: "kb-github-sync" },
           ],
         },
         {

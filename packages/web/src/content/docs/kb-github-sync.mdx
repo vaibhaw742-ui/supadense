@@ -1,0 +1,95 @@
+---
+title: GitHub Sync
+description: Back up your Knowledge Base to a GitHub repository using commit and push.
+---
+
+Supadense lets you back up your Knowledge Base to a private GitHub repository. Changes are committed locally first, then pushed manually when you're ready — no automatic syncing, full control.
+
+---
+
+## What gets synced
+
+Every commit includes the following folders from your KB directory:
+
+| Folder | Contents |
+|--------|----------|
+| `wiki/` | Wiki markdown pages generated from your KB |
+| `assets/` | Images and attachments |
+| `raw/` | Raw ingested source files |
+| `.gitignore` | Auto-created to exclude database files |
+
+Database files (`*.db`, `*.db-wal`, `*.db-shm`) are excluded automatically.
+
+---
+
+## Setup
+
+### 1. Create a GitHub repository
+
+Create a new **private** repository on GitHub. It can be empty — Supadense will initialize git and push the first commit.
+
+### 2. Get a Personal Access Token (PAT)
+
+1. On GitHub, go to **Settings → Developer settings → Personal access tokens → Tokens (classic)**
+2. Click **Generate new token (classic)**
+3. Give it a name (e.g. `supadense-kb-sync`)
+4. Under **Select scopes**, check **`repo`**
+5. Click **Generate token** and copy it — it starts with `ghp_...` and is shown only once
+
+### 3. Connect in Supadense
+
+1. Open a KB session
+2. Click the **GitHub button** (↑) in the top-right of the session header
+3. Select **Push to GitHub** from the dropdown
+4. In the dialog, enter:
+   - **Repository URL** — e.g. `https://github.com/you/your-kb`
+   - **Personal Access Token** — the `ghp_...` token from above
+5. Click **Connect**
+
+The PAT is stored locally on your server only and never sent to any third party.
+
+---
+
+## Committing changes
+
+**Commit changes** saves a snapshot of your KB to local git history. It does **not** upload anything to GitHub.
+
+To commit:
+
+1. Click the **GitHub button** in the session header
+2. Select **Commit changes (N)** — the number shows how many uncommitted files exist
+3. A commit is created with a timestamp message like `sync: 2026-05-03T10:30:00.000Z`
+
+Commit regularly to keep a local history of how your KB evolves.
+
+---
+
+## Pushing to GitHub
+
+**Push to GitHub** uploads your committed changes to the connected GitHub repository.
+
+To push:
+
+1. Click the **GitHub button** in the session header
+2. Select **Push to GitHub (N)** — the number shows unpushed commits
+3. Changes are pushed to the `main` branch of your repo
+
+If no repository is connected yet, selecting Push will open the Connect dialog first.
+
+---
+
+## Indicator dot
+
+A small orange dot appears on the GitHub button when there are uncommitted changes or unpushed commits, so you always know when your KB is out of sync.
+
+---
+
+## Workflow
+
+The recommended workflow is:
+
+```
+Make changes in KB → Commit changes → Push to GitHub
+```
+
+You can commit multiple times before pushing — all commits will be pushed together in one go.
