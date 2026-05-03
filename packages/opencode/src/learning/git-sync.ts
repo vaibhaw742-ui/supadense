@@ -76,7 +76,10 @@ export namespace KbGitSync {
     if (!statusResult.stdout) return { ok: true, message: "Nothing to commit" }
 
     const timestamp = new Date().toISOString()
-    const commitResult = run(["commit", "-m", `sync: ${timestamp}`], kbPath)
+    const commitResult = run(
+      ["-c", "user.name=Supadense", "-c", "user.email=sync@supadense", "commit", "-m", `sync: ${timestamp}`],
+      kbPath,
+    )
     if (!commitResult.ok) return { ok: false, message: commitResult.stderr || "git commit failed" }
 
     return { ok: true, message: "Changes committed" }
