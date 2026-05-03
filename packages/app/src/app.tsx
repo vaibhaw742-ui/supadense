@@ -47,6 +47,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
+const AdminRoute = lazy(() => import("@/pages/admin"))
 const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
@@ -312,6 +313,7 @@ export function AppInterface(props: {
                 root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
               >
                 <Route path="/" component={HomeRoute} />
+                <Route path="/admin" component={AdminRoute} />
                 <Route path="/:dir" component={DirectoryLayout}>
                   <Route path="/" component={SessionIndexRoute} />
                   <Route path="/session/:id?" component={SessionRoute} />

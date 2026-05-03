@@ -4,6 +4,8 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useNavigate } from "@solidjs/router"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
@@ -27,6 +29,8 @@ async function checkIsAdmin(): Promise<boolean> {
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
+  const navigate = useNavigate()
+  const dialog = useDialog()
   const [isAdmin] = createResource(checkIsAdmin)
 
   return (
@@ -66,6 +70,14 @@ export const DialogSettings: Component = () => {
                         <Icon name="person" />
                         Users
                       </Tabs.Trigger>
+                      <button
+                        type="button"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-md text-14-regular text-text-weak hover:bg-[var(--surface-raised-stronger-non-alpha)] hover:text-text-strong transition-colors w-full text-left"
+                        onClick={() => { dialog.close(); navigate("/admin") }}
+                      >
+                        <Icon name="dash" />
+                        Analytics
+                      </button>
                     </Show>
                   </div>
                 </div>

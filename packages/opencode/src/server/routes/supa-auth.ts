@@ -110,6 +110,12 @@ export function SupaAuthRoutes() {
     const exp = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
     const token = signToken({ userId: user.id, email: user.email, exp }, secret)
 
+    try {
+      Database.Client().$client
+        .prepare("INSERT INTO user_activity_events (id, user_id, event_type, created_at) VALUES (?, ?, 'login', ?)")
+        .run(randomUUID(), user.id, new Date().toISOString())
+    } catch {}
+
     return c.json({ token, email: user.email })
   })
 
@@ -125,7 +131,8 @@ export function SupaAuthRoutes() {
 
     try {
       const payload = verifyToken(token, secret) as { userId: string; email: string }
-      return c.json({ userId: payload.userId, email: payload.email })
+      const isAdmin = payload.email === Flag.SUPADENSE_ADMIN_EMAIL
+      return c.json({ userId: payload.userId, email: payload.email, is_admin: isAdmin })
     } catch {
       return c.json({ error: "Invalid token" }, 401)
     }
@@ -244,6 +251,85 @@ export function SupaAuthRoutes() {
       .prepare("DELETE FROM auth_users WHERE id = ? AND status = 'pending'")
       .run(c.req.param("id"))
     return c.json({ ok: true })
+  })
+
+  // ── Admin: analytics ──────────────────────────────────────────────────────────
+
+  app.get("/admin/analytics", (c) => {
+    const auth = requireAdmin(c)
+    if ("error" in auth) return c.json({ error: auth.error }, auth.error === "Forbidden" ? 403 : 401)
+
+    const db = Database.Client().$client
+
+    const totalUsers = (db.prepare("SELECT COUNT(*) as n FROM auth_users WHERE status = 'approved'").get() as { n: number }).n
+
+    const dau = db.prepare(`
+      SELECT DATE(created_at) as day, COUNT(DISTINCT user_id) as users
+      FROM user_activity_events
+      WHERE event_type = 'login' AND created_at >= DATE('now', '-30 days')
+      GROUP BY day ORDER BY day ASC
+    `).all() as { day: string; users: number }[]
+
+    const hourly = db.prepare(`
+      SELECT CAST(STRFTIME('%H', created_at) AS INTEGER) as hour, COUNT(*) as events
+      FROM user_activity_events
+      WHERE event_type = 'login' AND created_at >= DATE('now', '-30 days')
+      GROUP BY hour ORDER BY hour ASC
+    `).all() as { hour: number; events: number }[]
+
+    // Week-1 retention: users who logged in again in days 7-14 after their first login
+    const retention = db.prepare(`
+      SELECT
+        COUNT(DISTINCT first_logins.user_id) as cohort_size,
+        COUNT(DISTINCT retained.user_id) as retained
+      FROM (
+        SELECT user_id, MIN(DATE(created_at)) as first_day
+        FROM user_activity_events WHERE event_type = 'login'
+        GROUP BY user_id
+        HAVING first_day <= DATE('now', '-7 days')
+      ) first_logins
+      LEFT JOIN user_activity_events retained ON retained.user_id = first_logins.user_id
+        AND DATE(retained.created_at) BETWEEN DATE(first_logins.first_day, '+7 days') AND DATE(first_logins.first_day, '+14 days')
+        AND retained.event_type = 'login'
+    `).get() as { cohort_size: number; retained: number }
+
+    const messageStats = db.prepare(`
+      SELECT
+        DATE(m.created_at) as day,
+        COUNT(*) as messages
+      FROM message m
+      WHERE m.created_at >= DATE('now', '-30 days')
+      GROUP BY day ORDER BY day ASC
+    `).all() as { day: string; messages: number }[]
+
+    return c.json({ totalUsers, dau, hourly, retention, messageStats })
+  })
+
+  app.get("/admin/users-detail", (c) => {
+    const auth = requireAdmin(c)
+    if ("error" in auth) return c.json({ error: auth.error }, auth.error === "Forbidden" ? 403 : 401)
+
+    const db = Database.Client().$client
+
+    const users = db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        MAX(e.created_at) as last_login,
+        COUNT(e.id) as login_count,
+        (SELECT COUNT(*) FROM message m JOIN session s ON s.id = m.session_id JOIN project p ON p.id = s.project_id WHERE p.user_id = u.id) as message_count
+      FROM auth_users u
+      LEFT JOIN user_activity_events e ON e.user_id = u.id AND e.event_type = 'login'
+      WHERE u.status = 'approved'
+      GROUP BY u.id
+      ORDER BY last_login DESC NULLS LAST
+    `).all() as {
+      id: string; email: string; created_at: string;
+      last_login: string | null; login_count: number; message_count: number
+    }[]
+
+    return c.json(users)
   })
 
   return app
