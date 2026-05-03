@@ -4,12 +4,22 @@ import path from "path"
 
 const GITIGNORE = "*.db\n*.db-wal\n*.db-shm\n"
 
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Supadense",
+  GIT_AUTHOR_EMAIL: "sync@supadense",
+  GIT_COMMITTER_NAME: "Supadense",
+  GIT_COMMITTER_EMAIL: "sync@supadense",
+}
+
 function run(args: string[], cwd: string) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" })
+  const result = spawnSync("git", args, { cwd, encoding: "utf8", env: GIT_ENV })
+  const stdout = (result.stdout ?? "").trim()
+  const stderr = (result.stderr ?? "").trim()
   return {
     ok: result.status === 0,
-    stdout: (result.stdout ?? "").trim(),
-    stderr: (result.stderr ?? "").trim(),
+    stdout,
+    stderr: stderr || result.error?.message || "",
   }
 }
 
@@ -70,17 +80,18 @@ export namespace KbGitSync {
   export function commit(kbPath: string): { ok: boolean; message: string } {
     initRepo(kbPath)
 
-    run(["add", "wiki/", "assets/", "raw/", ".gitignore"], kbPath)
+    // Stage everything (db files excluded via .gitignore)
+    run(["add", "-A"], kbPath)
 
     const statusResult = run(["status", "--short"], kbPath)
     if (!statusResult.stdout) return { ok: true, message: "Nothing to commit" }
 
     const timestamp = new Date().toISOString()
-    const commitResult = run(
-      ["-c", "user.name=Supadense", "-c", "user.email=sync@supadense", "commit", "-m", `sync: ${timestamp}`],
-      kbPath,
-    )
-    if (!commitResult.ok) return { ok: false, message: commitResult.stderr || "git commit failed" }
+    const commitResult = run(["commit", "-m", `sync: ${timestamp}`], kbPath)
+    if (!commitResult.ok) {
+      const detail = [commitResult.stderr, commitResult.stdout].filter(Boolean).join(" | ")
+      return { ok: false, message: detail || "git commit failed" }
+    }
 
     return { ok: true, message: "Changes committed" }
   }
