@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createResource, createSignal, For, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { getAuthToken, getBackendUrl } from "@/utils/server"
 import * as d3 from "d3"
@@ -20,21 +20,23 @@ type UserDetail = {
   message_count: number
 }
 
-async function fetchAnalytics(): Promise<AnalyticsData> {
+async function fetchAnalytics(): Promise<AnalyticsData | null> {
   const token = getAuthToken()
+  if (!token) return null
   const res = await fetch(`${getBackendUrl()}/supa-auth/admin/analytics`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error("Unauthorized")
+  if (!res.ok) return null
   return res.json()
 }
 
-async function fetchUsers(): Promise<UserDetail[]> {
+async function fetchUsers(): Promise<UserDetail[] | null> {
   const token = getAuthToken()
+  if (!token) return null
   const res = await fetch(`${getBackendUrl()}/supa-auth/admin/users-detail`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error("Unauthorized")
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -153,25 +155,30 @@ function StatCard(props: { label: string; value: string | number; sub?: string }
   )
 }
 
+async function checkAdmin(): Promise<boolean> {
+  const token = getAuthToken()
+  if (!token) return false
+  try {
+    const res = await fetch(`${getBackendUrl()}/supa-auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return false
+    const data = await res.json() as { is_admin?: boolean }
+    return !!data.is_admin
+  } catch {
+    return false
+  }
+}
+
 export default function AdminPage() {
   const navigate = useNavigate()
-  const [analytics] = createResource(fetchAnalytics)
-  const [users] = createResource(fetchUsers)
+  const [isAdmin] = createResource(checkAdmin)
+  const [analytics] = createResource(() => isAdmin() === true || undefined, fetchAnalytics)
+  const [users] = createResource(() => isAdmin() === true || undefined, fetchUsers)
   const [tab, setTab] = createSignal<"overview" | "users">("overview")
 
-  // Redirect if not admin
-  onMount(async () => {
-    const token = getAuthToken()
-    if (!token) { navigate("/"); return }
-    try {
-      const res = await fetch(`${getBackendUrl()}/supa-auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json() as { is_admin?: boolean }
-      if (!data.is_admin) navigate("/")
-    } catch {
-      navigate("/")
-    }
+  createEffect(() => {
+    if (!isAdmin.loading && isAdmin() === false) navigate("/")
   })
 
   const dauData = () =>
