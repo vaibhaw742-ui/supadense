@@ -190,64 +190,121 @@ export const KbPipelineRunTool = Tool.defineEffect(
 
       const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(curatorPrompt))
 
-      // ── Fire and forget ───────────────────────────────────────────────
-      // Intentionally not awaited — the curator runs in background.
-      SessionPrompt.prompt({
-        sessionID: childSession.id,
-        messageID,
-        model,
-        agent: "kb-curator",
-        tools: {
-          // Disable non-KB tools in this session
-          bash: false,
-          edit: false,
-          write: false,
-          glob: false,
-          grep: false,
-          task: false,
-          fetch: false,
-          search: false,
-          code: false,
-          skill: false,
-          patch: false,
-          lsp: false,
-          plan: false,
-          todo: false,
-          // Allow read so curator can inspect existing wiki content if needed
-          // KB tools are all enabled by default
-        },
-        parts,
-      }).catch((err: unknown) => {
-        console.error(
-          "[KB Pipeline] Error in curator session:",
-          err instanceof Error ? err.message : String(err),
-        )
-      })
+      // ── Run curator and await completion ─────────────────────────────
+      yield* Effect.promise(() =>
+        SessionPrompt.prompt({
+          sessionID: childSession.id,
+          messageID,
+          model,
+          agent: "kb-curator",
+          tools: {
+            bash: false,
+            edit: false,
+            write: false,
+            glob: false,
+            grep: false,
+            task: false,
+            fetch: false,
+            search: false,
+            code: false,
+            skill: false,
+            patch: false,
+            lsp: false,
+            plan: false,
+            todo: false,
+          },
+          parts,
+        }).catch((err: unknown) => {
+          console.error(
+            "[KB Pipeline] Error in curator session:",
+            err instanceof Error ? err.message : String(err),
+          )
+        }),
+      )
+
+      // ── Collect results from child session messages ───────────────────
+      const KB_TOOLS = new Set([
+        "kb_resource_place",
+        "kb_concept_upsert",
+        "kb_wiki_build",
+        "kb_event_log",
+        "kb_resource_create",
+        "kb_category_manage",
+      ])
+
+      const placements: string[] = []
+      const concepts: string[] = []
+      const wikiBuilt: string[] = []
+      let errors = 0
+
+      const page = MessageV2.page({ sessionID: childSession.id, limit: 200 })
+      for (const msg of page.items) {
+        if (msg.info.role !== "assistant") continue
+        for (const part of msg.parts) {
+          if (part.type !== "tool") continue
+          if (!KB_TOOLS.has(part.tool)) continue
+          const state = part.state
+          if (state.status === "error") { errors++; continue }
+          if (state.status !== "completed") continue
+          if (part.tool === "kb_resource_place") {
+            const input = state.input as Record<string, unknown>
+            const slug = (input?.section_slug as string) ?? ""
+            const pageId = (input?.wiki_page_id as string) ?? ""
+            if (slug) placements.push(`${pageId} → ${slug}`)
+          } else if (part.tool === "kb_concept_upsert") {
+            const input = state.input as Record<string, unknown>
+            const name = (input?.name as string) ?? ""
+            if (name) concepts.push(name)
+          } else if (part.tool === "kb_wiki_build") {
+            const input = state.input as Record<string, unknown>
+            const ids = (input?.page_ids as string[]) ?? []
+            wikiBuilt.push(...ids)
+          }
+        }
+      }
+
+      const lines: string[] = [
+        `✓ Processing complete: ${resource.title ?? resource.url ?? resource.id}`,
+        "",
+      ]
+
+      if (placements.length > 0) {
+        lines.push(`Placed into ${placements.length} section(s):`)
+        for (const p of placements) lines.push(`  • ${p}`)
+        lines.push("")
+      } else {
+        lines.push("No section placements recorded.")
+        lines.push("")
+      }
+
+      if (concepts.length > 0) {
+        lines.push(`Concepts extracted: ${concepts.join(", ")}`)
+        lines.push("")
+      }
+
+      if (wikiBuilt.length > 0) {
+        lines.push(`Wiki rebuilt for ${[...new Set(wikiBuilt)].length} page(s).`)
+      }
+
+      if (errors > 0) {
+        lines.push(`⚠ ${errors} tool call(s) failed during extraction.`)
+      }
 
       return {
-        title: "KB pipeline started",
-        metadata: { task_id: childSession.id, resource_id: params.resource_id },
-        output: [
-          `task_id: ${childSession.id}`,
-          `resource: ${resource.title ?? resource.url ?? resource.id}`,
-          "",
-          "KB extraction running in background.",
-          "The wiki will be updated automatically — you can continue chatting.",
-          "",
-          "To check progress, look for the child session in your session list.",
-        ].join("\n"),
+        title: `KB pipeline complete: ${resource.title ?? resource.url ?? resource.id}`,
+        metadata: { task_id: childSession.id, resource_id: params.resource_id, finished: true },
+        output: lines.join("\n"),
       }
     })
 
     return {
       description: [
-        "Trigger the background KB extraction pipeline for a memorized resource.",
+        "Run the KB extraction pipeline for a resource and wait for it to finish.",
         "",
-        "Creates a child KBCurator session that runs in the background — returns immediately.",
-        "The curator reads the resource content, extracts knowledge per the schema sections,",
-        "calls kb_resource_place (×N), kb_concept_upsert, kb_wiki_build, and kb_event_log.",
+        "Runs the KBCurator agent synchronously — BLOCKS until complete, then returns",
+        "a summary of what was placed, which concepts were extracted, and which wiki pages were rebuilt.",
         "",
-        "Call this AFTER kb_resource_create. The user can continue chatting immediately.",
+        "Call this AFTER kb_resource_create. Do NOT call kb_pipeline_status after this — it is not needed.",
         "",
         "Parameters:",
         "  resource_id   — from kb_resource_create",

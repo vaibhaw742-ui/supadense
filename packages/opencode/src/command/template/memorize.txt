@@ -1,16 +1,13 @@
-Add the following resource to my knowledge base and wait for processing to complete: $ARGUMENTS
+Add the following resource to my knowledge base: $ARGUMENTS
 
 Steps:
 1. Call `kb_workspace_init` to get the workspace. If not yet onboarded, tell the user to run `/onboard` first and stop.
 2. Call `kb_resource_create` with the URL/content from `$ARGUMENTS` to register the resource.
-3. Call `kb_pipeline_run` to start processing — save the returned `task_id`.
-4. Tell the user: "Processing started — waiting for the curator to finish..."
-5. Poll `kb_pipeline_status` with the `task_id` in a loop:
-   - Call `kb_pipeline_status` and check if `finished` is true in the metadata.
-   - If not finished, wait a moment and call `kb_pipeline_status` again.
-   - Keep polling until `finished` is true. Do not stop early.
-6. Once finished, report back to the user:
+3. Call `kb_pipeline_run` — this runs the full extraction pipeline and blocks until complete.
+4. Once `kb_pipeline_run` returns, report back to the user:
    - What resource was added (title/URL)
    - Which categories/sections it was placed into
    - Any concepts extracted
    - Confirm the wiki has been updated
+
+Do NOT call `kb_pipeline_status` — it is not needed. `kb_pipeline_run` already waits for everything to finish.
