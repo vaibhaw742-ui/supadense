@@ -97,17 +97,28 @@ export namespace KbGitSync {
   }
 
   export function push(kbPath: string): { ok: boolean; message: string } {
+    initRepo(kbPath)
+
     const remoteResult = run(["remote", "get-url", "origin"], kbPath)
     if (!remoteResult.ok) return { ok: false, message: "No remote configured. Add a GitHub repo first." }
 
-    // Auto-commit if there are no commits yet (main branch doesn't exist until first commit)
+    // If no commits exist yet, stage everything and make an initial commit
     const headResult = run(["rev-parse", "HEAD"], kbPath)
     if (!headResult.ok) {
-      const autoCommit = commit(kbPath)
-      if (!autoCommit.ok) return autoCommit
+      run(["add", "-A"], kbPath)
+      const initCommit = run(["commit", "--allow-empty", "-m", `init: ${new Date().toISOString()}`], kbPath)
+      if (!initCommit.ok) {
+        const detail = [initCommit.stderr, initCommit.stdout].filter(Boolean).join(" | ")
+        return { ok: false, message: detail || "Failed to create initial commit" }
+      }
     }
 
-    let pushResult = run(["push", "--set-upstream", "origin", "main"], kbPath)
+    // Detect actual branch name rather than assuming "main"
+    const branchResult = run(["rev-parse", "--abbrev-ref", "HEAD"], kbPath)
+    const branch = branchResult.ok && branchResult.stdout ? branchResult.stdout : "main"
+
+    // Push all commits; --set-upstream handles first-time push
+    const pushResult = run(["push", "--set-upstream", "origin", branch], kbPath)
     if (!pushResult.ok) return { ok: false, message: pushResult.stderr || "Push failed" }
 
     return { ok: true, message: "Pushed to GitHub" }
