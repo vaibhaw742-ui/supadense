@@ -25,14 +25,12 @@ const KB_TOOLS = new Set([
 
 export const KbPipelineStatusTool = Tool.define("kb_pipeline_status", {
   description: [
-    "Check the progress of a background KB extraction pipeline.",
+    "Wait for a background KB extraction pipeline to finish, then return the final result.",
     "",
-    "Pass the task_id returned by kb_pipeline_run to see current status:",
-    "  - Whether the pipeline is still running or has finished",
-    "  - Which KB tools have been called and their outcomes",
-    "  - Any errors that occurred",
+    "Pass the task_id returned by kb_pipeline_run. This tool BLOCKS until the pipeline",
+    "completes (up to 10 minutes), then returns a summary of what was done.",
     "",
-    "Call this anytime after kb_pipeline_run to monitor progress.",
+    "Call this ONCE after kb_pipeline_run — do NOT call it repeatedly.",
   ].join("\n"),
   parameters: z.object({
     task_id: z.string().describe("The task_id returned by kb_pipeline_run (child session ID)"),
@@ -40,20 +38,30 @@ export const KbPipelineStatusTool = Tool.define("kb_pipeline_status", {
   async execute(params) {
     const sessionID = params.task_id as SessionID
 
-    // ── Check session exists + archived status ────────────────────────────
-    const row = Database.use((db) =>
-      db
-        .select({ id: SessionTable.id, title: SessionTable.title, time_archived: SessionTable.time_archived })
-        .from(SessionTable)
-        .where(eq(SessionTable.id, sessionID))
-        .get(),
-    )
+    // ── Wait for pipeline to finish (poll DB, max 10 min) ─────────────────
+    const POLL_INTERVAL_MS = 3_000
+    const TIMEOUT_MS = 10 * 60 * 1000
+    const deadline = Date.now() + TIMEOUT_MS
 
-    if (!row) {
-      throw new Error(`Pipeline task not found: ${params.task_id}`)
+    let row: { id: string; title: string | null; time_archived: number | null } | undefined
+
+    while (true) {
+      row = Database.use((db) =>
+        db
+          .select({ id: SessionTable.id, title: SessionTable.title, time_archived: SessionTable.time_archived })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get(),
+      )
+
+      if (!row) throw new Error(`Pipeline task not found: ${params.task_id}`)
+      if (row.time_archived) break
+      if (Date.now() >= deadline) break
+
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
     }
 
-    const isFinished = !!row.time_archived
+    const isFinished = !!row!.time_archived
 
     // ── Gather all messages ───────────────────────────────────────────────
     const toolCalls: Array<{
@@ -129,11 +137,11 @@ export const KbPipelineStatusTool = Tool.define("kb_pipeline_status", {
     }
 
     if (!isFinished) {
-      lines.push("", "Call kb_pipeline_status again to refresh.")
+      lines.push("", "Pipeline timed out after 10 minutes.")
     }
 
     return {
-      title: `KB Pipeline: ${isFinished ? "finished" : "running"}`,
+      title: `KB Pipeline: ${isFinished ? "finished ✓" : "timed out"}`,
       metadata: {
         task_id: sessionID,
         finished: isFinished,
