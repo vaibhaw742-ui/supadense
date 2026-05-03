@@ -20,6 +20,7 @@ import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { KBRoutes } from "./routes/kb"
+import { KBGitRoutes } from "./routes/kb-git"
 import { initProjectors } from "./projectors"
 import { ModelsDev } from "../provider/models"
 import { Provider } from "../provider/provider"
@@ -294,6 +295,7 @@ export namespace Server {
         return c.json(Project.list(userId))
       })
       .route("/kb", KBRoutes())
+      .route("/kb/git", KBGitRoutes())
       // Intercept GET /provider and GET /provider/auth ONLY when no directory is
       // specified — that is, global-context calls from bootstrapGlobal or the
       // connect-provider dialog that don't have a KB open yet.

@@ -20,6 +20,8 @@ export const LearningKbWorkspaceTable = sqliteTable("learning_kb_workspaces", {
   scout_platforms: text({ mode: "json" }).$type<string[]>().notNull().default([]),
   extra_folders: text({ mode: "json" }).$type<string[]>().notNull().default([]), // ["papers", "experiments"]
   onboarded_at: integer(), // unix ms, null until onboarding complete
+  github_remote_url: text(), // "https://github.com/user/my-kb"
+  github_pat: text(),        // personal access token stored locally
   ...Timestamps,
 })
 

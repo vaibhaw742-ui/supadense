@@ -8,7 +8,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -125,6 +125,250 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+function kbApiBase() {
+  return import.meta.env.DEV
+    ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:4096`
+    : `${location.origin}/api`
+}
+
+function GitHubButton(props: { directory: string }) {
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  const [modalOpen, setModalOpen] = createSignal(false)
+  const [repoUrl, setRepoUrl] = createSignal("")
+  const [pat, setPat] = createSignal("")
+  const [saving, setSaving] = createSignal(false)
+  const [committing, setCommitting] = createSignal(false)
+  const [pushing, setPushing] = createSignal(false)
+  const [hasRemote, setHasRemote] = createSignal(false)
+  const [uncommitted, setUncommitted] = createSignal(0)
+  const [unpushed, setUnpushed] = createSignal(0)
+
+  const loadStatus = async () => {
+    try {
+      const res = await fetch(
+        `${kbApiBase()}/kb/git/status?directory=${encodeURIComponent(props.directory)}`,
+      )
+      if (!res.ok) return
+      const data = await res.json() as {
+        hasRemoteConfigured: boolean
+        uncommittedCount: number
+        unpushedCount: number
+      }
+      setHasRemote(data.hasRemoteConfigured)
+      setUncommitted(data.uncommittedCount)
+      setUnpushed(data.unpushedCount)
+    } catch {}
+  }
+
+  const handleCommit = async () => {
+    setCommitting(true)
+    setMenuOpen(false)
+    try {
+      const res = await fetch(`${kbApiBase()}/kb/git/commit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ directory: props.directory }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) {
+        showToast({ variant: "error", title: data.error ?? "Commit failed" })
+      } else {
+        showToast({ variant: "success", title: data.message ?? "Committed" })
+        await loadStatus()
+      }
+    } catch {
+      showToast({ variant: "error", title: "Commit failed" })
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  const handlePush = async () => {
+    if (!hasRemote()) {
+      setMenuOpen(false)
+      setModalOpen(true)
+      return
+    }
+    setPushing(true)
+    setMenuOpen(false)
+    try {
+      const res = await fetch(`${kbApiBase()}/kb/git/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ directory: props.directory }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) {
+        showToast({ variant: "error", title: data.error ?? "Push failed" })
+      } else {
+        showToast({ variant: "success", title: data.message ?? "Pushed" })
+        await loadStatus()
+      }
+    } catch {
+      showToast({ variant: "error", title: "Push failed" })
+    } finally {
+      setPushing(false)
+    }
+  }
+
+  const handleSaveRemote = async () => {
+    if (!repoUrl().trim() || !pat().trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`${kbApiBase()}/kb/git/remote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directory: props.directory,
+          remote_url: repoUrl().trim(),
+          pat: pat().trim(),
+        }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) {
+        showToast({ variant: "error", title: data.error ?? "Failed to save remote" })
+      } else {
+        showToast({ variant: "success", title: "GitHub remote saved" })
+        setModalOpen(false)
+        setRepoUrl("")
+        setPat("")
+        await loadStatus()
+      }
+    } catch {
+      showToast({ variant: "error", title: "Failed to save remote" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const busy = () => committing() || pushing() || saving()
+  const hasDot = () => uncommitted() > 0 || unpushed() > 0
+
+  return (
+    <>
+      <DropdownMenu
+        gutter={4}
+        placement="bottom-end"
+        open={menuOpen()}
+        onOpenChange={(open) => {
+          if (open) void loadStatus()
+          setMenuOpen(open)
+        }}
+      >
+        <DropdownMenu.Trigger as="div">
+          <Tooltip placement="bottom" value="GitHub sync">
+            <Button
+              variant="ghost"
+              class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center relative"
+              aria-label="GitHub sync"
+              disabled={busy()}
+            >
+              <Show when={busy()} fallback={
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.647.35-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                  </svg>
+                  <span class="text-xs">GitHub</span>
+                  <Show when={hasDot()}>
+                    <span
+                      class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full"
+                      style={{ background: unpushed() > 0 ? "#f97316" : "#22c55e" }}
+                    />
+                  </Show>
+                </>
+              }>
+                <Spinner class="size-3" />
+              </Show>
+            </Button>
+          </Tooltip>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item onSelect={handleCommit} disabled={committing()}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                <circle cx="12" cy="12" r="3"/>
+                <line x1="3" y1="12" x2="9" y2="12"/>
+                <line x1="15" y1="12" x2="21" y2="12"/>
+              </svg>
+              <DropdownMenu.ItemLabel>
+                Commit changes{uncommitted() > 0 ? ` (${uncommitted()})` : ""}
+              </DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={handlePush} disabled={pushing()}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
+                <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+              </svg>
+              <DropdownMenu.ItemLabel>
+                {hasRemote() ? `Push to GitHub${unpushed() > 0 ? ` (${unpushed()})` : ""}` : "Connect GitHub repo…"}
+              </DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+
+      {/* GitHub repo setup modal */}
+      <Show when={modalOpen()}>
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false) }}
+        >
+          <div
+            class="bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg shadow-xl p-6 w-full max-w-md mx-4"
+            style={{ "font-family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" }}
+          >
+            <h2 class="text-sm font-medium text-[var(--color-text-strong)] mb-1">Connect GitHub repo</h2>
+            <p class="text-xs text-[var(--color-text-weak)] mb-4">
+              Your KB files (wiki, assets, raw) will be pushed to this repo.
+            </p>
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-[var(--color-text-weak)]">Repository URL</label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/your-user/your-kb"
+                  value={repoUrl()}
+                  onInput={(e) => setRepoUrl(e.currentTarget.value)}
+                  class="w-full px-3 py-2 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background-weak)] text-[var(--color-text-strong)] outline-none focus:border-[var(--sl-color-accent)]"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-[var(--color-text-weak)]">Personal Access Token (PAT)</label>
+                <input
+                  type="password"
+                  placeholder="ghp_xxxxxxxxxxxx"
+                  value={pat()}
+                  onInput={(e) => setPat(e.currentTarget.value)}
+                  class="w-full px-3 py-2 text-xs rounded border border-[var(--color-border)] bg-[var(--color-background-weak)] text-[var(--color-text-strong)] outline-none focus:border-[var(--sl-color-accent)]"
+                />
+                <p class="text-xs text-[var(--color-text-weaker)]">
+                  Needs <strong>repo</strong> scope. Stored locally on this device only.
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+              <Button variant="ghost" class="text-xs h-7 px-3" onClick={() => setModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                class="text-xs h-7 px-3"
+                disabled={saving() || !repoUrl().trim() || !pat().trim()}
+                onClick={handleSaveRemote}
+              >
+                <Show when={saving()} fallback="Save & connect">
+                  <Spinner class="size-3 mr-1" />Saving…
+                </Show>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Show>
+    </>
+  )
 }
 
 function WikiButton() {
@@ -398,6 +642,9 @@ export function SessionHeader() {
               <div class="flex items-center gap-1">
                 <WikiButton />
                 <DocsButton />
+                <Show when={projectDirectory()}>
+                  {(dir) => <GitHubButton directory={dir()} />}
+                </Show>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
