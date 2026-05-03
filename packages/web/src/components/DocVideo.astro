@@ -3,6 +3,8 @@ interface Props {
   src: string
 }
 const { src } = Astro.props
+const base = import.meta.env.BASE_URL.replace(/\/$/, "")
+const fullSrc = `${base}${src}`
 ---
 
 <video
@@ -10,5 +12,5 @@ const { src } = Astro.props
   width="100%"
   style="border-radius: 8px; margin-bottom: 1.5rem; display: block;"
 >
-  <source src={src} type="video/mp4" />
+  <source src={fullSrc} type="video/mp4" />
 </video>
