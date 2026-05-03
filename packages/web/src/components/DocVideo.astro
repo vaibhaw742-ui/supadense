@@ -1,0 +1,14 @@
+---
+interface Props {
+  src: string
+}
+const { src } = Astro.props
+---
+
+<video
+  controls
+  width="100%"
+  style="border-radius: 8px; margin-bottom: 1.5rem; display: block;"
+>
+  <source src={src} type="video/mp4" />
+</video>
