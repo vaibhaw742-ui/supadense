@@ -1,4 +1,4 @@
-import { createEffect, createResource, createSignal, For, Show } from "solid-js"
+import { createEffect, createResource, createSignal, For, onMount, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { getAuthToken, getBackendUrl } from "@/utils/server"
 import * as d3 from "d3"
