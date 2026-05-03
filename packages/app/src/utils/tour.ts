@@ -72,6 +72,16 @@ export function startTour(): void {
         },
       },
       {
+        element: '[data-tour="kb-tree-panel"]',
+        popover: {
+          title: "KB Files & Folders",
+          description:
+            "Your KB structure lives here — categories, sub-categories, wiki pages, and raw files. Expand folders to browse, click any file to open it.",
+          side: "left",
+          align: "start",
+        },
+      },
+      {
         element: '[data-tour="wiki-btn"]',
         popover: {
           title: "Open Wiki",
@@ -89,6 +99,16 @@ export function startTour(): void {
             "Back up your KB to a private GitHub repo. Commit changes locally, then push to GitHub whenever you're ready.",
           side: "bottom",
           align: "end",
+        },
+      },
+      {
+        element: '[data-tour="chat-composer"]',
+        popover: {
+          title: "Ready to get started?",
+          description:
+            "Type <strong>/onboard</strong> in the chat box and press Enter — your AI assistant will walk you through setting up your first Knowledge Base.",
+          side: "top",
+          align: "center",
         },
       },
     ],

@@ -401,6 +401,7 @@ export function SessionSidePanel(props: {
 
           <div
             id="file-tree-panel"
+            data-tour="kb-tree-panel"
             aria-hidden={!fileOpen()}
             inert={!fileOpen()}
             class="relative min-w-0 h-full shrink-0 overflow-hidden"
@@ -459,7 +460,7 @@ export function SessionSidePanel(props: {
                     <Match when={true}>{empty(props.empty())}</Match>
                   </Switch>
                 </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger py-0" style={{ "padding-left": "0", "padding-right": "0" }}>
+                <Tabs.Content value="all" class="bg-background-stronger py-0" style={{ "padding-left": "0", "padding-right": "0" }} data-tour="kb-files-panel">
                   {/* VS Code-style explorer header */}
                   <div class="kb-explorer-header" style={{
                     display: "flex", "align-items": "center",
