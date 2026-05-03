@@ -1941,6 +1941,7 @@ const reviewEmptyText = createMemo(() => {
             </Switch>
           </div>
 
+          <div data-tour="chat-composer">
           <SessionComposerRegion
             state={composer}
             ready={!store.deferRender && messagesReady()}
@@ -1992,6 +1993,7 @@ const reviewEmptyText = createMemo(() => {
               promptDock = el
             }}
           />
+          </div>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

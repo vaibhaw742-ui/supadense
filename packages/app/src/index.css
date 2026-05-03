@@ -1,5 +1,86 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
+/* ── Driver.js tour theme ─────────────────────────────────────── */
+.driver-popover.supadense-tour {
+  background: var(--color-background-stronger, #fff);
+  border: 1px solid var(--color-border-base, #e5e5e5);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  padding: 18px 20px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  max-width: 300px;
+}
+
+.driver-popover.supadense-tour .driver-popover-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-strong, #111);
+  margin-bottom: 6px;
+}
+
+.driver-popover.supadense-tour .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-base, #444);
+}
+
+.driver-popover.supadense-tour .driver-popover-progress-text {
+  font-size: 11px;
+  color: var(--color-text-weak, #888);
+}
+
+.driver-popover.supadense-tour .driver-popover-footer {
+  margin-top: 14px;
+  gap: 6px;
+}
+
+.driver-popover.supadense-tour button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.driver-popover.supadense-tour .driver-popover-next-btn {
+  background: hsl(20, 87%, 52%);
+  color: #fff;
+}
+
+.driver-popover.supadense-tour .driver-popover-next-btn:hover {
+  background: hsl(20, 87%, 44%);
+}
+
+.driver-popover.supadense-tour .driver-popover-prev-btn {
+  background: transparent;
+  color: var(--color-text-base, #444);
+  border: 1px solid var(--color-border-base, #e5e5e5) !important;
+}
+
+.driver-popover.supadense-tour .driver-popover-prev-btn:hover {
+  background: var(--color-background-weak, #f5f5f5);
+}
+
+.driver-popover.supadense-tour .driver-popover-close-btn {
+  color: var(--color-text-weak, #888);
+  font-size: 16px;
+  background: transparent;
+  padding: 2px 6px;
+}
+
+.driver-popover.supadense-tour .driver-popover-close-btn:hover {
+  color: var(--color-text-strong, #111);
+}
+
+.driver-popover-arrow-side-left.supadense-tour .driver-popover-arrow,
+.driver-popover-arrow-side-right.supadense-tour .driver-popover-arrow {
+  border-color: var(--color-background-stronger, #fff) !important;
+}
+/* ─────────────────────────────────────────────────────────────── */
+
 @layer components {
   @keyframes session-progress-whip {
     0% {

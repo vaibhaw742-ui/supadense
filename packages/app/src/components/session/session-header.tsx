@@ -263,7 +263,7 @@ function GitHubButton(props: { directory: string }) {
           setMenuOpen(open)
         }}
       >
-        <DropdownMenu.Trigger as="div">
+        <DropdownMenu.Trigger as="div" data-tour="github-btn">
           <Tooltip placement="bottom" value="GitHub sync">
             <Button
               variant="ghost"
@@ -393,6 +393,7 @@ function WikiButton() {
         class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
         onClick={() => window.open(`/${params.dir}/wiki`, "_blank")}
         aria-label="Open Wiki"
+        data-tour="wiki-btn"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
