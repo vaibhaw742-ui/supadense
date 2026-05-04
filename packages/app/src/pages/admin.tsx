@@ -196,6 +196,32 @@ export default function AdminPage() {
   const [expandedUser, setExpandedUser] = createSignal<string | null>(null)
   const [queriesCache, setQueriesCache] = createSignal<Record<string, UserQuery[]>>({})
   const [queriesLoading, setQueriesLoading] = createSignal<string | null>(null)
+  const [deletingUser, setDeletingUser] = createSignal<string | null>(null)
+  const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set())
+
+  async function deleteUser(e: MouseEvent, userId: string) {
+    e.stopPropagation()
+    if (!confirm("Remove this user? This cannot be undone.")) return
+    setDeletingUser(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/users/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      })
+      if (res.ok) {
+        setDeletedIds((prev) => new Set([...prev, userId]))
+        if (expandedUser() === userId) setExpandedUser(null)
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to delete user")
+      }
+    } catch {
+      alert("Failed to delete user — check connection")
+    } finally {
+      setDeletingUser(null)
+    }
+  }
 
   async function toggleUserQueries(userId: string) {
     if (expandedUser() === userId) {
@@ -353,10 +379,11 @@ export default function AdminPage() {
                       <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Last Login</th>
                       <th class="text-right px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Logins</th>
                       <th class="text-right px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Messages</th>
+                      <th class="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody>
-                    <For each={list()}>
+                    <For each={list().filter((u) => !deletedIds().has(u.id))}>
                       {(u) => {
                         const days = daysSince(u.last_login)
                         const lastLoginClass =
@@ -384,6 +411,16 @@ export default function AdminPage() {
                               <td class={`px-4 py-3 ${lastLoginClass}`}>{fmtDate(u.last_login)}</td>
                               <td class="px-4 py-3 text-right text-text-weak">{u.login_count}</td>
                               <td class="px-4 py-3 text-right text-text-weak">{u.message_count}</td>
+                              <td class="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  class="text-11-regular text-red-400 hover:text-red-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                                  disabled={deletingUser() === u.id}
+                                  onClick={(e) => deleteUser(e, u.id)}
+                                >
+                                  {deletingUser() === u.id ? "…" : "Remove"}
+                                </button>
+                              </td>
                             </tr>
                             <Show when={isExpanded()}>
                               <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-base)]">
