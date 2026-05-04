@@ -50,7 +50,6 @@ export default function Home() {
       const { userId } = (await res.json()) as { userId?: string }
       if (!userId) return
       const defaultDir = `/workspaces/${userId}/default`
-      layout.projects.open(defaultDir)
       server.projects.touch(defaultDir)
       navigate(`/${base64Encode(defaultDir)}/session`)
     } catch {}

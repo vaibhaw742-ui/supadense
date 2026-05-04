@@ -19,6 +19,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
+import { hasSeenTour, startTour } from "@/utils/tour"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -334,6 +335,12 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string; send?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const [autoSend, setAutoSend] = createSignal(false)
+
+  onMount(() => {
+    if (!hasSeenTour()) {
+      setTimeout(() => startTour(), 800)
+    }
+  })
 
   createEffect(() => {
     if (!prompt.ready()) return
