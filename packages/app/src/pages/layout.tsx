@@ -301,6 +301,13 @@ export default function Layout(props: ParentProps) {
     setHoverProject(undefined)
   })
 
+  // Auto-open sidebar when a project is active so sessions are visible by default
+  createEffect(() => {
+    if (layout.sidebar.opened()) return
+    if (!currentProject()) return
+    layout.sidebar.open()
+  })
+
   createEffect(() => {
     if (!state.autoselect) return
     const dir = params.dir
@@ -2456,6 +2463,12 @@ export default function Layout(props: ParentProps) {
       userEmail={getSessionEmail()}
       onLogout={handleLogout}
       notificationBell={<KbNotificationBell directory={() => currentProject()?.worktree} />}
+      onToggleSessions={() => layout.sidebar.toggle()}
+      onNewSession={() => {
+        const dir = currentProject()?.worktree
+        if (!dir) return
+        navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
+      }}
     />
   )
 

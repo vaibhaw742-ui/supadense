@@ -35,6 +35,8 @@ export const SidebarContent = (props: {
   userEmail?: string
   onLogout?: () => void
   notificationBell?: JSX.Element
+  onToggleSessions: () => void
+  onNewSession?: () => void
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -57,7 +59,29 @@ export const SidebarContent = (props: {
         class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
         onMouseMove={props.aimMove}
       >
-        <div class="flex-1 min-h-0 w-full" />
+        <div class="flex-1 min-h-0 w-full flex flex-col items-center pt-3 gap-2">
+          <Tooltip placement={placement()} value={props.opened() ? "Hide Sessions" : "Show Sessions"}>
+            <IconButton
+              icon={props.opened() ? "sidebar-active" : "sidebar"}
+              variant="ghost"
+              size="large"
+              onClick={props.onToggleSessions}
+              aria-label={props.opened() ? "Hide Sessions" : "Show Sessions"}
+              classList={{ "text-icon-strong": props.opened() }}
+            />
+          </Tooltip>
+          <Show when={props.onNewSession}>
+            <Tooltip placement={placement()} value="New Session">
+              <IconButton
+                icon="new-session"
+                variant="ghost"
+                size="large"
+                onClick={props.onNewSession}
+                aria-label="New Session"
+              />
+            </Tooltip>
+          </Show>
+        </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
           <Show when={props.notificationBell}>
             {props.notificationBell}
