@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -13,7 +13,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { getAuthToken } from "@/utils/server"
+import { getAuthToken, getBackendUrl } from "@/utils/server"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -36,6 +36,24 @@ export default function Home() {
     if (healthy === true) return "bg-icon-success-base"
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
+  })
+
+  // Auto-redirect authenticated users to their default workspace
+  onMount(async () => {
+    const token = getAuthToken()
+    if (!token) return
+    try {
+      const res = await fetch(`${getBackendUrl()}/supa-auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const { userId } = (await res.json()) as { userId?: string }
+      if (!userId) return
+      const defaultDir = `/workspaces/${userId}/default`
+      layout.projects.open(defaultDir)
+      server.projects.touch(defaultDir)
+      navigate(`/${base64Encode(defaultDir)}/session`)
+    } catch {}
   })
 
   // KB creation state — lives directly in Home so signals are always reactive
