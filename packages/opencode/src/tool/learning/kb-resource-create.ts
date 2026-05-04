@@ -40,11 +40,16 @@ async function fetchWithAirtop(url: string, apiKey: string): Promise<{
 
   // ── 2. Poll until completed ────────────────────────────────────────────
   const pollUrl = `https://api.airtop.ai/api/hooks/agents/e0103755-2146-43d3-bd25-5410d00b3654/invocations/${invocationId}/result`
-  const MAX_ATTEMPTS = 60       // 60 × 5s = 5 min max (Airtop takes ~100s)
-  const POLL_INTERVAL_MS = 5_000
+  const POLL_INTERVAL_MS = 2_000
+  const MAX_WAIT_MS = 5 * 60 * 1000  // 5 min total
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  // Airtop takes ~100s minimum — skip straight to 60s before first poll
+  await new Promise((r) => setTimeout(r, 60_000))
+  let elapsed = 60_000
+
+  while (elapsed < MAX_WAIT_MS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+    elapsed += POLL_INTERVAL_MS
 
     const res = await fetch(pollUrl, {
       headers: {
@@ -57,7 +62,7 @@ async function fetchWithAirtop(url: string, apiKey: string): Promise<{
 
     const data = (await res.json()) as { status?: string; output?: unknown; error?: string }
 
-    console.log(`[Airtop] attempt ${attempt + 1} status=${data.status ?? "(no status field)"}`)
+    console.log(`[Airtop] elapsed=${elapsed}ms status=${data.status ?? "(no status field)"}`)
 
     const statusLower = data.status?.toLowerCase() ?? ""
     if (statusLower === "failed") throw new Error(`Airtop extraction failed: ${data.error ?? "unknown"}`)
@@ -99,7 +104,7 @@ async function fetchWithAirtop(url: string, apiKey: string): Promise<{
     // status === "running" — keep polling
   }
 
-  throw new Error("Airtop extraction timed out after ~3 minutes")
+  throw new Error("Airtop extraction timed out after 5 minutes")
 }
 
 // ── Image download helpers ─────────────────────────────────────────────────
