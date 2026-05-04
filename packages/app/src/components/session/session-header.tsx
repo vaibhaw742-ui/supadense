@@ -11,7 +11,8 @@ import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { useParams } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -384,6 +385,76 @@ function GitHubButton(props: { directory: string }) {
   )
 }
 
+function KbSelectorDropdown() {
+  const params = useParams<{ dir: string }>()
+  const navigate = useNavigate()
+  const layout = useLayout()
+  const command = useCommand()
+  const projects = () => layout.projects.list()
+  const currentDir = () => {
+    try { return atob(params.dir.replace(/-/g, "+").replace(/_/g, "/")) } catch { return "" }
+  }
+  const currentProject = () => projects().find((p) => p.worktree === currentDir())
+  const currentName = () => {
+    const p = currentProject()
+    if (!p) return "Select KB"
+    return p.name || p.worktree.split("/").pop() || "KB"
+  }
+
+  return (
+    <DropdownMenu placement="bottom-start">
+      <Tooltip placement="bottom" value="Switch KB">
+        <DropdownMenu.Trigger
+          as={Button}
+          variant="ghost"
+          class="titlebar-icon h-6 px-2 gap-1 box-border shrink-0 flex items-center max-w-[140px]"
+          aria-label="Switch KB"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          <span class="text-xs truncate">{currentName()}</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </DropdownMenu.Trigger>
+      </Tooltip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content>
+          <For each={projects()}>
+            {(project) => {
+              const name = () => project.name || project.worktree.split("/").pop() || "KB"
+              const isActive = () => project.worktree === currentDir()
+              return (
+                <DropdownMenu.Item
+                  onSelect={() => navigate(`/${base64Encode(project.worktree)}/wiki`)}
+                >
+                  <div class="flex items-center gap-2">
+                    <Show when={isActive()}>
+                      <Icon name="check-small" size="small" class="text-icon-strong" />
+                    </Show>
+                    <Show when={!isActive()}>
+                      <div class="w-3" />
+                    </Show>
+                    <DropdownMenu.ItemLabel>{name()}</DropdownMenu.ItemLabel>
+                  </div>
+                </DropdownMenu.Item>
+              )
+            }}
+          </For>
+          <Show when={projects().length > 0}>
+            <DropdownMenu.Separator />
+          </Show>
+          <DropdownMenu.Item onSelect={() => command.trigger("project.create")}>
+            <DropdownMenu.ItemLabel>+ Add new KB</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
+  )
+}
+
 function WikiButton() {
   const params = useParams<{ dir: string }>()
   return (
@@ -654,6 +725,7 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <KbSelectorDropdown />
                 <WikiButton />
                 <DocsButton />
                 <Show when={projectDirectory()}>
