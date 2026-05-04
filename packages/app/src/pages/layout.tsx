@@ -1950,7 +1950,7 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
-  const SIDEBAR_COLLAPSED_WIDTH = 40
+  const SIDEBAR_COLLAPSED_WIDTH = 56
 
   createEffect(() => {
     const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : SIDEBAR_COLLAPSED_WIDTH

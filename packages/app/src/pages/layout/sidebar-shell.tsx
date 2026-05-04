@@ -46,18 +46,69 @@ export const SidebarContent = (props: {
 
   return (
     <div class="flex h-full w-full min-w-0 overflow-hidden" onMouseMove={props.aimMove}>
-      {/* Collapsed state: thin strip with expand toggle */}
+      {/* Collapsed state: thin strip with toggle + all icons */}
       <Show when={!expanded()}>
-        <div class="w-10 shrink-0 h-full bg-background-base flex flex-col items-center pt-3 gap-2">
-          <Tooltip placement="right" value="Show Sessions">
-            <IconButton
-              icon="sidebar"
-              variant="ghost"
-              size="large"
-              onClick={props.onToggleSessions}
-              aria-label="Show Sessions"
-            />
-          </Tooltip>
+        <div class="w-10 shrink-0 h-full bg-background-base flex flex-col items-center overflow-hidden">
+          <div class="flex-1 min-h-0 flex flex-col items-center pt-3 gap-2">
+            <Tooltip placement="right" value="Show Sessions">
+              <IconButton
+                icon="sidebar"
+                variant="ghost"
+                size="large"
+                onClick={props.onToggleSessions}
+                aria-label="Show Sessions"
+              />
+            </Tooltip>
+          </div>
+          <div class="shrink-0 flex flex-col items-center pb-6 gap-2">
+            <Show when={props.notificationBell}>
+              {props.notificationBell}
+            </Show>
+            <TooltipKeybind placement="right" title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
+              <IconButton
+                icon="settings-gear"
+                variant="ghost"
+                size="large"
+                onClick={props.onOpenSettings}
+                aria-label={props.settingsLabel()}
+              />
+            </TooltipKeybind>
+            <Tooltip placement="right" value={props.helpLabel()}>
+              <IconButton
+                icon="help"
+                variant="ghost"
+                size="large"
+                onClick={props.onOpenHelp}
+                aria-label={props.helpLabel()}
+              />
+            </Tooltip>
+            <Show when={props.onLogout}>
+              <DropdownMenu placement="right-end">
+                <Tooltip placement="right" value={props.userEmail ?? "Account"}>
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    icon="person"
+                    variant="ghost"
+                    size="large"
+                    aria-label="Account"
+                  />
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>
+                    <Show when={props.userEmail}>
+                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {props.userEmail}
+                      </div>
+                      <DropdownMenu.Separator />
+                    </Show>
+                    <DropdownMenu.Item onSelect={props.onLogout}>
+                      Sign out
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </Show>
+          </div>
         </div>
       </Show>
 
