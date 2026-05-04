@@ -301,12 +301,6 @@ export default function Layout(props: ParentProps) {
     setHoverProject(undefined)
   })
 
-  // Auto-open sidebar when a project is active so sessions are visible by default
-  createEffect(() => {
-    if (layout.sidebar.opened()) return
-    if (!currentProject()) return
-    layout.sidebar.open()
-  })
 
   createEffect(() => {
     if (!state.autoselect) return
@@ -1956,13 +1950,15 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  const SIDEBAR_COLLAPSED_WIDTH = 40
+
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : SIDEBAR_COLLAPSED_WIDTH
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
-  const panel = createMemo(() => Math.max(side() - 64, 0))
+  const side = createMemo(() => layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 244) : SIDEBAR_COLLAPSED_WIDTH)
+  const panel = createMemo(() => side())
 
   const loadedSessionDirs = new Set<string>()
 
@@ -2268,11 +2264,7 @@ export default function Layout(props: ParentProps) {
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
           "bg-background-stronger": !merged() && !hover(),
-          "flex-1 min-w-0": panelProps.mobile,
-          "max-w-full overflow-hidden": panelProps.mobile,
-        }}
-        style={{
-          width: panelProps.mobile ? undefined : `${panel()}px`,
+          "flex-1 min-w-0 max-w-full overflow-hidden": true,
         }}
       >
         <Show

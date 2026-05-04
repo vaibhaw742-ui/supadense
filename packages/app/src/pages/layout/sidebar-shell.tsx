@@ -1,17 +1,9 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
-import {
-  DragDropProvider,
-  DragDropSensors,
-  DragOverlay,
-  SortableProvider,
-  closestCenter,
-  type DragEvent,
-} from "@thisbeyond/solid-dnd"
-import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { createEffect, createMemo, Show, type Accessor, type JSX } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -53,94 +45,97 @@ export const SidebarContent = (props: {
   })
 
   return (
-    <div class="flex h-full w-full min-w-0 overflow-hidden">
-      <div
-        data-component="sidebar-rail"
-        class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
-        onMouseMove={props.aimMove}
-      >
-        <div class="flex-1 min-h-0 w-full flex flex-col items-center pt-3 gap-2">
-          <Tooltip placement={placement()} value={props.opened() ? "Hide Sessions" : "Show Sessions"}>
+    <div class="flex h-full w-full min-w-0 overflow-hidden" onMouseMove={props.aimMove}>
+      {/* Collapsed state: thin strip with expand toggle */}
+      <Show when={!expanded()}>
+        <div class="w-10 shrink-0 h-full bg-background-base flex flex-col items-center pt-3 gap-2">
+          <Tooltip placement="right" value="Show Sessions">
             <IconButton
-              icon={props.opened() ? "sidebar-active" : "sidebar"}
+              icon="sidebar"
               variant="ghost"
               size="large"
               onClick={props.onToggleSessions}
-              aria-label={props.opened() ? "Hide Sessions" : "Show Sessions"}
-              classList={{ "text-icon-strong": props.opened() }}
+              aria-label="Show Sessions"
             />
           </Tooltip>
-          <Show when={props.onNewSession}>
-            <Tooltip placement={placement()} value="New Session">
-              <IconButton
-                icon="new-session"
-                variant="ghost"
-                size="large"
-                onClick={props.onNewSession}
-                aria-label="New Session"
-              />
-            </Tooltip>
-          </Show>
         </div>
-        <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
-          <Show when={props.notificationBell}>
-            {props.notificationBell}
-          </Show>
-          <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
-            <IconButton
-              icon="settings-gear"
-              variant="ghost"
-              size="large"
-              onClick={props.onOpenSettings}
-              aria-label={props.settingsLabel()}
-            />
-          </TooltipKeybind>
-          <Tooltip placement={placement()} value={props.helpLabel()}>
-            <IconButton
-              icon="help"
-              variant="ghost"
-              size="large"
-              onClick={props.onOpenHelp}
-              aria-label={props.helpLabel()}
-            />
-          </Tooltip>
-          <Show when={props.onLogout}>
-            <DropdownMenu placement="right-end">
-              <Tooltip placement={placement()} value={props.userEmail ?? "Account"}>
-                <DropdownMenu.Trigger
-                  as={IconButton}
-                  icon="person"
-                  variant="ghost"
-                  size="large"
-                  aria-label="Account"
-                />
-              </Tooltip>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content>
-                  <Show when={props.userEmail}>
-                    <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                      {props.userEmail}
-                    </div>
-                    <DropdownMenu.Separator />
-                  </Show>
-                  <DropdownMenu.Item onSelect={props.onLogout}>
-                    Sign out
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu>
-          </Show>
-        </div>
-      </div>
+      </Show>
 
+      {/* Expanded state: full sessions panel + footer */}
       <div
-        ref={(el) => {
-          panel = el
+        ref={(el) => { panel = el }}
+        classList={{
+          "flex flex-col h-full w-full min-w-0 overflow-hidden": true,
+          "pointer-events-none": !expanded(),
         }}
-        classList={{ "flex-1 flex h-full min-h-0 min-w-0 overflow-hidden": true, "pointer-events-none": !expanded() }}
         aria-hidden={!expanded()}
       >
-        {props.renderPanel()}
+        {/* Sessions panel content */}
+        <div class="flex-1 min-h-0 overflow-hidden">
+          {props.renderPanel()}
+        </div>
+
+        {/* Footer: bell, settings, help, account + collapse button */}
+        <div class="shrink-0 flex items-center justify-between px-2 py-2 border-t border-border-weaker-base bg-background-base">
+          <div class="flex items-center gap-1">
+            <Show when={props.notificationBell}>
+              {props.notificationBell}
+            </Show>
+            <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
+              <IconButton
+                icon="settings-gear"
+                variant="ghost"
+                size="large"
+                onClick={props.onOpenSettings}
+                aria-label={props.settingsLabel()}
+              />
+            </TooltipKeybind>
+            <Tooltip placement={placement()} value={props.helpLabel()}>
+              <IconButton
+                icon="help"
+                variant="ghost"
+                size="large"
+                onClick={props.onOpenHelp}
+                aria-label={props.helpLabel()}
+              />
+            </Tooltip>
+            <Show when={props.onLogout}>
+              <DropdownMenu placement="top-start">
+                <Tooltip placement={placement()} value={props.userEmail ?? "Account"}>
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    icon="person"
+                    variant="ghost"
+                    size="large"
+                    aria-label="Account"
+                  />
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>
+                    <Show when={props.userEmail}>
+                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {props.userEmail}
+                      </div>
+                      <DropdownMenu.Separator />
+                    </Show>
+                    <DropdownMenu.Item onSelect={props.onLogout}>
+                      Sign out
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </Show>
+          </div>
+          <Tooltip placement={placement()} value="Collapse">
+            <IconButton
+              icon="sidebar-active"
+              variant="ghost"
+              size="large"
+              onClick={props.onToggleSessions}
+              aria-label="Collapse sidebar"
+            />
+          </Tooltip>
+        </div>
       </div>
     </div>
   )
