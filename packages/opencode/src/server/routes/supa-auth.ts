@@ -332,5 +332,43 @@ export function SupaAuthRoutes() {
     return c.json(users)
   })
 
+  app.get("/admin/user-queries", (c) => {
+    const auth = requireAdmin(c)
+    if ("error" in auth) return c.json({ error: auth.error }, auth.error === "Forbidden" ? 403 : 401)
+
+    const userId = c.req.query("userId")
+    if (!userId) return c.json({ error: "userId required" }, 400)
+
+    const db = Database.Client().$client
+
+    const rows = db.prepare(`
+      SELECT
+        m.id as message_id,
+        m.time_created,
+        s.title as session_title,
+        (
+          SELECT json_extract(p.data, '$.text')
+          FROM part p
+          WHERE p.message_id = m.id
+            AND json_extract(p.data, '$.type') = 'text'
+            AND (json_extract(p.data, '$.synthetic') IS NULL OR json_extract(p.data, '$.synthetic') = 0)
+          ORDER BY p.time_created ASC
+          LIMIT 1
+        ) as query_text
+      FROM message m
+      JOIN session s ON s.id = m.session_id
+      JOIN project pr ON pr.id = s.project_id
+      WHERE pr.user_id = ?
+        AND s.parent_id IS NULL
+        AND json_extract(m.data, '$.role') = 'user'
+      ORDER BY m.time_created DESC
+      LIMIT 10
+    `).all(userId) as { message_id: string; time_created: number; session_title: string; query_text: string | null }[]
+
+    const queries = rows.filter((r) => r.query_text && r.query_text.trim().length > 0)
+
+    return c.json(queries)
+  })
+
   return app
 }

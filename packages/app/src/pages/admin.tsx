@@ -30,6 +30,13 @@ async function fetchAnalytics(): Promise<AnalyticsData | null> {
   return res.json()
 }
 
+type UserQuery = {
+  message_id: string
+  time_created: number
+  session_title: string
+  query_text: string
+}
+
 async function fetchUsers(): Promise<UserDetail[] | null> {
   const token = getAuthToken()
   if (!token) return null
@@ -37,6 +44,16 @@ async function fetchUsers(): Promise<UserDetail[] | null> {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchUserQueries(userId: string): Promise<UserQuery[]> {
+  const token = getAuthToken()
+  if (!token) return []
+  const res = await fetch(`${getBackendUrl()}/supa-auth/admin/user-queries?userId=${encodeURIComponent(userId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return []
   return res.json()
 }
 
@@ -176,6 +193,22 @@ export default function AdminPage() {
   const [analytics] = createResource(() => isAdmin() === true || undefined, fetchAnalytics)
   const [users] = createResource(() => isAdmin() === true || undefined, fetchUsers)
   const [tab, setTab] = createSignal<"overview" | "users">("overview")
+  const [expandedUser, setExpandedUser] = createSignal<string | null>(null)
+  const [queriesCache, setQueriesCache] = createSignal<Record<string, UserQuery[]>>({})
+  const [queriesLoading, setQueriesLoading] = createSignal<string | null>(null)
+
+  async function toggleUserQueries(userId: string) {
+    if (expandedUser() === userId) {
+      setExpandedUser(null)
+      return
+    }
+    setExpandedUser(userId)
+    if (queriesCache()[userId]) return
+    setQueriesLoading(userId)
+    const queries = await fetchUserQueries(userId)
+    setQueriesCache((prev) => ({ ...prev, [userId]: queries }))
+    setQueriesLoading(null)
+  }
 
   createEffect(() => {
     if (!isAdmin.loading && isAdmin() === false) navigate("/")
@@ -334,14 +367,56 @@ export default function AdminPage() {
                               : days <= 7
                                 ? "text-yellow-400"
                                 : "text-text-weak"
+                        const isExpanded = () => expandedUser() === u.id
+                        const queries = () => queriesCache()[u.id] ?? []
+                        const isLoading = () => queriesLoading() === u.id
                         return (
-                          <tr class="border-b border-[var(--border-weak-base)] last:border-0 hover:bg-[var(--surface-raised-base)] transition-colors">
-                            <td class="px-4 py-3 text-text-strong">{u.email}</td>
-                            <td class="px-4 py-3 text-text-weak">{fmtDate(u.created_at)}</td>
-                            <td class={`px-4 py-3 ${lastLoginClass}`}>{fmtDate(u.last_login)}</td>
-                            <td class="px-4 py-3 text-right text-text-weak">{u.login_count}</td>
-                            <td class="px-4 py-3 text-right text-text-weak">{u.message_count}</td>
-                          </tr>
+                          <>
+                            <tr
+                              class="border-b border-[var(--border-weak-base)] hover:bg-[var(--surface-raised-base)] transition-colors cursor-pointer select-none"
+                              onClick={() => toggleUserQueries(u.id)}
+                            >
+                              <td class="px-4 py-3 text-text-strong flex items-center gap-2">
+                                <span class="text-text-weak text-10-regular transition-transform" style={{ display: "inline-block", transform: isExpanded() ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+                                {u.email}
+                              </td>
+                              <td class="px-4 py-3 text-text-weak">{fmtDate(u.created_at)}</td>
+                              <td class={`px-4 py-3 ${lastLoginClass}`}>{fmtDate(u.last_login)}</td>
+                              <td class="px-4 py-3 text-right text-text-weak">{u.login_count}</td>
+                              <td class="px-4 py-3 text-right text-text-weak">{u.message_count}</td>
+                            </tr>
+                            <Show when={isExpanded()}>
+                              <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-base)]">
+                                <td colspan="5" class="px-8 py-4">
+                                  <div class="text-12-medium text-text-weak uppercase tracking-wide mb-3">Last 10 chat queries</div>
+                                  <Show when={isLoading()}>
+                                    <div class="text-12-regular text-text-weak">Loading...</div>
+                                  </Show>
+                                  <Show when={!isLoading() && queries().length === 0}>
+                                    <div class="text-12-regular text-text-weak">No queries found.</div>
+                                  </Show>
+                                  <Show when={!isLoading() && queries().length > 0}>
+                                    <div class="flex flex-col gap-2">
+                                      <For each={queries()}>
+                                        {(q) => (
+                                          <div class="flex items-start gap-3 rounded-lg bg-[var(--surface-raised-base)] px-3 py-2">
+                                            <span class="text-11-regular text-text-weak whitespace-nowrap pt-0.5 min-w-[120px]">
+                                              {new Date(q.time_created).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                                              {" "}
+                                              {new Date(q.time_created).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                            <span class="text-12-regular text-text-weak shrink-0">·</span>
+                                            <span class="text-12-regular text-text-strong line-clamp-2 flex-1">{q.query_text}</span>
+                                            <span class="text-11-regular text-text-weak whitespace-nowrap pt-0.5 shrink-0">{q.session_title}</span>
+                                          </div>
+                                        )}
+                                      </For>
+                                    </div>
+                                  </Show>
+                                </td>
+                              </tr>
+                            </Show>
+                          </>
                         )
                       }}
                     </For>
