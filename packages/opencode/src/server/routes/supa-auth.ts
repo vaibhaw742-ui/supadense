@@ -207,7 +207,12 @@ export function SupaAuthRoutes() {
     const callerPayload = callerToken ? verifyToken(callerToken, Flag.SUPADENSE_AUTH_SECRET!) as { userId: string } : null
     if (callerPayload?.userId === c.req.param("id")) return c.json({ error: "Cannot delete yourself" }, 400)
 
-    Database.Client().$client.prepare("DELETE FROM auth_users WHERE id = ?").run(c.req.param("id"))
+    const db = Database.Client().$client
+    const id = c.req.param("id")
+    // Null out project.user_id before deleting — project has a FK to auth_users
+    // without cascade, so the delete would fail if the user has any projects.
+    db.prepare("UPDATE project SET user_id = NULL WHERE user_id = ?").run(id)
+    db.prepare("DELETE FROM auth_users WHERE id = ?").run(id)
     return c.json({ ok: true })
   })
 
