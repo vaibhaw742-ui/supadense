@@ -1,223 +1,100 @@
 ---
 title: Models
-description: Configuring an LLM provider and model.
+description: Choose and configure the AI model that powers your Supadense knowledge base.
 ---
 
-Supadense uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
-
----
-
-## Providers
-
-Most popular providers are preloaded by default. If you've added the credentials for a provider through the `/connect` command, they'll be available when you start Supadense.
-
-Learn more about [providers](/docs/providers).
+Supadense uses a large language model (LLM) to power ingestion, extraction, and chat. You can choose which model to use and configure it through the app settings or your `opencode.json` config file.
 
 ---
 
-## Select a model
+## Supported providers
 
-Once you've configured your provider you can select the model you want by typing in:
+Supadense works with the major AI providers out of the box:
 
-```bash frame="none"
-/models
-```
+| Provider | Examples |
+|----------|---------|
+| **Anthropic** | Claude Sonnet 4, Claude Opus 4 |
+| **OpenAI** | GPT-4o, GPT-4.1, o3 |
+| **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash |
+| **OpenRouter** | Any model via OpenRouter |
+
+To connect a provider, open **Settings → Providers** and enter your API key.
 
 ---
 
 ## Recommended models
 
-There are a lot of models out there, with new models coming out every week.
+Supadense requires a model that is capable of both **long-context understanding** (for reading full articles, papers, and transcripts) and **reliable tool use** (for writing structured KB placements).
+
+The following models are recommended:
+
+| Model | Provider | Best for |
+|-------|----------|---------|
+| **Claude Sonnet 4** | Anthropic | Best overall — fast, accurate tool use |
+| **Claude Opus 4** | Anthropic | Highest quality extractions, slower |
+| **GPT-4.1** | OpenAI | Strong tool use, good at structured output |
+| **Gemini 2.5 Pro** | Google | Long context, good for large PDFs |
 
 :::tip
-Consider using one of the models we recommend.
+Claude Sonnet 4 is the default and what Supadense is optimized for. If you're unsure, start here.
 :::
 
-However, there are only a few of them that are good at both generating code and tool calling.
-
-Here are several models that work well with Supadense, in no particular order. (This is not an exhaustive list nor is it necessarily up to date):
-
-- GPT 5.2
-- GPT 5.1 Codex
-- Claude Opus 4.5
-- Claude Sonnet 4.5
-- Minimax M2.1
-- Gemini 3 Pro
-
 ---
 
-## Set a default
+## Changing the model
 
-To set one of these as the default model, you can set the `model` key in your
-Supadense config.
+### From the app
 
-```json title="opencode.json" {3}
+Click the **model name** shown in the session header to open the model picker. Select any model from your connected providers.
+
+The selected model is saved per-session and remembered for new sessions.
+
+### From the config
+
+To set a default model for all sessions, add it to your `opencode.json`:
+
+```json title="opencode.json"
 {
   "$schema": "https://supadense.com/config.json",
-  "model": "lmstudio/google/gemma-3n-e4b"
+  "model": "anthropic/claude-sonnet-4-5"
 }
 ```
 
-Here the full ID is `provider_id/model_id`. For example, if you're using [Supadense Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
-
-If you've configured a [custom provider](/docs/providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
+The format is `provider_id/model_id`. You can find the exact IDs in the model picker.
 
 ---
 
-## Configure models
+## The KB Curator model
 
-You can globally configure a model's options through the config.
+Supadense runs a separate background agent — the **KB Curator** — when you add a resource via `/memorize`. The curator is responsible for reading the resource and placing extracted content into your wiki.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+By default, the curator uses the same model as your main session. You can set a different model for it in `opencode.json` to balance cost and quality:
+
+```json title="opencode.json"
 {
   "$schema": "https://supadense.com/config.json",
-  "provider": {
-    "openai": {
-      "models": {
-        "gpt-5": {
-          "options": {
-            "reasoningEffort": "high",
-            "textVerbosity": "low",
-            "reasoningSummary": "auto",
-            "include": ["reasoning.encrypted_content"],
-          },
-        },
-      },
-    },
-    "anthropic": {
-      "models": {
-        "claude-sonnet-4-5-20250929": {
-          "options": {
-            "thinking": {
-              "type": "enabled",
-              "budgetTokens": 16000,
-            },
-          },
-        },
-      },
-    },
-  },
+  "agents": {
+    "kb-curator": {
+      "model": "anthropic/claude-haiku-4-5"
+    }
+  }
 }
 ```
 
-Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
-The built-in provider and model names can be found on [Models.dev](https://models.dev).
-
-You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
-
-You can also define custom variants that extend built-in ones. Variants let you configure different settings for the same model without creating duplicate entries:
-
-```jsonc title="opencode.jsonc" {6-21}
-{
-  "$schema": "https://supadense.com/config.json",
-  "provider": {
-    "opencode": {
-      "models": {
-        "gpt-5": {
-          "variants": {
-            "high": {
-              "reasoningEffort": "high",
-              "textVerbosity": "low",
-              "reasoningSummary": "auto",
-            },
-            "low": {
-              "reasoningEffort": "low",
-              "textVerbosity": "low",
-              "reasoningSummary": "auto",
-            },
-          },
-        },
-      },
-    },
-  },
-}
-```
+Using a faster, cheaper model for the curator (like Claude Haiku) keeps ingestion costs low while reserving a more capable model for your main chat sessions.
 
 ---
 
-## Variants
+## Context window
 
-Many models support multiple variants with different configurations. Supadense ships with built-in default variants for popular providers.
+The ingestion pipeline sends up to **12,000 characters** of raw resource content to the curator per run. For very long resources (long PDFs, full-length YouTube transcripts), the content is truncated at this limit before being passed to the model.
 
-### Built-in variants
-
-Supadense ships with default variants for many providers:
-
-**Anthropic**:
-
-- `high` - High thinking budget (default)
-- `max` - Maximum thinking budget
-
-**OpenAI**:
-
-Varies by model but roughly:
-
-- `none` - No reasoning
-- `minimal` - Minimal reasoning effort
-- `low` - Low reasoning effort
-- `medium` - Medium reasoning effort
-- `high` - High reasoning effort
-- `xhigh` - Extra high reasoning effort
-
-**Google**:
-
-- `low` - Lower effort/token budget
-- `high` - Higher effort/token budget
-
-:::tip
-This list is not comprehensive. Many other providers have built-in defaults too.
-:::
-
-### Custom variants
-
-You can override existing variants or add your own:
-
-```jsonc title="opencode.jsonc" {7-18}
-{
-  "$schema": "https://supadense.com/config.json",
-  "provider": {
-    "openai": {
-      "models": {
-        "gpt-5": {
-          "variants": {
-            "thinking": {
-              "reasoningEffort": "high",
-              "textVerbosity": "low",
-            },
-            "fast": {
-              "disabled": true,
-            },
-          },
-        },
-      },
-    },
-  },
-}
-```
-
-### Cycle variants
-
-Use the keybind `variant_cycle` to quickly switch between variants. [Learn more](/docs/keybinds).
+Most models with a 32k+ context window handle this comfortably.
 
 ---
 
-## Loading models
+## Cost
 
-When Supadense starts up, it checks for models in the following priority order:
+Every `/memorize` call runs one curator session — typically **1–3 LLM calls** depending on how many sections the resource is placed into. A typical ingestion costs a few cents or less with Claude Sonnet 4.
 
-1. The `--model` or `-m` command line flag. The format is the same as in the config file: `provider_id/model_id`.
-
-2. The model list in the Supadense config.
-
-   ```json title="opencode.json"
-   {
-     "$schema": "https://supadense.com/config.json",
-     "model": "anthropic/claude-sonnet-4-20250514"
-   }
-   ```
-
-   The format here is `provider/model`.
-
-3. The last used model.
-
-4. The first model using an internal priority.
+Chat responses in the KB session (answering questions from your KB) do not call the curator and cost only what a normal chat message costs.

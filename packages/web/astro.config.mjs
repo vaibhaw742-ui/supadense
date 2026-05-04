@@ -171,6 +171,7 @@ export default defineConfig({
         { label: "Get Started", link: "get-started" },
         { label: "KB Structure", link: "kb-structure" },
         { label: "Wiki Page", link: "wiki" },
+        { label: "Models", link: "models" },
         {
           label: "Knowledge Base",
           items: [
