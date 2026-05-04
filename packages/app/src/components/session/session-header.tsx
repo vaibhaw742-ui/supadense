@@ -428,7 +428,7 @@ function KbSelectorDropdown() {
               const isActive = () => project.worktree === currentDir()
               return (
                 <DropdownMenu.Item
-                  onSelect={() => navigate(`/${base64Encode(project.worktree)}/wiki`)}
+                  onSelect={() => navigate(`/${base64Encode(project.worktree)}/session`)}
                 >
                   <div class="flex items-center gap-2">
                     <Show when={isActive()}>
