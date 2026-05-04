@@ -48,7 +48,7 @@ export const SidebarContent = (props: {
     <div class="flex h-full w-full min-w-0 overflow-hidden" onMouseMove={props.aimMove}>
       {/* Collapsed state: thin strip with toggle + all icons */}
       <Show when={!expanded()}>
-        <div class="w-10 shrink-0 h-full bg-background-base flex flex-col items-center overflow-hidden">
+        <div class="w-full h-full bg-background-base flex flex-col items-center overflow-hidden">
           <div class="flex-1 min-h-0 flex flex-col items-center pt-3 gap-2">
             <Tooltip placement="right" value="Show Sessions">
               <IconButton
@@ -117,7 +117,7 @@ export const SidebarContent = (props: {
         ref={(el) => { panel = el }}
         classList={{
           "flex flex-col h-full w-full min-w-0 overflow-hidden": true,
-          "pointer-events-none": !expanded(),
+          "hidden": !expanded(),
         }}
         aria-hidden={!expanded()}
       >
