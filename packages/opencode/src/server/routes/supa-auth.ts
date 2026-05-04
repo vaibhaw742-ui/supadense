@@ -39,8 +39,11 @@ export async function seedAdminUser() {
   if (!secret || !email || !password) return
 
   const client = Database.Client().$client
-  const existing = client.prepare("SELECT id FROM auth_users WHERE email = ?").get(email)
-  if (existing) return
+  const existing = client.prepare("SELECT id FROM auth_users WHERE email = ?").get(email) as { id: string } | undefined
+  if (existing) {
+    provisionWorkspace(existing.id)
+    return
+  }
 
   const hash = await Bun.password.hash(password)
   const id = randomUUID()
@@ -106,6 +109,8 @@ export function SupaAuthRoutes() {
     if (!valid) return c.json({ error: "Invalid credentials" }, 401)
 
     if (user.status === "pending") return c.json({ error: "waitlist" }, 403)
+
+    provisionWorkspace(user.id)
 
     const exp = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
     const token = signToken({ userId: user.id, email: user.email, exp }, secret)
