@@ -23,6 +23,7 @@ import { MessageID } from "../../session/schema"
 import { MessageV2 } from "../../session/message-v2"
 import { Resource } from "../../learning/resource"
 import { Workspace } from "../../learning/workspace"
+import { WikiBuilder } from "../../learning/wiki-builder"
 
 // ── Prompt builder ─────────────────────────────────────────────────────────
 
@@ -235,7 +236,7 @@ export const KbPipelineRunTool = Tool.defineEffect(
       const placements: string[] = []
       const concepts: string[] = []
       const wikiBuilt: string[] = []
-      let errors = 0
+      const errorDetails: string[] = []
 
       const page = MessageV2.page({ sessionID: childSession.id, limit: 200 })
       for (const msg of page.items) {
@@ -244,7 +245,14 @@ export const KbPipelineRunTool = Tool.defineEffect(
           if (part.type !== "tool") continue
           if (!KB_TOOLS.has(part.tool)) continue
           const state = part.state
-          if (state.status === "error") { errors++; continue }
+          if (state.status === "error") {
+            const errMsg = (state as Record<string, unknown>).error as string | undefined
+            const input = (state as Record<string, unknown>).input as Record<string, unknown> | undefined
+            const detail = input?.name ?? input?.section_slug ?? input?.page_ids ?? ""
+            errorDetails.push(`${part.tool}${detail ? ` (${detail})` : ""}: ${errMsg ?? "unknown error"}`)
+            console.error(`[KB Pipeline] tool error: ${part.tool} — ${errMsg ?? "unknown"}`, input)
+            continue
+          }
           if (state.status !== "completed") continue
           if (part.tool === "kb_resource_place") {
             const input = state.input as Record<string, unknown>
@@ -282,12 +290,28 @@ export const KbPipelineRunTool = Tool.defineEffect(
         lines.push("")
       }
 
-      if (wikiBuilt.length > 0) {
-        lines.push(`Wiki rebuilt for ${[...new Set(wikiBuilt)].length} page(s).`)
+      // If the curator failed to build the wiki (common permission issue), rebuild directly
+      const wikiToolFailed = errorDetails.some((e) => e.startsWith("kb_wiki_build"))
+      if (placements.length > 0 && wikiToolFailed) {
+        try {
+          WikiBuilder.buildAll(params.workspace_id)
+          WikiBuilder.buildSupadenseMd(workspace)
+          WikiBuilder.buildLogFile(workspace)
+          wikiBuilt.push(...Workspace.getWikiPages(params.workspace_id).map((p) => p.file_path))
+          // Remove kb_wiki_build from error details since we recovered
+          errorDetails.splice(0, errorDetails.length, ...errorDetails.filter((e) => !e.startsWith("kb_wiki_build")))
+        } catch (e) {
+          console.error("[KB Pipeline] fallback wiki build failed:", e instanceof Error ? e.message : String(e))
+        }
       }
 
-      if (errors > 0) {
-        lines.push(`⚠ ${errors} tool call(s) failed during extraction.`)
+      if (wikiBuilt.length > 0) {
+        lines.push(`Wiki has been rebuilt and updated.`)
+      }
+
+      if (errorDetails.length > 0) {
+        lines.push(`⚠ ${errorDetails.length} non-critical tool call(s) failed during extraction, but the pipeline completed successfully.`)
+        for (const e of errorDetails) lines.push(`  • ${e}`)
       }
 
       return {

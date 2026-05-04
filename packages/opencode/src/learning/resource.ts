@@ -365,6 +365,13 @@ export namespace ConceptStore {
   }
 
   export function linkToPage(conceptId: string, wikiPageId: string, sectionSlug?: string, introducedByResourceId?: string): void {
+    // Validate FK — skip silently if the wiki page doesn't exist
+    const pageExists = Database.use((db) =>
+      db.select({ id: LearningWikiPageTable.id }).from(LearningWikiPageTable)
+        .where(eq(LearningWikiPageTable.id, wikiPageId)).get(),
+    )
+    if (!pageExists) return
+
     const existing = Database.use((db) =>
       db
         .select()
