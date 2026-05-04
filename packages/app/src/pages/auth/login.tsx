@@ -1,4 +1,5 @@
 import { createSignal, Show } from "solid-js"
+import { createMediaQuery } from "@solid-primitives/media"
 import { setAuthToken } from "@/utils/server"
 
 interface Props {
@@ -34,6 +35,7 @@ const linkBtn = {
 }
 
 export default function LoginPage(props: Props) {
+  const isMobile = createMediaQuery("(max-width: 640px)")
   const [mode, setMode] = createSignal<Mode>(props.initialMode ?? "login")
   const [email, setEmail] = createSignal("")
   const [password, setPassword] = createSignal("")
@@ -102,7 +104,7 @@ export default function LoginPage(props: Props) {
 
   return (
     <div style={{ "min-height": "100dvh", display: "flex", "flex-direction": "column", background: "#fff", "font-family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      <nav style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "16px 40px", "border-bottom": "1px solid #f0f0f0" }}>
+      <nav style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: isMobile() ? "12px 16px" : "16px 40px", "border-bottom": "1px solid #f0f0f0" }}>
         <div
           onClick={props.onBack}
           style={{ display: "flex", "align-items": "center", gap: "10px", cursor: props.onBack ? "pointer" : "default" }}
@@ -127,7 +129,7 @@ export default function LoginPage(props: Props) {
           background: "#fff",
           border: "1px solid #e5e5e5",
           "border-radius": "12px",
-          padding: "32px",
+          padding: isMobile() ? "20px 16px" : "32px",
           "box-shadow": "0 2px 12px rgba(0,0,0,0.06)",
         }}>
           <div style={{ "text-align": "center", "margin-bottom": "28px" }}>
