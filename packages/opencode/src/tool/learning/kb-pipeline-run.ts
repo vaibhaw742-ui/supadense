@@ -9,18 +9,19 @@
  *   2. Extract content into each relevant schema section
  *   3. Call kb_resource_place (×N), kb_concept_upsert, kb_wiki_build, kb_event_log
  *
- * The main conversation is unblocked immediately after this call.
+ * When done, injects a synthetic user message into the parent session with a
+ * full summary of placements, concepts, and wiki pages updated.
  */
 import z from "zod"
 
 import { Effect } from "effect"
+import { ulid } from "ulid"
 import { Tool } from "../tool"
 import { Agent } from "../../agent/agent"
-import { Config } from "../../config/config"
 import { Session } from "../../session"
-import { SessionPrompt } from "../../session/prompt"
-import { MessageID } from "../../session/schema"
+import { SessionID, MessageID, PartID } from "../../session/schema"
 import { MessageV2 } from "../../session/message-v2"
+import { SessionPrompt } from "../../session/prompt"
 import { Resource } from "../../learning/resource"
 import { Workspace } from "../../learning/workspace"
 import { WikiBuilder } from "../../learning/wiki-builder"
@@ -129,13 +130,138 @@ function buildCuratorPrompt(
   return lines.filter(Boolean).join("\n")
 }
 
+// ── Background completion → inject notification into parent session ─────────
+
+async function injectCompletionNotification(
+  parentSessionID: string,
+  workspaceID: string,
+  childSessionID: string,
+  resourceLabel: string,
+  model: { modelID: string; providerID: string },
+): Promise<void> {
+  const KB_TOOLS = new Set([
+    "kb_resource_place",
+    "kb_concept_upsert",
+    "kb_wiki_build",
+    "kb_event_log",
+    "kb_resource_create",
+    "kb_category_manage",
+  ])
+
+  const placements: string[] = []
+  const concepts: string[] = []
+  const wikiBuilt: string[] = []
+  const errorDetails: string[] = []
+
+  const page = MessageV2.page({ sessionID: childSessionID as SessionID, limit: 200 })
+  for (const msg of page.items) {
+    if (msg.info.role !== "assistant") continue
+    for (const part of msg.parts) {
+      if (part.type !== "tool") continue
+      if (!KB_TOOLS.has(part.tool)) continue
+      const state = part.state
+      if (state.status === "error") {
+        const errMsg = (state as Record<string, unknown>).error as string | undefined
+        const input = (state as Record<string, unknown>).input as Record<string, unknown> | undefined
+        const detail = input?.name ?? input?.section_slug ?? input?.page_ids ?? ""
+        errorDetails.push(`${part.tool}${detail ? ` (${detail})` : ""}: ${errMsg ?? "unknown error"}`)
+        continue
+      }
+      if (state.status !== "completed") continue
+      if (part.tool === "kb_resource_place") {
+        const input = state.input as Record<string, unknown>
+        const slug = (input?.section_slug as string) ?? ""
+        const pageId = (input?.wiki_page_id as string) ?? ""
+        if (slug) placements.push(`${pageId} → ${slug}`)
+      } else if (part.tool === "kb_concept_upsert") {
+        const input = state.input as Record<string, unknown>
+        const name = (input?.name as string) ?? ""
+        if (name) concepts.push(name)
+      } else if (part.tool === "kb_wiki_build") {
+        const input = state.input as Record<string, unknown>
+        const ids = (input?.page_ids as string[]) ?? []
+        wikiBuilt.push(...ids)
+      }
+    }
+  }
+
+  // Fallback wiki build if the curator's kb_wiki_build failed due to permissions
+  const wikiToolFailed = errorDetails.some((e) => e.startsWith("kb_wiki_build"))
+  if (placements.length > 0 && wikiToolFailed) {
+    try {
+      const workspace = Workspace.getById(workspaceID)
+      if (workspace) {
+        WikiBuilder.buildAll(workspaceID)
+        WikiBuilder.buildSupadenseMd(workspace)
+        WikiBuilder.buildLogFile(workspace)
+        wikiBuilt.push(...Workspace.getWikiPages(workspaceID).map((p) => p.file_path))
+        errorDetails.splice(0, errorDetails.length, ...errorDetails.filter((e) => !e.startsWith("kb_wiki_build")))
+      }
+    } catch (e) {
+      console.error("[KB Pipeline] fallback wiki build failed:", e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // Build the notification text
+  const lines: string[] = [
+    `**KB pipeline complete:** ${resourceLabel}`,
+    "",
+  ]
+
+  if (placements.length > 0) {
+    lines.push(`Placed into ${placements.length} section(s):`)
+    for (const p of placements) lines.push(`  • ${p}`)
+    lines.push("")
+  } else {
+    lines.push("No section placements recorded.")
+    lines.push("")
+  }
+
+  if (concepts.length > 0) {
+    lines.push(`Concepts extracted: ${concepts.join(", ")}`)
+    lines.push("")
+  }
+
+  if (wikiBuilt.length > 0) {
+    lines.push("Wiki has been rebuilt and updated.")
+    lines.push("")
+  }
+
+  if (errorDetails.length > 0) {
+    lines.push(`⚠ ${errorDetails.length} non-critical tool call(s) failed during extraction, but the pipeline completed successfully.`)
+    for (const e of errorDetails) lines.push(`  • ${e}`)
+    lines.push("")
+  }
+
+  const notificationText = lines.join("\n").trimEnd()
+
+  // Inject a synthetic user message into the parent session
+  const msgID = MessageID.ascending()
+  const userMsg: MessageV2.User = {
+    id: msgID,
+    sessionID: parentSessionID as SessionID,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "default",
+    model: { providerID: model.providerID as any, modelID: model.modelID as any },
+  }
+  await Session.updateMessage(userMsg)
+  await Session.updatePart({
+    id: PartID.ascending(),
+    sessionID: parentSessionID as SessionID,
+    messageID: msgID,
+    type: "text",
+    text: notificationText,
+    synthetic: true,
+  } satisfies MessageV2.TextPart)
+}
+
 // ── Tool definition ────────────────────────────────────────────────────────
 
 export const KbPipelineRunTool = Tool.defineEffect(
   "kb_pipeline_run",
   Effect.gen(function* () {
     const agentService = yield* Agent.Service
-    const config = yield* Config.Service
 
     const run = Effect.fn("KbPipelineRun.execute")(function* (
       params: { resource_id: string; workspace_id: string },
@@ -172,7 +298,6 @@ export const KbPipelineRunTool = Tool.defineEffect(
           parentID: ctx.sessionID,
           title: `KB: ${resource.title ?? resource.url ?? resource.id}`,
           permission: [
-            // Lock the curator to KB tools only — deny destructive tools
             { permission: "bash" as const, pattern: "*" as const, action: "deny" as const },
             { permission: "edit" as const, pattern: "*" as const, action: "deny" as const },
             { permission: "write" as const, pattern: "*" as const, action: "deny" as const },
@@ -183,150 +308,77 @@ export const KbPipelineRunTool = Tool.defineEffect(
       )
 
       const messageID = MessageID.ascending()
+      const resourceLabel = resource.title ?? resource.url ?? resource.id
+      const parentSessionID = ctx.sessionID
 
       ctx.metadata({
-        title: `KB: ${resource.title ?? resource.url ?? resource.id}`,
+        title: `KB pipeline running: ${resourceLabel}`,
         metadata: { task_id: childSession.id, resource_id: params.resource_id },
       })
 
       const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(curatorPrompt))
 
-      // ── Run curator and await completion ─────────────────────────────
-      yield* Effect.promise(() =>
-        SessionPrompt.prompt({
-          sessionID: childSession.id,
-          messageID,
-          model,
-          agent: "kb-curator",
-          tools: {
-            bash: false,
-            edit: false,
-            write: false,
-            glob: false,
-            grep: false,
-            task: false,
-            fetch: false,
-            search: false,
-            code: false,
-            skill: false,
-            patch: false,
-            lsp: false,
-            plan: false,
-            todo: false,
-          },
-          parts,
-        }).catch((err: unknown) => {
+      // ── Fire curator in background — do NOT await ─────────────────────
+      SessionPrompt.prompt({
+        sessionID: childSession.id,
+        messageID,
+        model,
+        agent: "kb-curator",
+        tools: {
+          bash: false,
+          edit: false,
+          write: false,
+          glob: false,
+          grep: false,
+          task: false,
+          fetch: false,
+          search: false,
+          code: false,
+          skill: false,
+          patch: false,
+          lsp: false,
+          plan: false,
+          todo: false,
+        },
+        parts,
+      })
+        .then(() =>
+          injectCompletionNotification(
+            parentSessionID,
+            params.workspace_id,
+            childSession.id,
+            resourceLabel,
+            model,
+          ),
+        )
+        .catch((err: unknown) => {
           console.error(
             "[KB Pipeline] Error in curator session:",
             err instanceof Error ? err.message : String(err),
           )
-        }),
-      )
+        })
 
-      // ── Collect results from child session messages ───────────────────
-      const KB_TOOLS = new Set([
-        "kb_resource_place",
-        "kb_concept_upsert",
-        "kb_wiki_build",
-        "kb_event_log",
-        "kb_resource_create",
-        "kb_category_manage",
-      ])
-
-      const placements: string[] = []
-      const concepts: string[] = []
-      const wikiBuilt: string[] = []
-      const errorDetails: string[] = []
-
-      const page = MessageV2.page({ sessionID: childSession.id, limit: 200 })
-      for (const msg of page.items) {
-        if (msg.info.role !== "assistant") continue
-        for (const part of msg.parts) {
-          if (part.type !== "tool") continue
-          if (!KB_TOOLS.has(part.tool)) continue
-          const state = part.state
-          if (state.status === "error") {
-            const errMsg = (state as Record<string, unknown>).error as string | undefined
-            const input = (state as Record<string, unknown>).input as Record<string, unknown> | undefined
-            const detail = input?.name ?? input?.section_slug ?? input?.page_ids ?? ""
-            errorDetails.push(`${part.tool}${detail ? ` (${detail})` : ""}: ${errMsg ?? "unknown error"}`)
-            console.error(`[KB Pipeline] tool error: ${part.tool} — ${errMsg ?? "unknown"}`, input)
-            continue
-          }
-          if (state.status !== "completed") continue
-          if (part.tool === "kb_resource_place") {
-            const input = state.input as Record<string, unknown>
-            const slug = (input?.section_slug as string) ?? ""
-            const pageId = (input?.wiki_page_id as string) ?? ""
-            if (slug) placements.push(`${pageId} → ${slug}`)
-          } else if (part.tool === "kb_concept_upsert") {
-            const input = state.input as Record<string, unknown>
-            const name = (input?.name as string) ?? ""
-            if (name) concepts.push(name)
-          } else if (part.tool === "kb_wiki_build") {
-            const input = state.input as Record<string, unknown>
-            const ids = (input?.page_ids as string[]) ?? []
-            wikiBuilt.push(...ids)
-          }
-        }
-      }
-
-      const lines: string[] = [
-        `✓ Processing complete: ${resource.title ?? resource.url ?? resource.id}`,
-        "",
-      ]
-
-      if (placements.length > 0) {
-        lines.push(`Placed into ${placements.length} section(s):`)
-        for (const p of placements) lines.push(`  • ${p}`)
-        lines.push("")
-      } else {
-        lines.push("No section placements recorded.")
-        lines.push("")
-      }
-
-      if (concepts.length > 0) {
-        lines.push(`Concepts extracted: ${concepts.join(", ")}`)
-        lines.push("")
-      }
-
-      // If the curator failed to build the wiki (common permission issue), rebuild directly
-      const wikiToolFailed = errorDetails.some((e) => e.startsWith("kb_wiki_build"))
-      if (placements.length > 0 && wikiToolFailed) {
-        try {
-          WikiBuilder.buildAll(params.workspace_id)
-          WikiBuilder.buildSupadenseMd(workspace)
-          WikiBuilder.buildLogFile(workspace)
-          wikiBuilt.push(...Workspace.getWikiPages(params.workspace_id).map((p) => p.file_path))
-          // Remove kb_wiki_build from error details since we recovered
-          errorDetails.splice(0, errorDetails.length, ...errorDetails.filter((e) => !e.startsWith("kb_wiki_build")))
-        } catch (e) {
-          console.error("[KB Pipeline] fallback wiki build failed:", e instanceof Error ? e.message : String(e))
-        }
-      }
-
-      if (wikiBuilt.length > 0) {
-        lines.push(`Wiki has been rebuilt and updated.`)
-      }
-
-      if (errorDetails.length > 0) {
-        lines.push(`⚠ ${errorDetails.length} non-critical tool call(s) failed during extraction, but the pipeline completed successfully.`)
-        for (const e of errorDetails) lines.push(`  • ${e}`)
-      }
-
+      // ── Return immediately ────────────────────────────────────────────
       return {
-        title: `KB pipeline complete: ${resource.title ?? resource.url ?? resource.id}`,
-        metadata: { task_id: childSession.id, resource_id: params.resource_id, finished: true },
-        output: lines.join("\n"),
+        title: `KB pipeline started: ${resourceLabel}`,
+        metadata: { task_id: childSession.id, resource_id: params.resource_id },
+        output: [
+          `KB pipeline started for: **${resourceLabel}**`,
+          "",
+          "Extraction is running in the background. You will receive a notification in this chat when it completes with a full summary of placements, concepts, and wiki updates.",
+          "",
+          "You can continue using the KB session normally — the pipeline runs independently.",
+        ].join("\n"),
       }
     })
 
     return {
       description: [
-        "Run the KB extraction pipeline for a resource and wait for it to finish.",
+        "Run the KB extraction pipeline for a resource in the background.",
         "",
-        "Runs the KBCurator agent synchronously — BLOCKS until complete, then returns",
-        "a summary of what was placed, which concepts were extracted, and which wiki pages were rebuilt.",
+        "Starts the KBCurator agent asynchronously — returns immediately with a confirmation.",
+        "When extraction is complete, a notification is injected into the current chat with a full",
+        "summary of what was placed, which concepts were extracted, and which wiki pages were rebuilt.",
         "",
         "Call this AFTER kb_resource_create. Do NOT call kb_pipeline_status after this — it is not needed.",
         "",

@@ -3,11 +3,10 @@ Add the following resource to my knowledge base: $ARGUMENTS
 Steps:
 1. Call `kb_workspace_init` to get the workspace. If not yet onboarded, tell the user to run `/onboard` first and stop.
 2. Call `kb_resource_create` with the URL/content from `$ARGUMENTS` to register the resource.
-3. Call `kb_pipeline_run` — this runs the full extraction pipeline and blocks until complete.
-4. Once `kb_pipeline_run` returns, report back to the user:
+3. Call `kb_pipeline_run` — this starts the extraction pipeline in the background and returns immediately.
+4. Once `kb_pipeline_run` returns, tell the user:
    - What resource was added (title/URL)
-   - Which categories/sections it was placed into
-   - Any concepts extracted
-   - Confirm the wiki has been updated
+   - That extraction is running in the background
+   - That they will receive a notification in this chat when it's complete
 
-Do NOT call `kb_pipeline_status` — it is not needed. `kb_pipeline_run` already waits for everything to finish.
+Do NOT wait for the pipeline to finish. Do NOT call `kb_pipeline_status`. Return to the user as soon as `kb_pipeline_run` responds.
