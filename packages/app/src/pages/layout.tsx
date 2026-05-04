@@ -2214,6 +2214,7 @@ export default function Layout(props: ParentProps) {
     project: Accessor<LocalProject | undefined>
     mobile?: boolean
     merged?: boolean
+    onCollapse?: () => void
   }) => {
     const project = panelProps.project
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
@@ -2306,7 +2307,24 @@ export default function Layout(props: ParentProps) {
 
                 </div>
 
-                <DropdownMenu modal={!sidebarHovering()}>
+                <div class="flex items-center gap-0.5 shrink-0">
+                  <Show when={panelProps.onCollapse}>
+                    <Tooltip value="Collapse" placement="bottom">
+                      <IconButton
+                        icon="sidebar-active"
+                        variant="ghost"
+                        class="size-6 rounded-md transition-opacity"
+                        classList={{
+                          "opacity-100": panelProps.mobile || merged(),
+                          "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100":
+                            !panelProps.mobile && !merged(),
+                        }}
+                        onClick={panelProps.onCollapse}
+                        aria-label="Collapse sidebar"
+                      />
+                    </Tooltip>
+                  </Show>
+                  <DropdownMenu modal={!sidebarHovering()}>
                   <DropdownMenu.Trigger
                     as={IconButton}
                     icon="dot-grid"
@@ -2373,6 +2391,7 @@ export default function Layout(props: ParentProps) {
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu>
+                </div>
               </div>
             </div>
 
@@ -2450,7 +2469,9 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://x.com/vaibhawkhemka6")}
       renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+        mobile
+          ? <SidebarPanel project={currentProject} mobile />
+          : <SidebarPanel project={currentProject} merged onCollapse={() => layout.sidebar.toggle()} />
       }
       userEmail={getSessionEmail()}
       onLogout={handleLogout}

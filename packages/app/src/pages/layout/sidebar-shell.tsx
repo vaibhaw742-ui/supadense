@@ -126,66 +126,55 @@ export const SidebarContent = (props: {
           {props.renderPanel()}
         </div>
 
-        {/* Footer: bell, settings, help, account + collapse button */}
-        <div class="shrink-0 flex items-center justify-between px-2 py-2 border-t border-border-weaker-base bg-background-base">
-          <div class="flex items-center gap-1">
-            <Show when={props.notificationBell}>
-              {props.notificationBell}
-            </Show>
-            <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
-              <IconButton
-                icon="settings-gear"
-                variant="ghost"
-                size="large"
-                onClick={props.onOpenSettings}
-                aria-label={props.settingsLabel()}
-              />
-            </TooltipKeybind>
-            <Tooltip placement={placement()} value={props.helpLabel()}>
-              <IconButton
-                icon="help"
-                variant="ghost"
-                size="large"
-                onClick={props.onOpenHelp}
-                aria-label={props.helpLabel()}
-              />
-            </Tooltip>
-            <Show when={props.onLogout}>
-              <DropdownMenu placement="top-start">
-                <Tooltip placement={placement()} value={props.userEmail ?? "Account"}>
-                  <DropdownMenu.Trigger
-                    as={IconButton}
-                    icon="person"
-                    variant="ghost"
-                    size="large"
-                    aria-label="Account"
-                  />
-                </Tooltip>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content>
-                    <Show when={props.userEmail}>
-                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                        {props.userEmail}
-                      </div>
-                      <DropdownMenu.Separator />
-                    </Show>
-                    <DropdownMenu.Item onSelect={props.onLogout}>
-                      Sign out
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu>
-            </Show>
-          </div>
-          <Tooltip placement={placement()} value="Collapse">
+        {/* Footer: bell, settings, help, account */}
+        <div class="shrink-0 flex items-center gap-1 px-2 py-2 border-t border-border-weaker-base bg-background-base">
+          <Show when={props.notificationBell}>
+            {props.notificationBell}
+          </Show>
+          <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
-              icon="sidebar-active"
+              icon="settings-gear"
               variant="ghost"
               size="large"
-              onClick={props.onToggleSessions}
-              aria-label="Collapse sidebar"
+              onClick={props.onOpenSettings}
+              aria-label={props.settingsLabel()}
+            />
+          </TooltipKeybind>
+          <Tooltip placement={placement()} value={props.helpLabel()}>
+            <IconButton
+              icon="help"
+              variant="ghost"
+              size="large"
+              onClick={props.onOpenHelp}
+              aria-label={props.helpLabel()}
             />
           </Tooltip>
+          <Show when={props.onLogout}>
+            <DropdownMenu placement="top-start">
+              <Tooltip placement={placement()} value={props.userEmail ?? "Account"}>
+                <DropdownMenu.Trigger
+                  as={IconButton}
+                  icon="person"
+                  variant="ghost"
+                  size="large"
+                  aria-label="Account"
+                />
+              </Tooltip>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  <Show when={props.userEmail}>
+                    <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                      {props.userEmail}
+                    </div>
+                    <DropdownMenu.Separator />
+                  </Show>
+                  <DropdownMenu.Item onSelect={props.onLogout}>
+                    Sign out
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
+          </Show>
         </div>
       </div>
     </div>
