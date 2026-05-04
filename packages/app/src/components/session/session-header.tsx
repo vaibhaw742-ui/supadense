@@ -13,6 +13,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useNavigate, useParams } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -390,6 +391,7 @@ function KbSelectorDropdown() {
   const navigate = useNavigate()
   const layout = useLayout()
   const command = useCommand()
+  const dialog = useDialog()
   const projects = () => layout.projects.list()
   const currentDir = () => {
     try { return atob(params.dir.replace(/-/g, "+").replace(/_/g, "/")) } catch { return "" }
@@ -399,6 +401,21 @@ function KbSelectorDropdown() {
     const p = currentProject()
     if (!p) return "Select KB"
     return p.name || p.worktree.split("/").pop() || "KB"
+  }
+
+  const handleEdit = (project: ReturnType<typeof projects>[number], e: MouseEvent) => {
+    e.stopPropagation()
+    const run = Date.now()
+    void import("@/components/dialog-edit-project").then((x) => {
+      dialog.show(() => <x.DialogEditProject project={project} />)
+    })
+  }
+
+  const handleDelete = (project: ReturnType<typeof projects>[number], e: MouseEvent) => {
+    e.stopPropagation()
+    void import("@/components/dialog-delete-project").then((x) => {
+      dialog.show(() => <x.DialogDeleteProject project={project} />)
+    })
   }
 
   return (
@@ -428,16 +445,39 @@ function KbSelectorDropdown() {
               const isActive = () => project.worktree === currentDir()
               return (
                 <DropdownMenu.Item
+                  class="group/kb-item pr-1"
                   onSelect={() => navigate(`/${base64Encode(project.worktree)}/session`)}
                 >
-                  <div class="flex items-center gap-2">
-                    <Show when={isActive()}>
-                      <Icon name="check-small" size="small" class="text-icon-strong" />
+                  <div class="flex items-center gap-2 w-full min-w-0">
+                    <Show when={isActive()} fallback={<div class="w-3 shrink-0" />}>
+                      <Icon name="check-small" size="small" class="text-icon-strong shrink-0" />
                     </Show>
-                    <Show when={!isActive()}>
-                      <div class="w-3" />
-                    </Show>
-                    <DropdownMenu.ItemLabel>{name()}</DropdownMenu.ItemLabel>
+                    <DropdownMenu.ItemLabel class="flex-1 min-w-0 truncate">{name()}</DropdownMenu.ItemLabel>
+                    <div class="flex items-center gap-0.5 opacity-0 group-hover/kb-item:opacity-100 transition-opacity shrink-0">
+                      <button
+                        class="p-0.5 rounded hover:bg-surface-base-hover text-icon-base hover:text-icon-strong"
+                        onClick={(e) => handleEdit(project, e)}
+                        aria-label="Edit"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
+                      <button
+                        class="p-0.5 rounded hover:bg-surface-base-hover text-icon-base hover:text-red-500"
+                        onClick={(e) => handleDelete(project, e)}
+                        aria-label="Delete"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                          <path d="M10 11v6"/>
+                          <path d="M14 11v6"/>
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </DropdownMenu.Item>
               )
