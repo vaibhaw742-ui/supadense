@@ -803,7 +803,6 @@ export function SessionHeader() {
             <div class="flex items-center gap-1">
               <KbSelectorDropdown />
               <AllFilesButton />
-              <WikiButton />
               <DocsButton />
               <Show when={projectDirectory()}>
                 {(dir) => <GitHubButton directory={dir()} />}
