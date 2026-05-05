@@ -197,7 +197,7 @@ export function SessionSidePanel(props: {
     setAddSourceBusy(true)
     try {
       await sdk.client.session.command({
-        sessionID: sessionKey,
+        sessionID: sessionKey(),
         command: "memorize",
         arguments: url,
       })
