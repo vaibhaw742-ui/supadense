@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -27,6 +27,8 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useKbApi } from "@/pages/session/kb-files-panel"
 import { useSDK } from "@/context/sdk"
+import { WikiGraph } from "@/pages/wiki/wiki-graph"
+import { useWikiApi } from "@/pages/wiki/wiki-api"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -109,12 +111,19 @@ export function SessionSidePanel(props: {
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
   const reviewTab = createMemo(() => isDesktop())
+  const graphMode = createMemo(() => fileOpen() && fileTreeTab() === "all")
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
+    if (reviewOpen() || graphMode()) return `calc(100% - ${layout.session.width()}px)`
     return `${layout.fileTree.width()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => (fileOpen() && !graphMode() ? `${layout.fileTree.width()}px` : "0px"))
+
+  const wikiApi = useWikiApi()
+  const [graphData] = createResource(
+    () => graphMode() || null,
+    () => wikiApi.home().then((d) => d.graph_data).catch(() => null),
+  )
 
   const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
   const kinds = createMemo(() => {
@@ -260,7 +269,45 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        {/* Graph mode: full-width wiki graph spanning both panels */}
+        <Show when={graphMode()}>
+          <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
+            {/* Tab strip */}
+            <div class="shrink-0">
+              <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} data-scope="filetree">
+                <Tabs.List>
+                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
+                    {props.reviewCount()}{" "}
+                    {language.t(props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
+                    {language.t("session.files.all")}
+                  </Tabs.Trigger>
+                </Tabs.List>
+              </Tabs>
+            </div>
+            {/* Graph */}
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <Show when={graphData()} fallback={
+                <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
+                  {graphData() === null ? "No graph data available" : "Loading…"}
+                </div>
+              }>
+                {(data) => (
+                  <WikiGraph
+                    data={data()}
+                    onNavigate={(slug) => {
+                      const dir = wikiApi.dirSlug()
+                      window.open(`/${dir}/wiki/${slug}`, "_blank")
+                    }}
+                  />
+                )}
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        <div class="size-full flex border-l border-border-weaker-base" classList={{ "hidden": graphMode() }}>
           <div
             id="file-tree-panel"
             data-tour="kb-tree-panel"
