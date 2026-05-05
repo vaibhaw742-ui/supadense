@@ -202,16 +202,20 @@ export function Titlebar() {
         onMouseDown={drag}
       >
         <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
-        {/* Docs + GitHub always at the far right, above the absolute panel */}
-        <div
-          id="opencode-titlebar-end"
-          class="flex items-center gap-1 shrink-0 relative z-10"
-        />
         <Show when={windows()}>
           {!tauriApi() && <div class="w-36 shrink-0" />}
           <div data-tauri-decorum-tb class="flex flex-row" />
         </Show>
       </div>
+
+      {/* Absolutely anchored to right edge so the absolute panel can never overlap it */}
+      <div
+        id="opencode-titlebar-end"
+        class="pointer-events-auto absolute inset-y-0 flex items-center gap-1 z-20"
+        style={{
+          right: windows() ? "152px" : "8px",
+        }}
+      />
     </header>
   )
 }
