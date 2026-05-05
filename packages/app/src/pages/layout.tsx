@@ -179,6 +179,7 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
+  const collapseTimer = { current: undefined as number | undefined }
   const sortNow = () => state.sortNow
   let sizet: number | undefined
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
@@ -204,6 +205,7 @@ export default function Layout(props: ParentProps) {
     dialogDead = true
     dialogRun += 1
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
+    if (collapseTimer.current !== undefined) clearTimeout(collapseTimer.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
     if (sizet !== undefined) clearTimeout(sizet)
@@ -259,6 +261,21 @@ export default function Layout(props: ParentProps) {
       navLeave.current = undefined
       setHoverProject(undefined)
     }, 300)
+  }
+
+  const disarmCollapse = () => {
+    if (collapseTimer.current === undefined) return
+    clearTimeout(collapseTimer.current)
+    collapseTimer.current = undefined
+  }
+
+  const armCollapse = () => {
+    if (!layout.sidebar.opened()) return
+    disarmCollapse()
+    collapseTimer.current = window.setTimeout(() => {
+      collapseTimer.current = undefined
+      layout.sidebar.close()
+    }, 400)
   }
 
   let peekt: number | undefined
@@ -2505,12 +2522,12 @@ export default function Layout(props: ParentProps) {
               }}
               onMouseEnter={() => {
                 disarm()
+                disarmCollapse()
               }}
               onMouseLeave={() => {
                 aim.reset()
-                if (!sidebarHovering()) return
-
-                arm()
+                if (sidebarHovering()) arm()
+                armCollapse()
               }}
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
