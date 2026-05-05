@@ -25,8 +25,10 @@ import { SessionTable } from "../../session/session.sql"
 import { Resource } from "../../learning/resource"
 import { Session } from "../../session"
 import { SessionPrompt } from "../../session/prompt"
-import { MessageID } from "../../session/schema"
+import { MessageID, SessionID } from "../../session/schema"
 import { Provider } from "../../provider/provider"
+import { Agent } from "../../agent/agent"
+import { WikiBuilder } from "../../learning/wiki-builder"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { generateText } from "ai"
 
@@ -723,10 +725,11 @@ export const WikiRoutes = () => {
     const workspace = resolveWorkspace()
     if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
 
-    let body: { url?: string }
+    let body: { url?: string; session_id?: string }
     try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
     const url = body?.url?.trim()
     if (!url) return c.json({ error: "url required" }, 400)
+    const parentSessionID = body?.session_id?.trim() || undefined
 
     // Deduplication check
     const existing = Resource.getByUrl(workspace.id, url)
@@ -747,44 +750,58 @@ export const WikiRoutes = () => {
       return c.json({ error: String(err instanceof Error ? err.message : err) }, 500)
     }
 
-    // Step 2: Start pipeline in background
-    try {
-      const { buildCuratorPrompt } = await import("../../tool/learning/kb-pipeline-run")
-      const resource = Resource.get(resourceId)
-      const pages = Workspace.getWikiPages(workspace.id)
-      const curatorPrompt = buildCuratorPrompt(resource, workspace, pages)
+    // Step 2: Start curator pipeline in background
+    // Mirror kb_pipeline_run.ts: use curator agent's model, set parentID, inject completion notification
+    const boundStart = Instance.bind(async () => {
+      try {
+        const { buildCuratorPrompt } = await import("../../tool/learning/kb-pipeline-run")
+        const resource = Resource.get(resourceId)
+        const pages = Workspace.getWikiPages(workspace.id)
+        const curatorPrompt = buildCuratorPrompt(resource, workspace, pages)
+        const resourceLabel = resource?.title ?? url
 
-      const model = await Provider.defaultModel()
-      const childSession = await Session.create({
-        title: `KB: ${resource?.title ?? url}`,
-        permission: [
-          { permission: "bash" as const, pattern: "*" as const, action: "deny" as const },
-          { permission: "edit" as const, pattern: "*" as const, action: "deny" as const },
-          { permission: "write" as const, pattern: "*" as const, action: "deny" as const },
-          { permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const },
-          { permission: "task" as const, pattern: "*" as const, action: "deny" as const },
-        ],
-      })
+        // Use curator agent's configured model (same as kb_pipeline_run.ts)
+        const curatorAgent = await Agent.get("kb-curator").catch(() => null)
+        const defaultModel = await Provider.defaultModel()
+        const model = curatorAgent?.model ?? defaultModel
 
-      const parts = await SessionPrompt.resolvePromptParts(curatorPrompt)
-      SessionPrompt.prompt({
-        sessionID: childSession.id as any,
-        messageID: MessageID.ascending() as any,
-        model: model as any,
-        agent: "kb-curator",
-        tools: {
-          bash: false, edit: false, write: false, glob: false, grep: false,
-          task: false, fetch: false, search: false, code: false, skill: false,
-          patch: false, lsp: false, plan: false, todo: false,
-        },
-        parts,
-      }).catch((err: unknown) => {
-        console.error("[KB Pipeline] Error in curator session:", err instanceof Error ? err.message : String(err))
-      })
-    } catch (err) {
-      // Pipeline start failure is non-fatal — resource was created, just log
-      console.error("[KB Pipeline] Failed to start pipeline:", err instanceof Error ? err.message : String(err))
-    }
+        const childSession = await Session.create({
+          parentID: parentSessionID as SessionID | undefined,
+          title: `KB: ${resourceLabel}`,
+          permission: [
+            { permission: "bash" as const, pattern: "*" as const, action: "deny" as const },
+            { permission: "edit" as const, pattern: "*" as const, action: "deny" as const },
+            { permission: "write" as const, pattern: "*" as const, action: "deny" as const },
+            { permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const },
+            { permission: "task" as const, pattern: "*" as const, action: "deny" as const },
+          ],
+        })
+
+        const parts = await SessionPrompt.resolvePromptParts(curatorPrompt)
+        await SessionPrompt.prompt({
+          sessionID: childSession.id as any,
+          messageID: MessageID.ascending() as any,
+          model: model as any,
+          agent: "kb-curator",
+          parts,
+        })
+
+        // Fallback wiki rebuild after curator completes
+        try {
+          WikiBuilder.buildAll(workspace.id)
+          WikiBuilder.buildSupadenseMd(workspace)
+          WikiBuilder.buildLogFile(workspace)
+        } catch (e) {
+          console.error("[KB Pipeline] wiki rebuild error:", e instanceof Error ? e.message : String(e))
+        }
+
+        console.log(`[KB Pipeline] complete: ${resourceLabel}`)
+      } catch (err) {
+        console.error("[KB Pipeline] curator error:", err instanceof Error ? err.message : String(err))
+      }
+    })
+
+    boundStart()
 
     return c.json({ resource_id: resourceId })
   })

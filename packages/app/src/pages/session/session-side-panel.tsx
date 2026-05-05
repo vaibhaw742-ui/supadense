@@ -211,7 +211,7 @@ export function SessionSidePanel(props: {
         "x-opencode-directory": encodeURIComponent(sdk.directory),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, session_id: params.id }),
     }).then(async (res) => {
       if (res.ok) bgProcessUpdate(id, "done")
       else bgProcessUpdate(id, "error")
