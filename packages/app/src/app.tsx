@@ -54,6 +54,7 @@ const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
 const WikiPage = lazy(() => import("@/pages/wiki/wiki-page"))
 const WikiRoadmapList = lazy(() => import("@/pages/wiki/wiki-roadmap"))
 const WikiRoadmapPage = lazy(() => import("@/pages/wiki/wiki-roadmap-page"))
+const FilesPage = lazy(() => import("@/pages/files"))
 const Loading = () => <div class="size-full" />
 
 if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
@@ -318,6 +319,7 @@ export function AppInterface(props: {
                   <Route path="/" component={SessionIndexRoute} />
                   <Route path="/session/:id?" component={SessionRoute} />
                 </Route>
+                <Route path="/:dir/files" component={FilesPage} />
                 <Route path="/:dir/wiki" component={WikiHome} />
                 <Route path="/:dir/wiki/roadmap" component={WikiRoadmapList} />
                 <Route path="/:dir/wiki/roadmap/:slug" component={WikiRoadmapPage} />
