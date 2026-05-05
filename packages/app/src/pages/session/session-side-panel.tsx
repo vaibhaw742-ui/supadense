@@ -334,19 +334,59 @@ export function SessionSidePanel(props: {
           <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
             {/* Breadcrumb nav */}
             <div class="shrink-0 flex items-center gap-1 px-3 h-9 border-b border-border-weaker-base text-13-regular">
-              <button
-                class="text-text-link hover:underline"
-                onClick={() => setGraphNav(null)}
-              >
+              <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
                 Home
               </button>
               <Show when={graphNav()}>
-                {(nav) => (
-                  <>
-                    <span class="text-text-weak">›</span>
-                    <span class="text-text-base">{nav().label}</span>
-                  </>
-                )}
+                <Show
+                  when={wikiPageData()}
+                  fallback={
+                    <>
+                      <span class="text-text-weak">›</span>
+                      <span class="text-text-base">{graphNav()!.label}</span>
+                    </>
+                  }
+                >
+                  {(d) => (
+                    <>
+                      <Show when={d().parent_category}>
+                        {(parent) => (
+                          <>
+                            <span class="text-text-weak">›</span>
+                            <button
+                              class="text-text-link hover:underline"
+                              onClick={() => setGraphNav({ slug: parent().slug, label: parent().name })}
+                            >
+                              {parent().name}
+                            </button>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={d().category}>
+                        {(cat) => (
+                          <>
+                            <span class="text-text-weak">›</span>
+                            <Show
+                              when={d().page.type !== "overview" || d().parent_category}
+                              fallback={<span class="text-text-base">{cat().name}</span>}
+                            >
+                              <button
+                                class="text-text-link hover:underline"
+                                onClick={() => setGraphNav({ slug: cat().slug, label: cat().name })}
+                              >
+                                {cat().name}
+                              </button>
+                            </Show>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={d().page.type === "section"}>
+                        <span class="text-text-weak">›</span>
+                        <span class="text-text-base">{d().page.title}</span>
+                      </Show>
+                    </>
+                  )}
+                </Show>
               </Show>
             </div>
             {/* Graph or wiki page */}
