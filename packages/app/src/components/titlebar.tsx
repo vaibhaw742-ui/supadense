@@ -188,6 +188,12 @@ export function Titlebar() {
       </div>
 
       <div
+        id="opencode-titlebar-panel"
+        class="pointer-events-auto absolute inset-y-0 flex items-center"
+        style={{ left: "var(--session-panel-left, 9999px)" }}
+      />
+
+      <div
         classList={{
           "flex items-center min-w-0 justify-end": true,
           "pr-2": !windows(),

@@ -673,6 +673,7 @@ export function SessionHeader() {
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+  const panelMount = createMemo(() => document.getElementById("opencode-titlebar-panel"))
 
   return (
     <>
@@ -792,16 +793,21 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="flex items-center gap-1">
-                <KbSelectorDropdown />
-                <AllFilesButton />
-                <WikiButton />
-                <DocsButton />
-                <Show when={projectDirectory()}>
-                  {(dir) => <GitHubButton directory={dir()} />}
-                </Show>
-
-              </div>
+            </div>
+          </Portal>
+        )}
+      </Show>
+      <Show when={panelMount()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <div class="flex items-center gap-1">
+              <KbSelectorDropdown />
+              <AllFilesButton />
+              <WikiButton />
+              <DocsButton />
+              <Show when={projectDirectory()}>
+                {(dir) => <GitHubButton directory={dir()} />}
+              </Show>
             </div>
           </Portal>
         )}

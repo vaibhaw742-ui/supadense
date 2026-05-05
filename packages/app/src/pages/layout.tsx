@@ -1972,6 +1972,10 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : SIDEBAR_COLLAPSED_WIDTH
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+    document.documentElement.style.setProperty(
+      "--session-panel-left",
+      `${sidebarWidth + layout.session.width()}px`,
+    )
   })
 
   const side = createMemo(() => layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 244) : SIDEBAR_COLLAPSED_WIDTH)
