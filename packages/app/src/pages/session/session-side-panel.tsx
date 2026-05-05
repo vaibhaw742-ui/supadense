@@ -30,6 +30,15 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
+import { renderMarkdown } from "@/pages/wiki/markdown"
+import "@/pages/wiki/wiki.css"
+type WikiPageData = {
+  page: { slug: string; title: string; type: string; category_slug: string | null; resource_count: number; time_updated: number }
+  category: { slug: string; name: string; depth: string } | null
+  parent_category: { slug: string; name: string } | null
+  content: string
+  category_tabs: { nav_slug: string; title: string; type: string }[]
+}
 type GraphData = { nodes: { id: string; type: "category" | "subcategory" | "resource" | "group"; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
 
 const WikiGraph = lazy(() => import("@/pages/wiki/wiki-graph").then((m) => ({ default: m.WikiGraph })))
@@ -153,6 +162,30 @@ export function SessionSidePanel(props: {
       }
     },
   )
+
+  const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
+
+  const [wikiPageData] = createResource(
+    () => graphMode() ? (graphNav()?.slug ?? null) : null,
+    async (slug): Promise<WikiPageData | null> => {
+      try {
+        const token = getAuthToken()
+        const directory = decode64(params.dir) ?? ""
+        const res = await fetch(`${wikiBase()}/wiki/page/${encodeURIComponent(slug)}`, {
+          headers: {
+            "x-opencode-directory": directory,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+        if (!res.ok) return null
+        return res.json() as Promise<WikiPageData>
+      } catch {
+        return null
+      }
+    },
+  )
+
+  createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
   const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
   const kinds = createMemo(() => {
@@ -299,37 +332,82 @@ export function SessionSidePanel(props: {
         {/* Graph mode: full-width wiki graph spanning both panels */}
         <Show when={graphMode()}>
           <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
-            {/* Tab strip */}
-            <div class="shrink-0">
-              <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} data-scope="filetree">
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {props.reviewCount()}{" "}
-                    {language.t(props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
-              </Tabs>
-            </div>
-            {/* Graph */}
-            <div class="flex-1 min-h-0 overflow-hidden">
-              <Show when={graphData()} fallback={
-                <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
-                  {graphData() === null ? "No graph data available" : "Loading…"}
-                </div>
-              }>
-                {(data) => (
-                  <Suspense>
-                    <WikiGraph
-                      data={data()}
-                      onNavigate={(slug) => {
-                        window.open(`/${params.dir}/wiki/${slug}`, "_blank")
-                      }}
-                    />
-                  </Suspense>
+            {/* Breadcrumb nav */}
+            <div class="shrink-0 flex items-center gap-1 px-3 h-9 border-b border-border-weaker-base text-13-regular">
+              <button
+                class="text-text-link hover:underline"
+                onClick={() => setGraphNav(null)}
+              >
+                Home
+              </button>
+              <Show when={graphNav()}>
+                {(nav) => (
+                  <>
+                    <span class="text-text-weak">›</span>
+                    <span class="text-text-base">{nav().label}</span>
+                  </>
                 )}
+              </Show>
+            </div>
+            {/* Graph or wiki page */}
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <Show
+                when={graphNav()}
+                fallback={
+                  <Show when={graphData()} fallback={
+                    <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
+                      {graphData() === null ? "No graph data available" : "Loading…"}
+                    </div>
+                  }>
+                    {(data) => (
+                      <Suspense>
+                        <WikiGraph
+                          data={data()}
+                          onNavigate={(slug, label) => setGraphNav({ slug, label: label ?? slug })}
+                        />
+                      </Suspense>
+                    )}
+                  </Show>
+                }
+              >
+                {/* Wiki page content */}
+                <div class="h-full overflow-y-auto">
+                  <Show when={wikiPageData.loading}>
+                    <div class="p-6 text-12-regular text-text-weak">Loading…</div>
+                  </Show>
+                  <Show when={!wikiPageData.loading && wikiPageData()}>
+                    {(d) => (
+                      <div class="px-6 py-4 max-w-3xl">
+                        <h1 class="text-18-semibold text-text-strong mb-1">{d().page.title}</h1>
+                        <div class="text-12-regular text-text-weak mb-4">
+                          {d().page.resource_count} source{d().page.resource_count !== 1 ? "s" : ""}
+                        </div>
+                        <Show when={d().category_tabs.length > 1}>
+                          <div class="flex gap-2 mb-4 flex-wrap">
+                            <For each={d().category_tabs}>
+                              {(tab) => (
+                                <button
+                                  class="px-3 py-1 rounded text-12-regular border border-border-weaker-base hover:bg-surface-base-hover"
+                                  classList={{ "bg-surface-base-active font-medium": tab.nav_slug === graphNav()?.slug }}
+                                  onClick={() => setGraphNav({ slug: tab.nav_slug, label: tab.title })}
+                                >
+                                  {tab.title}
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                        <div
+                          class="wk-content text-14-regular text-text-base prose"
+                          innerHTML={renderMarkdown(d().content)}
+                        />
+                      </div>
+                    )}
+                  </Show>
+                  <Show when={!wikiPageData.loading && wikiPageData() === null}>
+                    <div class="p-6 text-12-regular text-text-weak">Page not found.</div>
+                  </Show>
+                </div>
               </Show>
             </div>
           </div>
