@@ -127,10 +127,12 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const location = useLocation()
   const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
+  const isFiles = () => /\/files(?:\/|$)/.test(location.pathname)
+  const isStandalone = () => isWiki() || isFiles()
 
   return (
     <Show
-      when={!isWiki()}
+      when={!isStandalone()}
       fallback={
         <Suspense fallback={<Loading />}>
           {props.children}
