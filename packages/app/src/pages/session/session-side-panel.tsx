@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -27,8 +27,12 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { useKbApi } from "@/pages/session/kb-files-panel"
 import { useSDK } from "@/context/sdk"
-import { WikiGraph } from "@/pages/wiki/wiki-graph"
-import { useWikiApi } from "@/pages/wiki/wiki-api"
+import { getAuthToken } from "@/utils/server"
+import { useServer } from "@/context/server"
+import { decode64 } from "@/utils/base64"
+import type { GraphData } from "@/pages/wiki/wiki-api"
+
+const WikiGraph = lazy(() => import("@/pages/wiki/wiki-graph").then((m) => ({ default: m.WikiGraph })))
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -48,7 +52,8 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
-  const { sessionKey, tabs, view } = useSessionLayout()
+  const server = useServer()
+  const { sessionKey, tabs, view, params } = useSessionLayout()
   const kbApi = useKbApi()
   const sdk = useSDK()
 
@@ -119,10 +124,32 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() && !graphMode() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const wikiApi = useWikiApi()
+  const wikiBase = () => {
+    const http = server.current?.http
+    if (!http) return import.meta.env.DEV
+      ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+      : `${location.origin}/api`
+    return typeof http === "string" ? http : (http as { url: string }).url
+  }
   const [graphData] = createResource(
     () => graphMode() || null,
-    () => wikiApi.home().then((d) => d.graph_data).catch(() => null),
+    async (): Promise<GraphData | null> => {
+      try {
+        const token = getAuthToken()
+        const directory = decode64(params.dir) ?? ""
+        const res = await fetch(`${wikiBase()}/wiki/home`, {
+          headers: {
+            "x-opencode-directory": directory,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+        if (!res.ok) return null
+        const data = await res.json() as { graph_data?: GraphData }
+        return data.graph_data ?? null
+      } catch {
+        return null
+      }
+    },
   )
 
   const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
@@ -294,13 +321,14 @@ export function SessionSidePanel(props: {
                 </div>
               }>
                 {(data) => (
-                  <WikiGraph
-                    data={data()}
-                    onNavigate={(slug) => {
-                      const dir = wikiApi.dirSlug()
-                      window.open(`/${dir}/wiki/${slug}`, "_blank")
-                    }}
-                  />
+                  <Suspense>
+                    <WikiGraph
+                      data={data()}
+                      onNavigate={(slug) => {
+                        window.open(`/${params.dir}/wiki/${slug}`, "_blank")
+                      }}
+                    />
+                  </Suspense>
                 )}
               </Show>
             </div>
