@@ -461,26 +461,32 @@ export function SessionSidePanel(props: {
               </Show>
             </div>
             {/* Resource milestone progress bar */}
-            <div
-              class="shrink-0 relative h-[3px] w-full overflow-hidden"
-              title={resourceMilestoneReached()
-                ? `${resourceCount()} resources — milestone reached! 🎉`
-                : `${resourceCount()} / ${RESOURCE_MILESTONE} resources to first milestone`}
-            >
-              {/* Track */}
-              <div class="absolute inset-0 bg-border-weaker-base" />
-              {/* Fill */}
-              <div
-                class="absolute inset-y-0 left-0 transition-[width] duration-500"
-                style={{
-                  width: `${resourcePct()}%`,
-                  background: resourceMilestoneReached()
-                    ? "linear-gradient(90deg,#22c55e,#4ade80)"
-                    : "linear-gradient(90deg,#6366f1,#a78bfa)",
-                }}
-              />
-              {/* Milestone tick at 100% */}
-              <div class="absolute inset-y-0 right-0 w-px bg-border-base opacity-60" />
+            <div class="shrink-0 w-full">
+              <div class="relative h-[3px] w-full overflow-hidden">
+                <div class="absolute inset-0 bg-border-weaker-base" />
+                <div
+                  class="absolute inset-y-0 left-0 transition-[width] duration-500"
+                  style={{
+                    width: `${resourcePct()}%`,
+                    background: resourceMilestoneReached()
+                      ? "linear-gradient(90deg,#22c55e,#4ade80)"
+                      : "linear-gradient(90deg,#6366f1,#a78bfa)",
+                  }}
+                />
+                <div class="absolute inset-y-0 right-0 w-px bg-border-base opacity-60" />
+              </div>
+              <div class="px-3 pt-1 pb-0.5">
+                <span
+                  class="text-10-regular"
+                  style={{
+                    color: resourceMilestoneReached() ? "#22c55e" : "var(--text-weakest, var(--text-weak))",
+                  }}
+                >
+                  {resourceMilestoneReached()
+                    ? `${resourceCount()} resources — milestone reached!`
+                    : `${resourceCount()} / ${RESOURCE_MILESTONE} resources`}
+                </span>
+              </div>
             </div>
 
             {/* Source queue dropdown */}
