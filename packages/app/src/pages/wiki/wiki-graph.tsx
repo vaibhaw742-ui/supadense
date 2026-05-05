@@ -187,15 +187,24 @@ export function WikiGraph(props: Props) {
       .attr("stroke",       "#f7f7f5")
       .attr("stroke-width", 1.5)
 
-    // Labels — category, subcategory, group only (resources too small)
-    nodeSel.filter((d) => d.type !== "resource")
-      .append("text")
-      .text((d) => truncate(d.label, d.type === "category" ? 12 : 14))
+    // Labels — all node types
+    nodeSel.append("text")
+      .text((d) => {
+        if (d.type === "category")    return truncate(d.label, 12)
+        if (d.type === "subcategory") return truncate(d.label, 14)
+        if (d.type === "group")       return truncate(d.label, 14)
+        return truncate(d.label, 16) // resource
+      })
       .attr("text-anchor", "middle")
-      .attr("dy", (d) => nodeRadius(d.type) + 11)
-      .attr("font-size", (d) => d.type === "category" ? 10 : 8)
+      .attr("dy", (d) => nodeRadius(d.type) + (d.type === "resource" ? 9 : 11))
+      .attr("font-size", (d) => {
+        if (d.type === "category")    return 10
+        if (d.type === "subcategory") return 8
+        if (d.type === "group")       return 8
+        return 7 // resource
+      })
       .attr("font-family", "'Inter', -apple-system, BlinkMacSystemFont, sans-serif")
-      .attr("fill", "#787774")
+      .attr("fill", (d) => d.type === "resource" ? "#a8a29e" : "#787774")
       .attr("pointer-events", "none")
 
     // ── Tooltip ───────────────────────────────────────────────────────────────
