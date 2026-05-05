@@ -518,16 +518,22 @@ function WikiButton() {
 
 function AllFilesButton() {
   const layout = useLayout()
+  const active = () => layout.fileTree.allFilesOpen()
   return (
-    <Tooltip placement="bottom" value="All Files">
+    <Tooltip placement="bottom" value={active() ? "Hide files" : "All Files"}>
       <Button
         variant="ghost"
         class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
+        classList={{
+          "text-text-strong bg-surface-base-active": active(),
+          "text-text-weak": !active(),
+        }}
         onClick={() => {
           layout.fileTree.open()
-          layout.fileTree.setTab("all")
+          layout.fileTree.toggleAllFiles()
         }}
         aria-label="All Files"
+        aria-pressed={active()}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>

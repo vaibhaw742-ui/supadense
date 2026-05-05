@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
@@ -658,7 +658,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("review", "diffStyle", diffStyle)
         },
       },
-      fileTree: {
+      fileTree: (() => {
+        const [allFilesOpen, setAllFilesOpen] = createSignal(false)
+        return {
+        allFilesOpen,
+        toggleAllFiles() { setAllFilesOpen((v) => !v) },
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
@@ -697,7 +701,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
           setStore("fileTree", "width", width)
         },
-      },
+        }
+      })(),
       session: {
         width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
         resize(width: number) {
