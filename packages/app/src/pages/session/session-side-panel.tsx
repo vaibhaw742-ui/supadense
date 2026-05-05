@@ -30,7 +30,7 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
-type GraphData = { nodes: { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
+type GraphData = { nodes: { id: string; type: "category" | "subcategory" | "resource" | "group"; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
 
 const WikiGraph = lazy(() => import("@/pages/wiki/wiki-graph").then((m) => ({ default: m.WikiGraph })))
 
