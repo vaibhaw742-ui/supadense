@@ -30,7 +30,7 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
-import type { GraphData } from "@/pages/wiki/wiki-api"
+type GraphData = { nodes: { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
 
 const WikiGraph = lazy(() => import("@/pages/wiki/wiki-graph").then((m) => ({ default: m.WikiGraph })))
 
@@ -111,6 +111,8 @@ export function SessionSidePanel(props: {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+
+  const fileTreeTab = () => layout.fileTree.tab()
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
@@ -223,8 +225,6 @@ export function SessionSidePanel(props: {
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
-
-  const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
     if (value !== "changes" && value !== "all") return
