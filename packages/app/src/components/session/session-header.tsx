@@ -517,13 +517,16 @@ function WikiButton() {
 }
 
 function AllFilesButton() {
-  const params = useParams<{ dir: string }>()
+  const layout = useLayout()
   return (
     <Tooltip placement="bottom" value="All Files">
       <Button
         variant="ghost"
         class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
-        onClick={() => window.open(`/${params.dir}/files`, "_blank")}
+        onClick={() => {
+          layout.fileTree.open()
+          layout.fileTree.setTab("all")
+        }}
         aria-label="All Files"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
