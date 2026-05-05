@@ -333,7 +333,7 @@ export function SessionSidePanel(props: {
         <Show when={graphMode()}>
           <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
             {/* Breadcrumb nav */}
-            <div class="shrink-0 flex items-center gap-1 px-3 h-9 border-b border-border-weaker-base text-13-regular">
+            <div class="shrink-0 flex items-center gap-1 px-3 h-9 text-13-regular">
               <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
                 Home
               </button>
