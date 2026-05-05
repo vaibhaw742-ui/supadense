@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Popover } from "@opencode-ai/ui/popover"
-import { bgProcesses, bgProcessClear } from "@/context/bg-processes"
+import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear } from "@/context/bg-processes"
 import { useServer } from "@/context/server"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
@@ -67,6 +67,21 @@ export function BgProcessMonitor(props: { directory: Accessor<string | undefined
     const interval = setInterval(pollJobs, 4_000)
     const stop = globalSDK.event.listen((e) => {
       if (e.details.type === "session.idle") pollJobs()
+
+      // Capture /memorize commands fired from chat
+      if (e.details.type === "command.executed" && (e.details as { name?: string }).name === "memorize") {
+        const url = ((e.details as { arguments?: string }).arguments ?? "").trim()
+        if (!url) return
+        // If Add Source button already added this URL as "processing", mark it done
+        const existing = bgProcesses().find((p) => p.label === url && p.status === "processing")
+        if (existing) {
+          bgProcessUpdate(existing.id, "done")
+        } else {
+          // Pure chat /memorize — add as done (pipeline kicked off, resource queued)
+          const id = bgProcessAdd(url)
+          bgProcessUpdate(id, "done")
+        }
+      }
     })
     onCleanup(() => { clearInterval(interval); stop() })
   })
