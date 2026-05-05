@@ -208,14 +208,6 @@ export function Titlebar() {
         </Show>
       </div>
 
-      {/* Absolutely anchored to right edge so the absolute panel can never overlap it */}
-      <div
-        id="opencode-titlebar-end"
-        class="pointer-events-auto absolute inset-y-0 flex items-center gap-1 z-20"
-        style={{
-          right: windows() ? "152px" : "8px",
-        }}
-      />
     </header>
   )
 }
