@@ -27,6 +27,7 @@ export const SidebarContent = (props: {
   userEmail?: string
   onLogout?: () => void
   notificationBell?: JSX.Element
+  bgProcessMonitor?: JSX.Element
   onToggleSessions: () => void
   onNewSession?: () => void
 }): JSX.Element => {
@@ -61,6 +62,9 @@ export const SidebarContent = (props: {
             </Tooltip>
           </div>
           <div class="shrink-0 flex flex-col items-center pb-6 gap-2">
+            <Show when={props.bgProcessMonitor}>
+              {props.bgProcessMonitor}
+            </Show>
             <Show when={props.notificationBell}>
               {props.notificationBell}
             </Show>
@@ -126,8 +130,11 @@ export const SidebarContent = (props: {
           {props.renderPanel()}
         </div>
 
-        {/* Footer: bell, settings, help, account */}
+        {/* Footer: bg-processes, bell, settings, help, account */}
         <div class="shrink-0 flex items-center gap-1 px-2 py-2 border-t border-border-weaker-base bg-background-base">
+          <Show when={props.bgProcessMonitor}>
+            {props.bgProcessMonitor}
+          </Show>
           <Show when={props.notificationBell}>
             {props.notificationBell}
           </Show>

@@ -1,4 +1,5 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -189,24 +190,20 @@ export function SessionSidePanel(props: {
 
   const [addSourceOpen, setAddSourceOpen] = createSignal(false)
   const [addSourceUrl, setAddSourceUrl] = createSignal("")
-  type SourceEntry = { id: number; url: string; status: "processing" | "done" | "error" }
-  const [sourceQueue, setSourceQueue] = createSignal<SourceEntry[]>([])
-  let sourceIdCounter = 0
 
   const submitAddSource = () => {
     const url = addSourceUrl().trim()
     if (!url) return
-    const id = ++sourceIdCounter
-    setSourceQueue((q) => [...q, { id, url, status: "processing" }])
+    const id = bgProcessAdd(url)
     setAddSourceUrl("")
     sdk.client.session.command({
       sessionID: sessionKey(),
       command: "memorize",
       arguments: url,
     }).then(() => {
-      setSourceQueue((q) => q.map((e) => e.id === id ? { ...e, status: "done" } : e))
+      bgProcessUpdate(id, "done")
     }).catch(() => {
-      setSourceQueue((q) => q.map((e) => e.id === id ? { ...e, status: "error" } : e))
+      bgProcessUpdate(id, "error")
     })
   }
 
@@ -439,7 +436,7 @@ export function SessionSidePanel(props: {
                     onInput={(e) => setAddSourceUrl(e.currentTarget.value)}
                     class="text-12-regular h-6 px-2 rounded border border-border-weak-base bg-surface-panel outline-none focus:border-border-base w-48"
                     autofocus
-                    onKeyDown={(e) => { if (e.key === "Escape") { setAddSourceOpen(false); setAddSourceUrl(""); setSourceQueue([]) } }}
+                    onKeyDown={(e) => { if (e.key === "Escape") { setAddSourceOpen(false); setAddSourceUrl("") } }}
                   />
                   <button
                     type="submit"
@@ -451,7 +448,7 @@ export function SessionSidePanel(props: {
                   <button
                     type="button"
                     class="text-12-regular text-text-weak hover:text-text-base px-1"
-                    onClick={() => { setAddSourceOpen(false); setAddSourceUrl(""); setSourceQueue([]) }}
+                    onClick={() => { setAddSourceOpen(false); setAddSourceUrl("") }}
                   >
                     ✕
                   </button>
@@ -459,9 +456,9 @@ export function SessionSidePanel(props: {
               </Show>
             </div>
             {/* Source queue dropdown */}
-            <Show when={sourceQueue().length > 0}>
+            <Show when={bgProcesses().length > 0}>
               <div class="shrink-0 border-t border-border-weaker-base bg-surface-panel px-3 py-2 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                <For each={sourceQueue()}>
+                <For each={bgProcesses()}>
                   {(entry) => (
                     <div class="flex items-center gap-2 text-12-regular min-w-0">
                       <Show when={entry.status === "processing"}>
@@ -486,9 +483,9 @@ export function SessionSidePanel(props: {
                           "text-text-base": entry.status === "done",
                           "text-red-500": entry.status === "error",
                         }}
-                        title={entry.url}
+                        title={entry.label}
                       >
-                        {entry.url}
+                        {entry.label}
                       </span>
                       <span class="shrink-0 text-text-weakest text-11-regular">
                         {entry.status === "processing" ? "Adding…" : entry.status === "done" ? "Done" : "Failed"}
