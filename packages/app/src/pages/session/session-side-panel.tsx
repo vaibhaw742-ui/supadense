@@ -187,6 +187,26 @@ export function SessionSidePanel(props: {
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
+  const [addSourceOpen, setAddSourceOpen] = createSignal(false)
+  const [addSourceUrl, setAddSourceUrl] = createSignal("")
+  const [addSourceBusy, setAddSourceBusy] = createSignal(false)
+
+  const submitAddSource = async () => {
+    const url = addSourceUrl().trim()
+    if (!url || addSourceBusy()) return
+    setAddSourceBusy(true)
+    try {
+      await sdk.client.session.command({
+        sessionID: sessionKey,
+        command: "memorize",
+        arguments: url,
+      })
+    } catch {}
+    setAddSourceBusy(false)
+    setAddSourceUrl("")
+    setAddSourceOpen(false)
+  }
+
   const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -387,6 +407,52 @@ export function SessionSidePanel(props: {
                     </>
                   )}
                 </Show>
+              </Show>
+              {/* spacer */}
+              <div class="flex-1" />
+              {/* Add source */}
+              <Show
+                when={addSourceOpen()}
+                fallback={
+                  <button
+                    class="flex items-center gap-1 text-12-regular text-text-weak hover:text-text-base px-2 py-0.5 rounded hover:bg-surface-base-hover shrink-0"
+                    onClick={() => setAddSourceOpen(true)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                    Add source
+                  </button>
+                }
+              >
+                <form
+                  class="flex items-center gap-1 shrink-0"
+                  onSubmit={(e) => { e.preventDefault(); void submitAddSource() }}
+                >
+                  <input
+                    type="url"
+                    placeholder="Paste URL…"
+                    value={addSourceUrl()}
+                    onInput={(e) => setAddSourceUrl(e.currentTarget.value)}
+                    class="text-12-regular h-6 px-2 rounded border border-border-weak-base bg-surface-panel outline-none focus:border-border-base w-48"
+                    autofocus
+                    onKeyDown={(e) => { if (e.key === "Escape") { setAddSourceOpen(false); setAddSourceUrl("") } }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!addSourceUrl().trim() || addSourceBusy()}
+                    class="text-12-regular px-2 py-0.5 rounded bg-surface-base-active hover:bg-surface-base-active-hover disabled:opacity-50"
+                  >
+                    {addSourceBusy() ? "…" : "Add"}
+                  </button>
+                  <button
+                    type="button"
+                    class="text-12-regular text-text-weak hover:text-text-base px-1"
+                    onClick={() => { setAddSourceOpen(false); setAddSourceUrl("") }}
+                  >
+                    ✕
+                  </button>
+                </form>
               </Show>
             </div>
             {/* Graph or wiki page */}
