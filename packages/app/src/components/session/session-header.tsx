@@ -711,6 +711,10 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              <DocsButton />
+              <Show when={projectDirectory()}>
+                {(dir) => <GitHubButton directory={dir()} />}
+              </Show>
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show when={canOpen()}>
@@ -804,10 +808,6 @@ export function SessionHeader() {
               <KbSelectorDropdown />
               <AllFilesButton />
               <WikiButton />
-              <DocsButton />
-              <Show when={projectDirectory()}>
-                {(dir) => <GitHubButton directory={dir()} />}
-              </Show>
             </div>
           </Portal>
         )}
