@@ -22,6 +22,11 @@ import {
 import { Auth } from "../../auth"
 import { SessionStatus } from "../../session/status"
 import { SessionTable } from "../../session/session.sql"
+import { Resource } from "../../learning/resource"
+import { Session } from "../../session"
+import { SessionPrompt } from "../../session/prompt"
+import { MessageID } from "../../session/schema"
+import { Provider } from "../../provider/provider"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { generateText } from "ai"
 
@@ -711,6 +716,77 @@ export const WikiRoutes = () => {
     }
 
     return c.text("Not found", 404)
+  })
+
+  // ── Direct resource add (bypasses AI command layer) ──────────────────────────
+  app.post("/resource", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: { url?: string }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+    const url = body?.url?.trim()
+    if (!url) return c.json({ error: "url required" }, 400)
+
+    // Deduplication check
+    const existing = Resource.getByUrl(workspace.id, url)
+    if (existing) return c.json({ resource_id: existing.id, duplicate: true })
+
+    // Step 1: Create resource (fetch content, write to disk, download images)
+    const { KbResourceCreateTool } = await import("../../tool/learning/kb-resource-create")
+    let resourceId: string
+    try {
+      const toolDef = await KbResourceCreateTool.init()
+      const result = await toolDef.execute(
+        { workspace_id: workspace.id, modality: "url", input: url },
+        {} as never,
+      )
+      resourceId = (result.metadata as Record<string, unknown>)?.resource_id as string
+      if (!resourceId) throw new Error("No resource_id returned")
+    } catch (err) {
+      return c.json({ error: String(err instanceof Error ? err.message : err) }, 500)
+    }
+
+    // Step 2: Start pipeline in background
+    try {
+      const { buildCuratorPrompt } = await import("../../tool/learning/kb-pipeline-run")
+      const resource = Resource.get(resourceId)
+      const pages = Workspace.getWikiPages(workspace.id)
+      const curatorPrompt = buildCuratorPrompt(resource, workspace, pages)
+
+      const model = await Provider.defaultModel()
+      const childSession = await Session.create({
+        title: `KB: ${resource?.title ?? url}`,
+        permission: [
+          { permission: "bash" as const, pattern: "*" as const, action: "deny" as const },
+          { permission: "edit" as const, pattern: "*" as const, action: "deny" as const },
+          { permission: "write" as const, pattern: "*" as const, action: "deny" as const },
+          { permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const },
+          { permission: "task" as const, pattern: "*" as const, action: "deny" as const },
+        ],
+      })
+
+      const parts = await SessionPrompt.resolvePromptParts(curatorPrompt)
+      SessionPrompt.prompt({
+        sessionID: childSession.id as any,
+        messageID: MessageID.ascending() as any,
+        model: model as any,
+        agent: "kb-curator",
+        tools: {
+          bash: false, edit: false, write: false, glob: false, grep: false,
+          task: false, fetch: false, search: false, code: false, skill: false,
+          patch: false, lsp: false, plan: false, todo: false,
+        },
+        parts,
+      }).catch((err: unknown) => {
+        console.error("[KB Pipeline] Error in curator session:", err instanceof Error ? err.message : String(err))
+      })
+    } catch (err) {
+      // Pipeline start failure is non-fatal — resource was created, just log
+      console.error("[KB Pipeline] Failed to start pipeline:", err instanceof Error ? err.message : String(err))
+    }
+
+    return c.json({ resource_id: resourceId })
   })
 
   // ── KB background jobs (curator sessions) ────────────────────────────────────

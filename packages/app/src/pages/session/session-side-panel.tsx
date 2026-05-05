@@ -201,12 +201,20 @@ export function SessionSidePanel(props: {
     if (!url) return
     const id = bgProcessAdd(url)
     setAddSourceUrl("")
-    sdk.client.session.command({
-      sessionID: sessionKey(),
-      command: "memorize",
-      arguments: url,
-    }).then(() => {
-      bgProcessUpdate(id, "done")
+    const http = server.current?.http
+    const baseUrl = http ? (typeof http === "string" ? http : (http as { url: string }).url) : "http://localhost:4096"
+    const token = getAuthToken()
+    fetch(`${baseUrl}/wiki/resource`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-opencode-directory": encodeURIComponent(sdk.directory),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ url }),
+    }).then(async (res) => {
+      if (res.ok) bgProcessUpdate(id, "done")
+      else bgProcessUpdate(id, "error")
     }).catch(() => {
       bgProcessUpdate(id, "error")
     })

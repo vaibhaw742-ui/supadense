@@ -28,7 +28,7 @@ import { WikiBuilder } from "../../learning/wiki-builder"
 
 // ── Prompt builder ─────────────────────────────────────────────────────────
 
-function buildCuratorPrompt(
+export function buildCuratorPrompt(
   resource: ReturnType<typeof Resource.get>,
   workspace: ReturnType<typeof Workspace.getById>,
   pages: ReturnType<typeof Workspace.getWikiPages>,
