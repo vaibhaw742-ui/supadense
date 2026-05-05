@@ -8,8 +8,7 @@ export function BgProcessMonitor() {
   const hasError = createMemo(() => bgProcesses().some((p) => p.status === "error"))
 
   return (
-    <Show when={hasAny()}>
-      <Popover
+    <Popover
         placement="right-end"
         triggerAs="button"
         triggerProps={{
@@ -40,26 +39,24 @@ export function BgProcessMonitor() {
               stroke-width="1.75"
               stroke-linecap="round"
               stroke-linejoin="round"
-              style={{ color: hasActive() ? "var(--color-blue-500, #3b82f6)" : "var(--color-icon-base)" }}
+              style={{ color: hasActive() ? "#3b82f6" : hasAny() ? "var(--color-icon-base)" : "var(--color-icon-dimmed, var(--color-icon-base))", opacity: hasAny() ? "1" : "0.45" }}
             >
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            {/* Status dot */}
-            <span
-              style={{
-                position: "absolute",
-                top: "6px",
-                right: "6px",
-                width: "6px",
-                height: "6px",
-                "border-radius": "50%",
-                background: hasActive()
-                  ? "#3b82f6"
-                  : hasError()
-                  ? "#ef4444"
-                  : "#22c55e",
-              }}
-            />
+            {/* Status dot — only shown when there are processes */}
+            <Show when={hasAny()}>
+              <span
+                style={{
+                  position: "absolute",
+                  top: "6px",
+                  right: "6px",
+                  width: "6px",
+                  height: "6px",
+                  "border-radius": "50%",
+                  background: hasActive() ? "#3b82f6" : hasError() ? "#ef4444" : "#22c55e",
+                }}
+              />
+            </Show>
           </>
         }
       >
@@ -138,8 +135,13 @@ export function BgProcessMonitor() {
               )}
             </For>
           </div>
+        {/* Empty state */}
+        <Show when={!hasAny()}>
+          <div style={{ padding: "16px 12px", "text-align": "center", "font-size": "12px", color: "var(--text-weak)" }}>
+            No background processes
+          </div>
+        </Show>
         </div>
       </Popover>
-    </Show>
   )
 }
