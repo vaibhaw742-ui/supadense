@@ -164,6 +164,11 @@ export function SessionSidePanel(props: {
     },
   )
 
+  const RESOURCE_MILESTONE = 100
+  const resourceCount = createMemo(() => graphData()?.nodes.filter((n) => n.type === "resource").length ?? 0)
+  const resourcePct = createMemo(() => Math.min(100, Math.round((resourceCount() / RESOURCE_MILESTONE) * 100)))
+  const resourceMilestoneReached = createMemo(() => resourceCount() >= RESOURCE_MILESTONE)
+
   const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
 
   const [wikiPageData] = createResource(
@@ -455,6 +460,29 @@ export function SessionSidePanel(props: {
                 </form>
               </Show>
             </div>
+            {/* Resource milestone progress bar */}
+            <div
+              class="shrink-0 relative h-[3px] w-full overflow-hidden"
+              title={resourceMilestoneReached()
+                ? `${resourceCount()} resources — milestone reached! 🎉`
+                : `${resourceCount()} / ${RESOURCE_MILESTONE} resources to first milestone`}
+            >
+              {/* Track */}
+              <div class="absolute inset-0 bg-border-weaker-base" />
+              {/* Fill */}
+              <div
+                class="absolute inset-y-0 left-0 transition-[width] duration-500"
+                style={{
+                  width: `${resourcePct()}%`,
+                  background: resourceMilestoneReached()
+                    ? "linear-gradient(90deg,#22c55e,#4ade80)"
+                    : "linear-gradient(90deg,#6366f1,#a78bfa)",
+                }}
+              />
+              {/* Milestone tick at 100% */}
+              <div class="absolute inset-y-0 right-0 w-px bg-border-base opacity-60" />
+            </div>
+
             {/* Source queue dropdown */}
             <Show when={bgProcesses().length > 0}>
               <div class="shrink-0 border-t border-border-weaker-base bg-surface-panel px-3 py-2 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
