@@ -145,17 +145,13 @@ export function useKbJobsGlobal(directory: Accessor<string | undefined>) {
   return { jobs, justFinished }
 }
 
-export function KbNotificationBell(props: { directory: Accessor<string | undefined> }) {
-  const { jobs, justFinished } = useKbJobsGlobal(props.directory)
-  const hasActivity = () => jobs().length > 0 || justFinished()
-  const isRunning = () => jobs().length > 0
-
+export function KbNotificationBell(_props: { directory: Accessor<string | undefined> }) {
   return (
     <Popover
       placement="right-end"
       triggerAs="button"
       triggerProps={{
-        "aria-label": "Background jobs",
+        "aria-label": "Notifications",
         style: {
           position: "relative",
           display: "flex",
@@ -168,64 +164,19 @@ export function KbNotificationBell(props: { directory: Accessor<string | undefin
           cursor: "pointer",
           color: "var(--color-icon-base)",
           "border-radius": "8px",
+          opacity: "0.45",
         },
       }}
       trigger={
-        <>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <Show when={hasActivity()}>
-            <span
-              style={{
-                position: "absolute",
-                top: "8px",
-                right: "8px",
-                width: "7px",
-                height: "7px",
-                "border-radius": "50%",
-                background: isRunning() ? "#f97316" : "#22c55e",
-                animation: isRunning() ? "kb-bell-pulse 1.5s ease-in-out infinite" : "none",
-              }}
-            />
-          </Show>
-          <style>{`
-            @keyframes kb-bell-pulse {
-              0%, 100% { opacity: 1; transform: scale(1); }
-              50% { opacity: 0.5; transform: scale(1.4); }
-            }
-          `}</style>
-        </>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       }
       class="[&_[data-slot=popover-body]]:p-0"
     >
-      <div style={{ padding: "8px 0", "min-width": "220px", "max-width": "300px" }}>
-        <div style={{ padding: "4px 12px 8px", "font-size": "11px", "font-weight": "600", "text-transform": "uppercase", "letter-spacing": "0.05em", color: "var(--color-text-dimmed)" }}>
-          Background Jobs
-        </div>
-        <Show when={jobs().length === 0 && !justFinished()}>
-          <div style={{ padding: "4px 12px 8px", "font-size": "13px", color: "var(--color-text-dimmed)" }}>
-            No active jobs
-          </div>
-        </Show>
-        <Show when={justFinished() && jobs().length === 0}>
-          <div style={{ padding: "6px 12px", display: "flex", "align-items": "center", gap: "8px" }}>
-            <span style={{ color: "#22c55e", "font-size": "14px" }}>✓</span>
-            <span style={{ "font-size": "13px", color: "var(--color-text-base)" }}>Processing complete</span>
-          </div>
-        </Show>
-        <For each={jobs()}>
-          {(job) => (
-            <div style={{ padding: "6px 12px", display: "flex", "align-items": "center", gap: "8px" }}>
-              <span style={{ animation: "kb-spin 1s linear infinite", display: "inline-block", color: "#f97316", "font-size": "14px" }}>⟳</span>
-              <span style={{ "font-size": "13px", color: "var(--color-text-base)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                {job.title}
-              </span>
-            </div>
-          )}
-        </For>
-        <style>{`@keyframes kb-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+      <div style={{ padding: "12px", "min-width": "200px", "font-size": "12px", color: "var(--color-text-dimmed)", "text-align": "center" }}>
+        No notifications
       </div>
     </Popover>
   )

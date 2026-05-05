@@ -2497,7 +2497,7 @@ export default function Layout(props: ParentProps) {
       }
       userEmail={getSessionEmail()}
       onLogout={handleLogout}
-      bgProcessMonitor={<BgProcessMonitor />}
+      bgProcessMonitor={<BgProcessMonitor directory={() => currentProject()?.worktree} />}
       notificationBell={<KbNotificationBell directory={() => currentProject()?.worktree} />}
       onToggleSessions={() => layout.sidebar.toggle()}
       onNewSession={() => {
