@@ -1945,3 +1945,34 @@ a.wk-resource-title:hover {
   color: var(--wk-red);
   font-size: 13px;
 }
+
+/* ── Add-source nudge tooltip ─────────────────────────────────────────────── */
+.add-source-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  white-space: nowrap;
+  background: #e86f2b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  animation: tip-pulse 2s ease-in-out infinite;
+  z-index: 50;
+}
+.add-source-tip-arrow {
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #e86f2b;
+}
+@keyframes tip-pulse {
+  0%, 100% { opacity: 1; transform: translateY(0); }
+  50%       { opacity: 0.8; transform: translateY(-2px); }
+}

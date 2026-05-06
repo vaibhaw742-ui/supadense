@@ -172,6 +172,14 @@ export function SessionSidePanel(props: {
     if (!data) return true
     return data.nodes.filter((n) => n.type === "category").length === 0
   })
+  const showAddSourceTip = createMemo(() => {
+    if (graphData.loading) return false
+    const data = graphData()
+    if (!data) return false
+    const cats = data.nodes.filter((n) => n.type === "category").length
+    const resources = data.nodes.filter((n) => n.type === "resource").length
+    return cats >= 1 && resources === 0
+  })
 
   const RESOURCE_MILESTONE = 100
   const resourceCount = createMemo(() => graphData()?.nodes.filter((n) => n.type === "resource").length ?? 0)
@@ -433,6 +441,13 @@ export function SessionSidePanel(props: {
               {/* spacer */}
               <div class="flex-1" />
               {/* Add source */}
+              <div class="relative shrink-0">
+                <Show when={showAddSourceTip() && !addSourceOpen()}>
+                  <div class="add-source-tip">
+                    Add your first source
+                    <div class="add-source-tip-arrow" />
+                  </div>
+                </Show>
               <Show
                 when={addSourceOpen()}
                 fallback={
@@ -476,6 +491,7 @@ export function SessionSidePanel(props: {
                   </button>
                 </form>
               </Show>
+              </div>
             </div>
             {/* Resource milestone progress bar */}
             <div class="shrink-0 w-full">
