@@ -1,4 +1,4 @@
-import { createResource, createMemo, For, Show, createSignal } from "solid-js"
+import { createResource, createMemo, For, Index, Show, createSignal } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useWikiApi, type WikiCategory, type WikiPageSummary } from "./wiki-api"
 import { WikiGraph } from "./wiki-graph"
@@ -65,7 +65,8 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
 
   const addCat = () => setCustomCats((cats) => cats.length < MAX_CUSTOM_CATS ? [...cats, { name: "" }] : cats)
 
-  const removeCat = (i: number) => setCustomCats((cats) => cats.filter((_, idx) => idx !== i))
+  const removeCat = (i: number) =>
+    setCustomCats((cats) => cats.length > 1 ? cats.filter((_, idx) => idx !== i) : cats)
 
   const filledCustomCats = () => customCats().filter((c) => c.name.trim().length > 0)
 
@@ -201,21 +202,21 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
             </div>
             <p class="wk-wizard-subtitle">Add 1–5 knowledge areas you want to track.</p>
             <div class="wk-wizard-custom-cats">
-              <For each={customCats()}>
+              <Index each={customCats()}>
                 {(cat, i) => (
                   <div class="wk-wizard-custom-row">
                     <input
                       class="wk-wizard-input wk-wizard-input--grow"
                       placeholder="Category name…"
-                      value={cat.name}
-                      onInput={(e) => updateCat(i(), e.currentTarget.value)}
+                      value={cat().name}
+                      onInput={(e) => updateCat(i, e.currentTarget.value)}
                     />
                     <Show when={customCats().length > 1}>
-                      <button class="wk-wizard-remove-btn" onClick={() => removeCat(i())}>✕</button>
+                      <button class="wk-wizard-remove-btn" onClick={() => removeCat(i)}>✕</button>
                     </Show>
                   </div>
                 )}
-              </For>
+              </Index>
               <Show when={customCats().length < MAX_CUSTOM_CATS}>
                 <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
               </Show>
