@@ -55,11 +55,7 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   const [template, setTemplate] = createSignal<TemplateKey>("ml")
   const [intent, setIntent] = createSignal("")
   const [goals, setGoals] = createSignal(["", "", ""])
-  const [customCats, setCustomCats] = createSignal([
-    { name: "", icon: "" },
-    { name: "", icon: "" },
-    { name: "", icon: "" },
-  ])
+  const [customCats, setCustomCats] = createSignal([{ name: "", icon: "" }])
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal("")
 
@@ -69,15 +65,19 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   const updateCat = (i: number, field: "name" | "icon", val: string) =>
     setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
 
-  const addCat = () => setCustomCats((cats) => [...cats, { name: "", icon: "" }])
+  const MAX_CUSTOM_CATS = 5
+
+  const addCat = () => setCustomCats((cats) => cats.length < MAX_CUSTOM_CATS ? [...cats, { name: "", icon: "" }] : cats)
 
   const removeCat = (i: number) => setCustomCats((cats) => cats.filter((_, idx) => idx !== i))
+
+  const filledCustomCats = () => customCats().filter((c) => c.name.trim().length > 0)
 
   const canProceedStep1 = () => template() !== undefined
   const canProceedStep2 = () => intent().trim().length > 0
   const canSubmit = () => {
     if (template() === "custom") {
-      return customCats().some((c) => c.name.trim().length > 0)
+      return filledCustomCats().length >= 1
     }
     return true
   }
@@ -249,8 +249,11 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
                 </div>
               </>
             }>
-              <h2 class="wk-wizard-title">Define your categories</h2>
-              <p class="wk-wizard-subtitle">Add the knowledge areas you want to track.</p>
+              <div class="wk-wizard-custom-header">
+                <h2 class="wk-wizard-title">Define your categories</h2>
+                <span class="wk-wizard-cat-counter">{filledCustomCats().length} / {MAX_CUSTOM_CATS}</span>
+              </div>
+              <p class="wk-wizard-subtitle">Add 1–5 knowledge areas you want to track.</p>
               <div class="wk-wizard-custom-cats">
                 <For each={customCats()}>
                   {(cat, i) => (
@@ -274,7 +277,12 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
                     </div>
                   )}
                 </For>
-                <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
+                <Show when={customCats().length < MAX_CUSTOM_CATS}>
+                  <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
+                </Show>
+                <Show when={customCats().length >= MAX_CUSTOM_CATS}>
+                  <div class="wk-wizard-cat-limit">Maximum 5 categories reached</div>
+                </Show>
               </div>
             </Show>
 
