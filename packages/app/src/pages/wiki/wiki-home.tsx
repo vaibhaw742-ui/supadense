@@ -69,14 +69,16 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
 
   const filledCustomCats = () => customCats().filter((c) => c.name.trim().length > 0)
 
-  const canProceedStep1 = () => template() !== undefined
-  const canProceedStep2 = () => intent().trim().length > 0
-  const canSubmit = () => {
-    if (template() === "custom") {
-      return filledCustomCats().length >= 1
-    }
-    return true
+  const totalSteps = () => template() === "custom" ? 3 : 2
+
+  const goBack = () => {
+    if (step() === 3) setStep(2)
+    else if (step() === 2) setStep(1)
   }
+
+  const canProceedStep1 = () => template() !== undefined
+  const canProceedStep2Custom = () => filledCustomCats().length >= 1
+  const canSubmit = () => intent().trim().length > 0
 
   const submit = async () => {
     if (submitting()) return
@@ -137,13 +139,15 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
             when={props.dark}
             fallback={
               <div class="wk-wizard-steps">
-                {([1, 2, 3] as const).map((s) => (
-                  <div
-                    class="wk-wizard-step-dot"
-                    classList={{ active: step() === s, done: step() > s }}
-                    onClick={() => step() > s && setStep(s)}
-                  />
-                ))}
+                <For each={Array.from({ length: totalSteps() }, (_, i) => i + 1)}>
+                  {(s) => (
+                    <div
+                      class="wk-wizard-step-dot"
+                      classList={{ active: step() === s, done: step() > s }}
+                      onClick={() => step() > s && setStep(s as 1 | 2 | 3)}
+                    />
+                  )}
+                </For>
               </div>
             }
           >
@@ -154,13 +158,13 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
           </Show>
         </div>
 
-        {/* Step 1 — Template */}
+        {/* Step 1 — Template selection */}
         <Show when={step() === 1}>
           <div class="wk-wizard-body">
             <h2 class="wk-wizard-title">Choose a knowledge template</h2>
             <p class="wk-wizard-subtitle">Select a starting structure for your KB. You can add or change categories anytime.</p>
             <div class="wk-wizard-templates">
-              <For each={Object.entries(TEMPLATES) as [TemplateKey, typeof TEMPLATES[TemplateKey]][]} >
+              <For each={Object.entries(TEMPLATES) as [TemplateKey, typeof TEMPLATES[TemplateKey]][]}>
                 {([key, tpl]) => (
                   <button
                     class="wk-wizard-tpl-card"
@@ -188,8 +192,55 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
           </div>
         </Show>
 
-        {/* Step 2 — Intent */}
-        <Show when={step() === 2}>
+        {/* Step 2 — Categories (custom only) */}
+        <Show when={step() === 2 && template() === "custom"}>
+          <div class="wk-wizard-body">
+            <div class="wk-wizard-custom-header">
+              <h2 class="wk-wizard-title">Define your categories</h2>
+              <span class="wk-wizard-cat-counter">{filledCustomCats().length} / {MAX_CUSTOM_CATS}</span>
+            </div>
+            <p class="wk-wizard-subtitle">Add 1–5 knowledge areas you want to track.</p>
+            <div class="wk-wizard-custom-cats">
+              <For each={customCats()}>
+                {(cat, i) => (
+                  <div class="wk-wizard-custom-row">
+                    <input
+                      class="wk-wizard-input wk-wizard-input--icon"
+                      placeholder="emoji"
+                      maxLength={2}
+                      value={cat.icon}
+                      onInput={(e) => updateCat(i(), "icon", e.currentTarget.value)}
+                    />
+                    <input
+                      class="wk-wizard-input wk-wizard-input--grow"
+                      placeholder="Category name…"
+                      value={cat.name}
+                      onInput={(e) => updateCat(i(), "name", e.currentTarget.value)}
+                    />
+                    <Show when={customCats().length > 1}>
+                      <button class="wk-wizard-remove-btn" onClick={() => removeCat(i())}>✕</button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+              <Show when={customCats().length < MAX_CUSTOM_CATS}>
+                <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
+              </Show>
+              <Show when={customCats().length >= MAX_CUSTOM_CATS}>
+                <div class="wk-wizard-cat-limit">Maximum 5 categories reached</div>
+              </Show>
+            </div>
+          </div>
+          <div class="wk-wizard-footer">
+            <button class="wk-wizard-btn-ghost" onClick={() => setStep(1)}>← Back</button>
+            <button class="wk-wizard-btn-primary" disabled={!canProceedStep2Custom()} onClick={() => setStep(3)}>
+              Continue →
+            </button>
+          </div>
+        </Show>
+
+        {/* Step 2 (non-custom) / Step 3 (custom) — Learning intent */}
+        <Show when={(step() === 2 && template() !== "custom") || (step() === 3 && template() === "custom")}>
           <div class="wk-wizard-body">
             <h2 class="wk-wizard-title">What are you learning?</h2>
             <p class="wk-wizard-subtitle">One sentence describing your goal. This helps the AI curate content for you.</p>
@@ -201,80 +252,12 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
               onInput={(e) => setIntent(e.currentTarget.value)}
               autofocus
             />
-          </div>
-          <div class="wk-wizard-footer">
-            <button class="wk-wizard-btn-ghost" onClick={() => setStep(1)}>← Back</button>
-            <button class="wk-wizard-btn-primary" disabled={!canProceedStep2()} onClick={() => setStep(3)}>
-              Continue →
-            </button>
-          </div>
-        </Show>
-
-        {/* Step 3 — Confirm / Custom categories */}
-        <Show when={step() === 3}>
-          <div class="wk-wizard-body">
-            <Show when={template() === "custom"} fallback={
-              <>
-                <h2 class="wk-wizard-title">Ready to go!</h2>
-                <p class="wk-wizard-subtitle">Your knowledge base will be created with these categories:</p>
-                <div class="wk-wizard-confirm-cats">
-                  <For each={(TEMPLATES[template()] as typeof TEMPLATES["ml"]).categories ?? []}>
-                    {(cat) => (
-                      <div class="wk-wizard-confirm-cat">
-                        <span class="wk-wizard-confirm-icon">{cat.icon}</span>
-                        <div>
-                          <div class="wk-wizard-confirm-name">{cat.name}</div>
-                          <div class="wk-wizard-confirm-desc">{cat.description}</div>
-                        </div>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </>
-            }>
-              <div class="wk-wizard-custom-header">
-                <h2 class="wk-wizard-title">Define your categories</h2>
-                <span class="wk-wizard-cat-counter">{filledCustomCats().length} / {MAX_CUSTOM_CATS}</span>
-              </div>
-              <p class="wk-wizard-subtitle">Add 1–5 knowledge areas you want to track.</p>
-              <div class="wk-wizard-custom-cats">
-                <For each={customCats()}>
-                  {(cat, i) => (
-                    <div class="wk-wizard-custom-row">
-                      <input
-                        class="wk-wizard-input wk-wizard-input--icon"
-                        placeholder="emoji"
-                        maxLength={2}
-                        value={cat.icon}
-                        onInput={(e) => updateCat(i(), "icon", e.currentTarget.value)}
-                      />
-                      <input
-                        class="wk-wizard-input wk-wizard-input--grow"
-                        placeholder={`Category name…`}
-                        value={cat.name}
-                        onInput={(e) => updateCat(i(), "name", e.currentTarget.value)}
-                      />
-                      <Show when={customCats().length > 1}>
-                        <button class="wk-wizard-remove-btn" onClick={() => removeCat(i())}>✕</button>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-                <Show when={customCats().length < MAX_CUSTOM_CATS}>
-                  <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
-                </Show>
-                <Show when={customCats().length >= MAX_CUSTOM_CATS}>
-                  <div class="wk-wizard-cat-limit">Maximum 5 categories reached</div>
-                </Show>
-              </div>
-            </Show>
-
             <Show when={error()}>
               <div class="wk-wizard-error">{error()}</div>
             </Show>
           </div>
           <div class="wk-wizard-footer">
-            <button class="wk-wizard-btn-ghost" onClick={() => setStep(2)}>← Back</button>
+            <button class="wk-wizard-btn-ghost" onClick={goBack}>← Back</button>
             <button
               class="wk-wizard-btn-primary"
               disabled={!canSubmit() || submitting()}
