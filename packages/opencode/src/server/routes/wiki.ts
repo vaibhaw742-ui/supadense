@@ -124,8 +124,24 @@ export const WikiRoutes = () => {
   // ── Home ────────────────────────────────────────────────────────────────────
   // Returns workspace stats, all categories with their pages, and recent events.
   app.get("/home", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    // Auto-create workspace if none exists so new KBs get an empty-state 200 response
+    // instead of a 404 that hides the Get Started button in the frontend.
+    let workspace = resolveWorkspace()
+    if (!workspace) {
+      try {
+        workspace = Workspace.ensure(Instance.project.id, Instance.directory)
+        wikiInitializedWorkspaces.add(workspace.id)
+        Workspace.scaffoldFiles(workspace)
+      } catch {
+        return c.json({
+          workspace: { id: "", kb_path: "", learning_intent: null, kb_initialized: false, goals: [] },
+          stats: { total_pages: 0, total_categories: 0, total_sources: 0, total_concepts: 0 },
+          categories: [],
+          recent_events: [],
+          graph_data: { nodes: [], edges: [] },
+        })
+      }
+    }
 
     const categories = Workspace.getCategories(workspace.id)
     const pages = Workspace.getWikiPages(workspace.id)
@@ -722,8 +738,13 @@ export const WikiRoutes = () => {
 
   // ── KB Onboarding (direct, no AI) ────────────────────────────────────────────
   app.post("/onboard", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    // Auto-create workspace if none exists so onboarding works for brand-new KBs
+    let workspace = resolveWorkspace()
+    if (!workspace) {
+      workspace = Workspace.ensure(Instance.project.id, Instance.directory)
+      wikiInitializedWorkspaces.add(workspace.id)
+      Workspace.scaffoldFiles(workspace)
+    }
 
     let body: {
       template?: "ml" | "software" | "custom"

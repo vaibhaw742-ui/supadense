@@ -467,7 +467,7 @@ export default function WikiHome() {
     return map
   })
 
-  const isEmpty = createMemo(() => !data.loading && (data()?.categories ?? []).length === 0)
+  const isEmpty = createMemo(() => !data.loading && (data.error || (data()?.categories ?? []).length === 0))
 
   const formatDate = (ts: number) =>
     new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -556,10 +556,10 @@ export default function WikiHome() {
             </div>
 
             <div class="wk-sb-bottom">
+              <div class="wk-sb-label">Docs</div>
+              <a class="wk-sb-link" onClick={() => navigate(`/${params.dir}/wiki/roadmap`)}>Roadmaps</a>
               <Show when={data()}>
                 <>
-                  <div class="wk-sb-label">Docs</div>
-                  <a class="wk-sb-link" onClick={() => navigate(`/${params.dir}/wiki/roadmap`)}>Roadmaps</a>
                   <div class="wk-sb-label" style={{ "margin-top": "6px" }}>Stats</div>
                   <div class="wk-sb-stat">{data()!.stats.total_pages} pages</div>
                   <div class="wk-sb-stat">{data()!.stats.total_sources} sources</div>
@@ -578,91 +578,87 @@ export default function WikiHome() {
               <div class="wk-loading">Loading…</div>
             </Show>
 
-            <Show when={data()}>
-              {(d) => (
-                <>
-                  <h1 class="wk-title">Welcome to Supadense Wiki</h1>
-                  <p class="wk-subtitle">Your Knowledge base for Tech</p>
+            <Show when={!data.loading}>
+              <>
+                <h1 class="wk-title">Welcome to Supadense Wiki</h1>
+                <p class="wk-subtitle">Your Knowledge base for Tech</p>
 
-                  <Show when={topLevelCats().length > 0} fallback={
-                    <div class="wk-empty-main">
-                      <div class="wk-empty-main-icon">📚</div>
-                      <div class="wk-empty-main-title">No categories yet</div>
-                      <div class="wk-empty-main-desc">
-                        Use the Get Started button in the graph panel, or click below to set up your knowledge base.
-                      </div>
-                      <button class="wk-empty-main-btn" onClick={() => setShowWizard(true)}>
-                        Get Started
-                      </button>
+                <Show when={topLevelCats().length > 0} fallback={
+                  <div class="wk-empty-main">
+                    <div class="wk-empty-main-icon">📚</div>
+                    <div class="wk-empty-main-title">No categories yet</div>
+                    <div class="wk-empty-main-desc">
+                      Use the Get Started button in the graph panel, or click below to set up your knowledge base.
                     </div>
-                  }>
-                    <div class="wk-section-label">Browse by category</div>
-                    <div class="wk-grid">
-                      <For each={topLevelCats()}>
-                        {(cat, i) => (
-                          <CategoryCard
-                            cat={cat}
-                            subcats={subcatsByParent().get(cat.id) ?? []}
-                            paletteIndex={i()}
-                            onNavigate={go}
-                          />
-                        )}
-                      </For>
-                    </div>
-                  </Show>
+                    <button class="wk-empty-main-btn" onClick={() => setShowWizard(true)}>
+                      Get Started
+                    </button>
+                  </div>
+                }>
+                  <div class="wk-section-label">Browse by category</div>
+                  <div class="wk-grid">
+                    <For each={topLevelCats()}>
+                      {(cat, i) => (
+                        <CategoryCard
+                          cat={cat}
+                          subcats={subcatsByParent().get(cat.id) ?? []}
+                          paletteIndex={i()}
+                          onNavigate={go}
+                        />
+                      )}
+                    </For>
+                  </div>
+                </Show>
 
-                  <Show when={d().recent_events.length > 0}>
-                    <div class="wk-section-label" style={{ "margin-top": "28px" }}>Recent activity</div>
-                    <ul class="wk-activity-list">
-                      <For each={d().recent_events.slice(0, 5)}>
-                        {(ev) => (
-                          <li class="wk-activity-item">
-                            <span class="wk-activity-dot" data-type={ev.event_type} />
-                            <span class="wk-activity-summary">{ev.summary}</span>
-                            <span class="wk-activity-date">{formatDate(ev.time_created)}</span>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  </Show>
-                </>
-              )}
+                <Show when={(data()?.recent_events?.length ?? 0) > 0}>
+                  <div class="wk-section-label" style={{ "margin-top": "28px" }}>Recent activity</div>
+                  <ul class="wk-activity-list">
+                    <For each={data()!.recent_events.slice(0, 5)}>
+                      {(ev) => (
+                        <li class="wk-activity-item">
+                          <span class="wk-activity-dot" data-type={ev.event_type} />
+                          <span class="wk-activity-summary">{ev.summary}</span>
+                          <span class="wk-activity-date">{formatDate(ev.time_created)}</span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+              </>
             </Show>
           </main>
 
-          <Show when={data()}>
+          <Show when={!data.loading}>
             <div class="wk-resize-divider" onMouseDown={onDividerMouseDown} />
           </Show>
 
-          {/* Graph panel — always shown once data loads */}
-          <Show when={data()}>
-            {(d) => (
-              <aside class="wk-graph-panel" style={{ width: `${graphWidth()}%` }}>
-                <div class="wk-graph-header">
-                  <span class="wk-graph-title">Knowledge Graph</span>
-                  <Show when={isEmpty()}>
-                    <button class="wk-graph-header-btn" onClick={() => setShowWizard(true)}>
-                      Get Started
-                    </button>
-                  </Show>
-                </div>
-                <div class="wk-graph-body">
-                  <Show when={isEmpty()} fallback={
-                    <WikiGraph data={d().graph_data} onNavigate={go} />
-                  }>
-                    <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
-                  </Show>
-                </div>
-                <Show when={!isEmpty()}>
-                  <div class="wk-graph-legend">
-                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
-                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
-                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
-                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
-                  </div>
+          {/* Graph panel — shown once initial load completes (whether data or error) */}
+          <Show when={!data.loading}>
+            <aside class="wk-graph-panel" style={{ width: `${graphWidth()}%` }}>
+              <div class="wk-graph-header">
+                <span class="wk-graph-title">Knowledge Graph</span>
+                <Show when={isEmpty()}>
+                  <button class="wk-graph-header-btn" onClick={() => setShowWizard(true)}>
+                    Get Started
+                  </button>
                 </Show>
-              </aside>
-            )}
+              </div>
+              <div class="wk-graph-body">
+                <Show when={isEmpty()} fallback={
+                  <WikiGraph data={data()!.graph_data} onNavigate={go} />
+                }>
+                  <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
+                </Show>
+              </div>
+              <Show when={!isEmpty()}>
+                <div class="wk-graph-legend">
+                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
+                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
+                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
+                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
+                </div>
+              </Show>
+            </aside>
           </Show>
 
         </div>
