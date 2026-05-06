@@ -14,6 +14,276 @@ const SUBCAT_PALETTES = [
   { bg: "rgba(168,85,247,0.10)", border: "rgba(168,85,247,0.25)", text: "#9333ea" },
 ]
 
+const TEMPLATES = {
+  ml: {
+    label: "ML / AI",
+    icon: "🤖",
+    desc: "Agents, RAG, LLM Inference, LLM Training",
+    categories: [
+      { slug: "agents", name: "Agents", icon: "🤖", description: "Autonomous AI systems that reason, plan, and act using tools, memory, and environment feedback." },
+      { slug: "rag", name: "RAG", icon: "🔍", description: "Retrieval-Augmented Generation — grounding LLM outputs with external knowledge retrieval." },
+      { slug: "llm-inference", name: "LLM Inference", icon: "⚡", description: "Serving large language models efficiently — latency, throughput, quantization, and hardware trade-offs." },
+      { slug: "llm-training", name: "LLM Training", icon: "🧠", description: "Pre-training, fine-tuning, RLHF, and alignment techniques." },
+    ],
+  },
+  software: {
+    label: "Software Engineering",
+    icon: "🏗️",
+    desc: "Database, Frontend, System Design",
+    categories: [
+      { slug: "database", name: "Database", icon: "🗄️", description: "Relational and non-relational databases — schema design, indexing, query optimization, transactions." },
+      { slug: "frontend", name: "Frontend", icon: "🖥️", description: "UI engineering — component architecture, state management, rendering strategies, performance." },
+      { slug: "software-system-design", name: "System Design", icon: "🏗️", description: "Distributed systems, scalability patterns, API design, caching, and architectural trade-offs." },
+    ],
+  },
+  custom: {
+    label: "Custom",
+    icon: "✏️",
+    desc: "Define your own categories",
+    categories: [],
+  },
+} as const
+
+type TemplateKey = keyof typeof TEMPLATES
+
+// ── Onboarding Wizard ─────────────────────────────────────────────────────────
+
+function OnboardingWizard(props: { onComplete: () => void }) {
+  const api = useWikiApi()
+
+  const [step, setStep] = createSignal<1 | 2 | 3>(1)
+  const [template, setTemplate] = createSignal<TemplateKey>("ml")
+  const [intent, setIntent] = createSignal("")
+  const [goals, setGoals] = createSignal(["", "", ""])
+  const [customCats, setCustomCats] = createSignal([
+    { name: "", icon: "" },
+    { name: "", icon: "" },
+    { name: "", icon: "" },
+  ])
+  const [submitting, setSubmitting] = createSignal(false)
+  const [error, setError] = createSignal("")
+
+  const updateGoal = (i: number, val: string) =>
+    setGoals((g) => g.map((v, idx) => (idx === i ? val : v)))
+
+  const updateCat = (i: number, field: "name" | "icon", val: string) =>
+    setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
+
+  const addCat = () => setCustomCats((cats) => [...cats, { name: "", icon: "" }])
+
+  const removeCat = (i: number) => setCustomCats((cats) => cats.filter((_, idx) => idx !== i))
+
+  const canProceedStep1 = () => template() !== undefined
+  const canProceedStep2 = () => intent().trim().length > 0
+  const canSubmit = () => {
+    if (template() === "custom") {
+      return customCats().some((c) => c.name.trim().length > 0)
+    }
+    return true
+  }
+
+  const submit = async () => {
+    if (submitting()) return
+    setSubmitting(true)
+    setError("")
+    try {
+      const filledGoals = goals().filter((g) => g.trim())
+      const cats = template() === "custom"
+        ? customCats()
+            .filter((c) => c.name.trim())
+            .map((c) => ({
+              slug: c.name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+              name: c.name.trim(),
+              icon: c.icon.trim() || undefined,
+            }))
+        : undefined
+
+      await api.onboard({
+        template: template(),
+        learning_intent: intent().trim(),
+        goals: filledGoals,
+        ...(cats ? { categories: cats } : {}),
+      })
+      props.onComplete()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div class="wk-wizard-overlay" onClick={(e) => e.target === e.currentTarget && undefined}>
+      <div class="wk-wizard">
+        {/* Header */}
+        <div class="wk-wizard-header">
+          <div class="wk-wizard-steps">
+            {([1, 2, 3] as const).map((s) => (
+              <div
+                class="wk-wizard-step-dot"
+                classList={{ active: step() === s, done: step() > s }}
+                onClick={() => step() > s && setStep(s)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Step 1 — Template */}
+        <Show when={step() === 1}>
+          <div class="wk-wizard-body">
+            <h2 class="wk-wizard-title">Choose a knowledge template</h2>
+            <p class="wk-wizard-subtitle">Select a starting structure for your KB. You can add or change categories anytime.</p>
+            <div class="wk-wizard-templates">
+              <For each={Object.entries(TEMPLATES) as [TemplateKey, typeof TEMPLATES[TemplateKey]][]} >
+                {([key, tpl]) => (
+                  <button
+                    class="wk-wizard-tpl-card"
+                    classList={{ selected: template() === key }}
+                    onClick={() => setTemplate(key)}
+                  >
+                    <div class="wk-wizard-tpl-icon">{tpl.icon}</div>
+                    <div class="wk-wizard-tpl-label">{tpl.label}</div>
+                    <div class="wk-wizard-tpl-desc">{tpl.desc}</div>
+                    <Show when={key !== "custom" && template() === key}>
+                      <div class="wk-wizard-tpl-cats">
+                        <For each={(tpl as typeof TEMPLATES["ml"]).categories}>
+                          {(cat) => <span class="wk-wizard-tpl-cat">{cat.icon} {cat.name}</span>}
+                        </For>
+                      </div>
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+          <div class="wk-wizard-footer">
+            <button class="wk-wizard-btn-primary" disabled={!canProceedStep1()} onClick={() => setStep(2)}>
+              Continue →
+            </button>
+          </div>
+        </Show>
+
+        {/* Step 2 — Intent */}
+        <Show when={step() === 2}>
+          <div class="wk-wizard-body">
+            <h2 class="wk-wizard-title">What are you learning?</h2>
+            <p class="wk-wizard-subtitle">One sentence describing your goal. This helps the AI curate content for you.</p>
+            <textarea
+              class="wk-wizard-textarea"
+              placeholder="e.g. Master LLM agent architectures for building production-grade AI systems"
+              rows={3}
+              value={intent()}
+              onInput={(e) => setIntent(e.currentTarget.value)}
+              autofocus
+            />
+            <div class="wk-wizard-goals-label">Your goals <span class="wk-wizard-optional">(optional)</span></div>
+            <For each={goals()}>
+              {(g, i) => (
+                <input
+                  class="wk-wizard-input"
+                  placeholder={`Goal ${i() + 1}…`}
+                  value={g}
+                  onInput={(e) => updateGoal(i(), e.currentTarget.value)}
+                />
+              )}
+            </For>
+          </div>
+          <div class="wk-wizard-footer">
+            <button class="wk-wizard-btn-ghost" onClick={() => setStep(1)}>← Back</button>
+            <button class="wk-wizard-btn-primary" disabled={!canProceedStep2()} onClick={() => setStep(3)}>
+              Continue →
+            </button>
+          </div>
+        </Show>
+
+        {/* Step 3 — Confirm / Custom categories */}
+        <Show when={step() === 3}>
+          <div class="wk-wizard-body">
+            <Show when={template() === "custom"} fallback={
+              <>
+                <h2 class="wk-wizard-title">Ready to go!</h2>
+                <p class="wk-wizard-subtitle">Your knowledge base will be created with these categories:</p>
+                <div class="wk-wizard-confirm-cats">
+                  <For each={(TEMPLATES[template()] as typeof TEMPLATES["ml"]).categories ?? []}>
+                    {(cat) => (
+                      <div class="wk-wizard-confirm-cat">
+                        <span class="wk-wizard-confirm-icon">{cat.icon}</span>
+                        <div>
+                          <div class="wk-wizard-confirm-name">{cat.name}</div>
+                          <div class="wk-wizard-confirm-desc">{cat.description}</div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </>
+            }>
+              <h2 class="wk-wizard-title">Define your categories</h2>
+              <p class="wk-wizard-subtitle">Add the knowledge areas you want to track.</p>
+              <div class="wk-wizard-custom-cats">
+                <For each={customCats()}>
+                  {(cat, i) => (
+                    <div class="wk-wizard-custom-row">
+                      <input
+                        class="wk-wizard-input wk-wizard-input--icon"
+                        placeholder="emoji"
+                        maxLength={2}
+                        value={cat.icon}
+                        onInput={(e) => updateCat(i(), "icon", e.currentTarget.value)}
+                      />
+                      <input
+                        class="wk-wizard-input wk-wizard-input--grow"
+                        placeholder={`Category name…`}
+                        value={cat.name}
+                        onInput={(e) => updateCat(i(), "name", e.currentTarget.value)}
+                      />
+                      <Show when={customCats().length > 1}>
+                        <button class="wk-wizard-remove-btn" onClick={() => removeCat(i())}>✕</button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <button class="wk-wizard-add-cat" onClick={addCat}>+ Add category</button>
+              </div>
+            </Show>
+
+            <Show when={error()}>
+              <div class="wk-wizard-error">{error()}</div>
+            </Show>
+          </div>
+          <div class="wk-wizard-footer">
+            <button class="wk-wizard-btn-ghost" onClick={() => setStep(2)}>← Back</button>
+            <button
+              class="wk-wizard-btn-primary"
+              disabled={!canSubmit() || submitting()}
+              onClick={submit}
+            >
+              {submitting() ? "Creating…" : "Set up Knowledge Base ✓"}
+            </button>
+          </div>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+// ── Empty state for graph panel ───────────────────────────────────────────────
+
+function GraphEmptyState(props: { onGetStarted: () => void }) {
+  return (
+    <div class="wk-graph-empty">
+      <div class="wk-graph-empty-icon">🧠</div>
+      <div class="wk-graph-empty-title">Your knowledge graph is empty</div>
+      <div class="wk-graph-empty-desc">Set up your KB structure to start organising what you learn</div>
+      <button class="wk-graph-empty-btn" onClick={props.onGetStarted}>
+        Get Started
+      </button>
+    </div>
+  )
+}
+
+// ── Navigation helpers ────────────────────────────────────────────────────────
+
 function pageNavSlug(page: WikiPageSummary): string {
   if (!page.subcategory_slug) return page.category_slug ?? page.slug
   return `${page.category_slug}--${page.subcategory_slug}`
@@ -159,6 +429,8 @@ function CategoryCard(props: {
   )
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function WikiHome() {
   const api = useWikiApi()
   const navigate = useNavigate()
@@ -166,9 +438,10 @@ export default function WikiHome() {
   const [sidebarOpen, setSidebarOpen] = createSignal(true)
   const [graphWidth, setGraphWidth] = createSignal(45)
   const [openIds, setOpenIds] = createSignal<Set<string>>(new Set())
+  const [showWizard, setShowWizard] = createSignal(false)
   let contentAreaRef: HTMLDivElement | undefined
 
-  const [data] = createResource(() => api.home())
+  const [data, { refetch }] = createResource(() => api.home())
 
   const go = (slug: string) => navigate(`/${params.dir}/wiki/${slug}`)
 
@@ -193,6 +466,8 @@ export default function WikiHome() {
     }
     return map
   })
+
+  const isEmpty = createMemo(() => !data.loading && (data()?.categories ?? []).length === 0)
 
   const formatDate = (ts: number) =>
     new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -227,8 +502,18 @@ export default function WikiHome() {
     document.addEventListener("mouseup", onMouseUp)
   }
 
+  const handleOnboardComplete = () => {
+    setShowWizard(false)
+    refetch()
+  }
+
   return (
     <div class="wk-root">
+      {/* Onboarding wizard overlay */}
+      <Show when={showWizard()}>
+        <OnboardingWizard onComplete={handleOnboardComplete} />
+      </Show>
+
       <div class="wk-layout">
 
         {/* ── Sidebar ── */}
@@ -247,7 +532,6 @@ export default function WikiHome() {
           </div>
 
           <Show when={sidebarOpen()}>
-            {/* Tree fills all available space and scrolls */}
             <div class="wk-sb-nav">
               <Show when={data()}>
                 {(_d) => (
@@ -271,7 +555,6 @@ export default function WikiHome() {
               </Show>
             </div>
 
-            {/* Docs + Stats pinned below the tree */}
             <div class="wk-sb-bottom">
               <Show when={data()}>
                 <>
@@ -284,7 +567,6 @@ export default function WikiHome() {
                 </>
               </Show>
             </div>
-
           </Show>
         </aside>
 
@@ -302,19 +584,32 @@ export default function WikiHome() {
                   <h1 class="wk-title">Welcome to Supadense Wiki</h1>
                   <p class="wk-subtitle">Your Knowledge base for Tech</p>
 
-                  <div class="wk-section-label">Browse by category</div>
-                  <div class="wk-grid">
-                    <For each={topLevelCats()}>
-                      {(cat, i) => (
-                        <CategoryCard
-                          cat={cat}
-                          subcats={subcatsByParent().get(cat.id) ?? []}
-                          paletteIndex={i()}
-                          onNavigate={go}
-                        />
-                      )}
-                    </For>
-                  </div>
+                  <Show when={topLevelCats().length > 0} fallback={
+                    <div class="wk-empty-main">
+                      <div class="wk-empty-main-icon">📚</div>
+                      <div class="wk-empty-main-title">No categories yet</div>
+                      <div class="wk-empty-main-desc">
+                        Use the Get Started button in the graph panel, or click below to set up your knowledge base.
+                      </div>
+                      <button class="wk-empty-main-btn" onClick={() => setShowWizard(true)}>
+                        Get Started
+                      </button>
+                    </div>
+                  }>
+                    <div class="wk-section-label">Browse by category</div>
+                    <div class="wk-grid">
+                      <For each={topLevelCats()}>
+                        {(cat, i) => (
+                          <CategoryCard
+                            cat={cat}
+                            subcats={subcatsByParent().get(cat.id) ?? []}
+                            paletteIndex={i()}
+                            onNavigate={go}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </Show>
 
                   <Show when={d().recent_events.length > 0}>
                     <div class="wk-section-label" style={{ "margin-top": "28px" }}>Recent activity</div>
@@ -339,21 +634,33 @@ export default function WikiHome() {
             <div class="wk-resize-divider" onMouseDown={onDividerMouseDown} />
           </Show>
 
+          {/* Graph panel — always shown once data loads */}
           <Show when={data()}>
             {(d) => (
               <aside class="wk-graph-panel" style={{ width: `${graphWidth()}%` }}>
                 <div class="wk-graph-header">
                   <span class="wk-graph-title">Knowledge Graph</span>
+                  <Show when={isEmpty()}>
+                    <button class="wk-graph-header-btn" onClick={() => setShowWizard(true)}>
+                      Get Started
+                    </button>
+                  </Show>
                 </div>
                 <div class="wk-graph-body">
-                  <WikiGraph data={d().graph_data} onNavigate={go} />
+                  <Show when={isEmpty()} fallback={
+                    <WikiGraph data={d().graph_data} onNavigate={go} />
+                  }>
+                    <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
+                  </Show>
                 </div>
-                <div class="wk-graph-legend">
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
-                </div>
+                <Show when={!isEmpty()}>
+                  <div class="wk-graph-legend">
+                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
+                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
+                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
+                    <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
+                  </div>
+                </Show>
               </aside>
             )}
           </Show>

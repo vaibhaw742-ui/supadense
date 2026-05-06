@@ -720,6 +720,87 @@ export const WikiRoutes = () => {
     return c.text("Not found", 404)
   })
 
+  // ── KB Onboarding (direct, no AI) ────────────────────────────────────────────
+  app.post("/onboard", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+
+    let body: {
+      template?: "ml" | "software" | "custom"
+      learning_intent?: string
+      goals?: string[]
+      categories?: { slug: string; name: string; description?: string; icon?: string }[]
+    }
+    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
+
+    const template = body?.template
+    if (!template || !["ml", "software", "custom"].includes(template)) {
+      return c.json({ error: "template must be 'ml', 'software', or 'custom'" }, 400)
+    }
+
+    const TEMPLATES: Record<string, { categories: { slug: string; name: string; description: string; depth: "deep" | "working"; icon: string }[] }> = {
+      ml: {
+        categories: [
+          { slug: "agents", name: "Agents", description: "Autonomous AI systems that reason, plan, and act using tools, memory, and environment feedback.", depth: "deep", icon: "🤖" },
+          { slug: "rag", name: "RAG", description: "Retrieval-Augmented Generation — grounding LLM outputs with external knowledge retrieval.", depth: "deep", icon: "🔍" },
+          { slug: "llm-inference", name: "LLM Inference", description: "Serving large language models efficiently — latency, throughput, quantization, and hardware trade-offs.", depth: "working", icon: "⚡" },
+          { slug: "llm-training", name: "LLM Training", description: "Pre-training, fine-tuning, RLHF, and alignment techniques.", depth: "working", icon: "🧠" },
+        ],
+      },
+      software: {
+        categories: [
+          { slug: "database", name: "Database", description: "Relational and non-relational databases — schema design, indexing, query optimization, transactions.", depth: "working", icon: "🗄️" },
+          { slug: "frontend", name: "Frontend", description: "UI engineering — component architecture, state management, rendering strategies, performance.", depth: "working", icon: "🖥️" },
+          { slug: "software-system-design", name: "Software System Design", description: "Distributed systems, scalability patterns, API design, caching, and architectural trade-offs.", depth: "deep", icon: "🏗️" },
+        ],
+      },
+    }
+
+    const resolvedCategories = template !== "custom"
+      ? TEMPLATES[template].categories
+      : (body.categories ?? [])
+
+    if (resolvedCategories.length === 0) {
+      return c.json({ error: "No categories provided" }, 400)
+    }
+
+    try {
+      const { mkdirSync } = await import("fs")
+      const path = await import("path")
+
+      Workspace.completeOnboarding(workspace.id, {
+        learning_intent: body.learning_intent ?? "",
+        goals: body.goals ?? [],
+        depth_prefs: {},
+        trusted_sources: [],
+        scout_platforms: [],
+        categories: resolvedCategories,
+        subcategories: [],
+      })
+
+      mkdirSync(path.join(workspace.kb_path, "assets"), { recursive: true })
+      mkdirSync(path.join(workspace.kb_path, "raw"), { recursive: true })
+
+      const createdCategories: string[] = []
+      for (let i = 0; i < resolvedCategories.length; i++) {
+        const cat = resolvedCategories[i]
+        Workspace.createCategory(workspace.id, cat.name, undefined, cat.description, {
+          icon: cat.icon,
+          position: i,
+        })
+        createdCategories.push(cat.name)
+      }
+
+      const updatedWorkspace = Workspace.getById(workspace.id)!
+      WikiBuilder.buildSupadenseMd(updatedWorkspace)
+      WikiBuilder.buildLogFile(updatedWorkspace)
+
+      return c.json({ ok: true, categories: createdCategories })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    }
+  })
+
   // ── Direct resource add (bypasses AI command layer) ──────────────────────────
   app.post("/resource", async (c) => {
     const workspace = resolveWorkspace()

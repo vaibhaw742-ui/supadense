@@ -32,6 +32,19 @@ export function useWikiApi() {
     return res.json() as Promise<T>
   }
 
+  async function post<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${baseUrl()}${path}`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+      throw new Error(err?.error ?? res.statusText)
+    }
+    return res.json() as Promise<T>
+  }
+
   return {
     home: () => get<WikiHomeData>("/wiki/home"),
     page: (slug: string) => get<WikiPageData>(`/wiki/page/${slug}`),
@@ -40,6 +53,12 @@ export function useWikiApi() {
     pages: () => get<WikiPageSummary[]>("/wiki/pages"),
     roadmapList: () => get<{ docs: WikiRoadmapDoc[] }>("/wiki/roadmap"),
     roadmapDoc: (slug: string) => get<WikiRoadmapDocFull>(`/wiki/roadmap/${slug}`),
+    onboard: (params: {
+      template: "ml" | "software" | "custom"
+      learning_intent: string
+      goals: string[]
+      categories?: { slug: string; name: string; description?: string; icon?: string }[]
+    }) => post<{ ok: boolean; categories: string[] }>("/wiki/onboard", params),
     dirSlug: () => params.dir,
   }
 }
