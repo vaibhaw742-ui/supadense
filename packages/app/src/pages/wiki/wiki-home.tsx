@@ -172,7 +172,6 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
             }
           >
             <div class="wk-wizard-header-dark">
-              <span class="wk-wizard-header-title">Set up Knowledge Base</span>
               <button class="wk-wizard-close-btn" onClick={props.onComplete}>✕</button>
             </div>
           </Show>
