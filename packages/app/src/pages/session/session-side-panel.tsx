@@ -574,8 +574,8 @@ export function SessionSidePanel(props: {
                     </Show>
                   }>
                     {/* Empty state — no categories yet, styled like "Make it Dense" */}
-                    <div class="h-full pb-30 flex items-center justify-center text-center">
-                      <div class="flex flex-col items-center gap-4">
+                    <div class="h-full pb-30 flex items-center justify-center">
+                      <div class="flex flex-row items-center gap-4">
                         <div class="text-20-medium text-text-strong">Set up your Knowledge Base</div>
                         <button
                           onClick={() => setShowOnboardWizard(true)}
