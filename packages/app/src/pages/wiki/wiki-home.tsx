@@ -128,6 +128,7 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   return (
     <div
       class="wk-wizard-overlay"
+      data-prevent-autofocus
       style={props.dark ? { background: "rgba(0,0,0,0.75)" } : {}}
       onClick={(e) => e.target === e.currentTarget && undefined}
     >
