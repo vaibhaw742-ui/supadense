@@ -442,12 +442,6 @@ export function SessionSidePanel(props: {
               <div class="flex-1" />
               {/* Add source */}
               <div class="relative shrink-0">
-                <Show when={showAddSourceTip() && !addSourceOpen()}>
-                  <div class="add-source-tip">
-                    Add your first source
-                    <div class="add-source-tip-arrow" />
-                  </div>
-                </Show>
               <Show
                 when={addSourceOpen()}
                 fallback={
