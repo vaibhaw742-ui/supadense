@@ -54,13 +54,9 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   const [step, setStep] = createSignal<1 | 2 | 3>(1)
   const [template, setTemplate] = createSignal<TemplateKey>("ml")
   const [intent, setIntent] = createSignal("")
-  const [goals, setGoals] = createSignal(["", "", ""])
   const [customCats, setCustomCats] = createSignal([{ name: "", icon: "" }])
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal("")
-
-  const updateGoal = (i: number, val: string) =>
-    setGoals((g) => g.map((v, idx) => (idx === i ? val : v)))
 
   const updateCat = (i: number, field: "name" | "icon", val: string) =>
     setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
@@ -87,7 +83,6 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
     setSubmitting(true)
     setError("")
     try {
-      const filledGoals = goals().filter((g) => g.trim())
       const cats = template() === "custom"
         ? customCats()
             .filter((c) => c.name.trim())
@@ -101,7 +96,7 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
       await api.onboard({
         template: template(),
         learning_intent: intent().trim(),
-        goals: filledGoals,
+        goals: [],
         ...(cats ? { categories: cats } : {}),
       })
       props.onComplete()
@@ -172,13 +167,12 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
                     classList={{ selected: template() === key }}
                     onClick={() => setTemplate(key)}
                   >
-                    <div class="wk-wizard-tpl-icon">{tpl.icon}</div>
                     <div class="wk-wizard-tpl-label">{tpl.label}</div>
                     <div class="wk-wizard-tpl-desc">{tpl.desc}</div>
                     <Show when={key !== "custom" && template() === key}>
                       <div class="wk-wizard-tpl-cats">
                         <For each={(tpl as typeof TEMPLATES["ml"]).categories}>
-                          {(cat) => <span class="wk-wizard-tpl-cat">{cat.icon} {cat.name}</span>}
+                          {(cat) => <span class="wk-wizard-tpl-cat">{cat.name}</span>}
                         </For>
                       </div>
                     </Show>
@@ -202,22 +196,11 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
             <textarea
               class="wk-wizard-textarea"
               placeholder="e.g. Master LLM agent architectures for building production-grade AI systems"
-              rows={3}
+              rows={4}
               value={intent()}
               onInput={(e) => setIntent(e.currentTarget.value)}
               autofocus
             />
-            <div class="wk-wizard-goals-label">Your goals <span class="wk-wizard-optional">(optional)</span></div>
-            <For each={goals()}>
-              {(g, i) => (
-                <input
-                  class="wk-wizard-input"
-                  placeholder={`Goal ${i() + 1}…`}
-                  value={g}
-                  onInput={(e) => updateGoal(i(), e.currentTarget.value)}
-                />
-              )}
-            </For>
           </div>
           <div class="wk-wizard-footer">
             <button class="wk-wizard-btn-ghost" onClick={() => setStep(1)}>← Back</button>
