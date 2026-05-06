@@ -1798,6 +1798,34 @@ a.wk-resource-title:hover {
 }
 
 /* Intent + goals */
+.wk-wizard-intent-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.wk-wizard-intent-opt {
+  padding: 10px 14px;
+  border: 1px solid var(--wk-border);
+  border-radius: 8px;
+  background: var(--wk-bg-subtle);
+  color: var(--wk-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wk-wizard-intent-opt:hover {
+  background: var(--wk-bg-hover);
+  border-color: var(--wk-border);
+}
+.wk-wizard-intent-opt.selected {
+  border-color: var(--wk-accent);
+  background: var(--wk-accent-light);
+  color: var(--wk-accent);
+  font-weight: 600;
+}
 .wk-wizard-textarea {
   width: 100%;
   box-sizing: border-box;

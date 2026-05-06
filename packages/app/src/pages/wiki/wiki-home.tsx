@@ -57,6 +57,21 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   const [customCats, setCustomCats] = createSignal([{ name: "" }])
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal("")
+  const [intentOption, setIntentOption] = createSignal<"llm" | "software" | "infra" | "custom" | null>(null)
+
+  const INTENT_OPTIONS = [
+    { key: "llm" as const, label: "LLM / AI", text: "Master large language models, agents, RAG, and production AI systems" },
+    { key: "software" as const, label: "Software Engineering", text: "Deepen expertise in databases, frontend, and system design" },
+    { key: "infra" as const, label: "Infrastructure", text: "Learn cloud infrastructure, DevOps, Kubernetes, and platform engineering" },
+    { key: "custom" as const, label: "Type here…", text: "" },
+  ]
+
+  const selectIntent = (key: "llm" | "software" | "infra" | "custom") => {
+    setIntentOption(key)
+    const opt = INTENT_OPTIONS.find((o) => o.key === key)
+    if (opt && opt.text) setIntent(opt.text)
+    else setIntent("")
+  }
 
   const updateCat = (i: number, val: string) =>
     setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, name: val } : c))
@@ -79,7 +94,11 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
 
   const canProceedStep1 = () => template() !== undefined
   const canProceedStep2Custom = () => filledCustomCats().length >= 1
-  const canSubmit = () => intent().trim().length > 0
+  const canSubmit = () => {
+    if (!intentOption()) return false
+    if (intentOption() === "custom") return intent().trim().length > 0
+    return true
+  }
 
   const submit = async () => {
     if (submitting()) return
@@ -237,15 +256,30 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
         <Show when={(step() === 2 && template() !== "custom") || (step() === 3 && template() === "custom")}>
           <div class="wk-wizard-body">
             <h2 class="wk-wizard-title">What are you learning?</h2>
-            <p class="wk-wizard-subtitle">One sentence describing your goal. This helps the AI curate content for you.</p>
-            <textarea
-              class="wk-wizard-textarea"
-              placeholder="e.g. Master LLM agent architectures for building production-grade AI systems"
-              rows={4}
-              value={intent()}
-              onInput={(e) => setIntent(e.currentTarget.value)}
-              autofocus
-            />
+            <p class="wk-wizard-subtitle">Pick a focus area or describe your own goal.</p>
+            <div class="wk-wizard-intent-options">
+              <For each={INTENT_OPTIONS}>
+                {(opt) => (
+                  <button
+                    class="wk-wizard-intent-opt"
+                    classList={{ selected: intentOption() === opt.key }}
+                    onClick={() => selectIntent(opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <Show when={intentOption() === "custom"}>
+              <textarea
+                class="wk-wizard-textarea"
+                placeholder="e.g. Master LLM agent architectures for building production-grade AI systems"
+                rows={3}
+                value={intent()}
+                onInput={(e) => setIntent(e.currentTarget.value)}
+                autofocus
+              />
+            </Show>
             <Show when={error()}>
               <div class="wk-wizard-error">{error()}</div>
             </Show>
