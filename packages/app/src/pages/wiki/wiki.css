@@ -1661,6 +1661,32 @@ a.wk-resource-title:hover {
   align-items: center;
   justify-content: center;
 }
+.wk-wizard-header-dark {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.wk-wizard-header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--wk-text);
+}
+.wk-wizard-close-btn {
+  background: none;
+  border: none;
+  color: var(--wk-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
+}
+.wk-wizard-close-btn:hover {
+  color: var(--wk-text);
+  background: var(--wk-bg-hover);
+}
 .wk-wizard-steps {
   display: flex;
   gap: 8px;

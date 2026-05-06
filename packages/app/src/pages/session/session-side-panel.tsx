@@ -549,7 +549,7 @@ export function SessionSidePanel(props: {
 
             {/* Onboarding wizard overlay */}
             <Show when={showOnboardWizard()}>
-              <OnboardingWizard onComplete={() => { setShowOnboardWizard(false); refetchGraphData() }} />
+              <OnboardingWizard dark onComplete={() => { setShowOnboardWizard(false); refetchGraphData() }} />
             </Show>
 
             {/* Graph or wiki page */}
