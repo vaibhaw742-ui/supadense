@@ -54,16 +54,16 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
   const [step, setStep] = createSignal<1 | 2 | 3>(1)
   const [template, setTemplate] = createSignal<TemplateKey>("ml")
   const [intent, setIntent] = createSignal("")
-  const [customCats, setCustomCats] = createSignal([{ name: "", icon: "" }])
+  const [customCats, setCustomCats] = createSignal([{ name: "" }])
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal("")
 
-  const updateCat = (i: number, field: "name" | "icon", val: string) =>
-    setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
+  const updateCat = (i: number, val: string) =>
+    setCustomCats((cats) => cats.map((c, idx) => idx === i ? { ...c, name: val } : c))
 
   const MAX_CUSTOM_CATS = 5
 
-  const addCat = () => setCustomCats((cats) => cats.length < MAX_CUSTOM_CATS ? [...cats, { name: "", icon: "" }] : cats)
+  const addCat = () => setCustomCats((cats) => cats.length < MAX_CUSTOM_CATS ? [...cats, { name: "" }] : cats)
 
   const removeCat = (i: number) => setCustomCats((cats) => cats.filter((_, idx) => idx !== i))
 
@@ -91,7 +91,6 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
             .map((c) => ({
               slug: c.name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
               name: c.name.trim(),
-              icon: c.icon.trim() || undefined,
             }))
         : undefined
 
@@ -205,17 +204,10 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
                 {(cat, i) => (
                   <div class="wk-wizard-custom-row">
                     <input
-                      class="wk-wizard-input wk-wizard-input--icon"
-                      placeholder="emoji"
-                      maxLength={2}
-                      value={cat.icon}
-                      onInput={(e) => updateCat(i(), "icon", e.currentTarget.value)}
-                    />
-                    <input
                       class="wk-wizard-input wk-wizard-input--grow"
                       placeholder="Category name…"
                       value={cat.name}
-                      onInput={(e) => updateCat(i(), "name", e.currentTarget.value)}
+                      onInput={(e) => updateCat(i(), e.currentTarget.value)}
                     />
                     <Show when={customCats().length > 1}>
                       <button class="wk-wizard-remove-btn" onClick={() => removeCat(i())}>✕</button>
