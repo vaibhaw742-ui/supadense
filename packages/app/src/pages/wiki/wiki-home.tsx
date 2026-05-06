@@ -48,7 +48,7 @@ type TemplateKey = keyof typeof TEMPLATES
 
 // ── Onboarding Wizard ─────────────────────────────────────────────────────────
 
-function OnboardingWizard(props: { onComplete: () => void }) {
+export function OnboardingWizard(props: { onComplete: () => void }) {
   const api = useWikiApi()
 
   const [step, setStep] = createSignal<1 | 2 | 3>(1)

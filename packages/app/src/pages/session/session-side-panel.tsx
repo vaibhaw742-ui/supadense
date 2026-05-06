@@ -32,6 +32,7 @@ import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 import { renderMarkdown } from "@/pages/wiki/markdown"
+import { OnboardingWizard } from "@/pages/wiki/wiki-home"
 import "@/pages/wiki/wiki.css"
 type WikiPageData = {
   page: { slug: string; title: string; type: string; category_slug: string | null; resource_count: number; time_updated: number }
@@ -143,7 +144,7 @@ export function SessionSidePanel(props: {
       : `${location.origin}/api`
     return typeof http === "string" ? http : (http as { url: string }).url
   }
-  const [graphData] = createResource(
+  const [graphData, { refetch: refetchGraphData }] = createResource(
     () => graphMode() || null,
     async (): Promise<GraphData | null> => {
       try {
@@ -163,6 +164,14 @@ export function SessionSidePanel(props: {
       }
     },
   )
+
+  const [showOnboardWizard, setShowOnboardWizard] = createSignal(false)
+  const hasNoCategories = createMemo(() => {
+    if (graphData.loading) return false
+    const data = graphData()
+    if (!data) return true
+    return data.nodes.filter((n) => n.type === "category").length === 0
+  })
 
   const RESOURCE_MILESTONE = 100
   const resourceCount = createMemo(() => graphData()?.nodes.filter((n) => n.type === "resource").length ?? 0)
@@ -538,24 +547,47 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
 
+            {/* Onboarding wizard overlay */}
+            <Show when={showOnboardWizard()}>
+              <OnboardingWizard onComplete={() => { setShowOnboardWizard(false); refetchGraphData() }} />
+            </Show>
+
             {/* Graph or wiki page */}
             <div class="flex-1 min-h-0 overflow-hidden">
               <Show
                 when={graphNav()}
                 fallback={
-                  <Show when={graphData()} fallback={
-                    <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
-                      {graphData() === null ? "No graph data available" : "Loading…"}
-                    </div>
+                  <Show when={hasNoCategories()} fallback={
+                    <Show when={graphData()} fallback={
+                      <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
+                        Loading…
+                      </div>
+                    }>
+                      {(data) => (
+                        <Suspense>
+                          <WikiGraph
+                            data={data()}
+                            onNavigate={(slug, label) => setGraphNav({ slug, label: label ?? slug })}
+                          />
+                        </Suspense>
+                      )}
+                    </Show>
                   }>
-                    {(data) => (
-                      <Suspense>
-                        <WikiGraph
-                          data={data()}
-                          onNavigate={(slug, label) => setGraphNav({ slug, label: label ?? slug })}
-                        />
-                      </Suspense>
-                    )}
+                    {/* Empty state — no categories yet */}
+                    <div class="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
+                      <div style={{ "font-size": "36px", "line-height": "1" }}>🧠</div>
+                      <div class="text-14-semibold text-text-base">Your knowledge graph is empty</div>
+                      <div class="text-12-regular text-text-weak max-w-48" style={{ "line-height": "1.5" }}>
+                        Set up your KB structure to start organising what you learn
+                      </div>
+                      <button
+                        onClick={() => setShowOnboardWizard(true)}
+                        class="mt-2 px-5 py-2 rounded-lg text-13-semibold text-white"
+                        style={{ background: "var(--wk-accent, #e86f2b)" }}
+                      >
+                        Get Started
+                      </button>
+                    </div>
                   </Show>
                 }
               >
