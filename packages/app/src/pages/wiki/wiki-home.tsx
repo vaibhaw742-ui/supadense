@@ -467,7 +467,8 @@ export default function WikiHome() {
     return map
   })
 
-  const isEmpty = createMemo(() => !data.loading && (data.error || (data()?.categories ?? []).length === 0))
+  // Show empty state whenever loading is done and there are no categories (or error)
+  const hasCategories = createMemo(() => !data.loading && !data.error && (data()?.categories ?? []).length > 0)
 
   const formatDate = (ts: number) =>
     new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -583,7 +584,7 @@ export default function WikiHome() {
                 <h1 class="wk-title">Welcome to Supadense Wiki</h1>
                 <p class="wk-subtitle">Your Knowledge base for Tech</p>
 
-                <Show when={topLevelCats().length > 0} fallback={
+                <Show when={hasCategories() && topLevelCats().length > 0} fallback={
                   <div class="wk-empty-main">
                     <div class="wk-empty-main-icon">📚</div>
                     <div class="wk-empty-main-title">No categories yet</div>
@@ -628,38 +629,34 @@ export default function WikiHome() {
             </Show>
           </main>
 
-          <Show when={!data.loading}>
-            <div class="wk-resize-divider" onMouseDown={onDividerMouseDown} />
-          </Show>
+          <div class="wk-resize-divider" onMouseDown={onDividerMouseDown} />
 
-          {/* Graph panel — shown once initial load completes (whether data or error) */}
-          <Show when={!data.loading}>
-            <aside class="wk-graph-panel" style={{ width: `${graphWidth()}%` }}>
-              <div class="wk-graph-header">
-                <span class="wk-graph-title">Knowledge Graph</span>
-                <Show when={isEmpty()}>
-                  <button class="wk-graph-header-btn" onClick={() => setShowWizard(true)}>
-                    Get Started
-                  </button>
-                </Show>
-              </div>
-              <div class="wk-graph-body">
-                <Show when={isEmpty()} fallback={
-                  <WikiGraph data={data()!.graph_data} onNavigate={go} />
-                }>
-                  <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
-                </Show>
-              </div>
-              <Show when={!isEmpty()}>
-                <div class="wk-graph-legend">
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
-                  <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
-                </div>
+          {/* Graph panel — always rendered so Get Started is always reachable */}
+          <aside class="wk-graph-panel" style={{ width: `${graphWidth()}%` }}>
+            <div class="wk-graph-header">
+              <span class="wk-graph-title">Knowledge Graph</span>
+              <Show when={!hasCategories()}>
+                <button class="wk-graph-header-btn" onClick={() => setShowWizard(true)}>
+                  Get Started
+                </button>
               </Show>
-            </aside>
-          </Show>
+            </div>
+            <div class="wk-graph-body">
+              <Show when={hasCategories()} fallback={
+                <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
+              }>
+                <WikiGraph data={data()!.graph_data} onNavigate={go} />
+              </Show>
+            </div>
+            <Show when={hasCategories()}>
+              <div class="wk-graph-legend">
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
+              </div>
+            </Show>
+          </aside>
 
         </div>
       </div>
