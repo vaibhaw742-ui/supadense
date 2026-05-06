@@ -573,20 +573,24 @@ export function SessionSidePanel(props: {
                       )}
                     </Show>
                   }>
-                    {/* Empty state — no categories yet */}
-                    <div class="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
-                      <div style={{ "font-size": "36px", "line-height": "1" }}>🧠</div>
-                      <div class="text-14-semibold text-text-base">Your knowledge graph is empty</div>
-                      <div class="text-12-regular text-text-weak max-w-48" style={{ "line-height": "1.5" }}>
-                        Set up your KB structure to start organising what you learn
+                    {/* Empty state — no categories yet, styled like "Make it Dense" */}
+                    <div class="h-full pb-30 flex items-center justify-center text-center">
+                      <div class="flex flex-col items-center gap-6">
+                        <Mark class="w-10" />
+                        <div class="flex flex-col items-center gap-3">
+                          <div class="text-20-medium text-text-strong">Set up your Knowledge Base</div>
+                          <div class="text-12-medium text-text-weak max-w-48" style={{ "line-height": "1.6" }}>
+                            Choose a template to organise what you learn
+                          </div>
+                          <button
+                            onClick={() => setShowOnboardWizard(true)}
+                            class="mt-1 px-5 py-2 rounded-lg text-13-semibold text-white"
+                            style={{ background: "var(--wk-accent, #e86f2b)" }}
+                          >
+                            Get Started
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => setShowOnboardWizard(true)}
-                        class="mt-2 px-5 py-2 rounded-lg text-13-semibold text-white"
-                        style={{ background: "var(--wk-accent, #e86f2b)" }}
-                      >
-                        Get Started
-                      </button>
                     </div>
                   </Show>
                 }
