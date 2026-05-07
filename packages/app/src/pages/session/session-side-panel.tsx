@@ -620,7 +620,7 @@ export function SessionSidePanel(props: {
                   style={{
                     position: "fixed", "z-index": "9998", "pointer-events": "none",
                     inset: "0", display: "flex", "align-items": "flex-end",
-                    "justify-content": "flex-start", padding: "0 0 72px 72px",
+                    "justify-content": "flex-start", padding: "0 0 130px 72px",
                   }}
                 >
                   <div
