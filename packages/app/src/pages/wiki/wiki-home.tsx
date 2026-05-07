@@ -684,8 +684,8 @@ export default function WikiHome() {
               <div class="wk-graph-legend">
                 <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#6366f1" }} />Category</span>
                 <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#a5b4fc" }} />Section</span>
-                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Group</span>
-                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Resource</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#cbd5e1" }} />Group</span>
+                <span class="wk-legend-item"><span class="wk-legend-dot" style={{ background: "#f59e0b" }} />Resource</span>
               </div>
             </Show>
           </aside>

@@ -32,9 +32,9 @@ function nodeColor(node: GraphNode, categoryColorMap: Map<string, string>): stri
       return blendWithWhite(base, 0.45)
     }
     case "group":
-      return "#f59e0b"
-    case "resource":
       return "#cbd5e1"
+    case "resource":
+      return "#f59e0b"
     default:
       return "#9ca3af"
   }
@@ -204,7 +204,7 @@ export function WikiGraph(props: Props) {
         return 7 // resource
       })
       .attr("font-family", "'Inter', -apple-system, BlinkMacSystemFont, sans-serif")
-      .attr("fill", (d) => d.type === "resource" ? "#a8a29e" : "#787774")
+      .attr("fill", (d) => d.type === "group" ? "#a8a29e" : "#787774")
       .attr("pointer-events", "none")
 
     // ── Tooltip ───────────────────────────────────────────────────────────────
