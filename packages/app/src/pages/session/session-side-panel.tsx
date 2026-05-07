@@ -520,20 +520,41 @@ export function SessionSidePanel(props: {
                   style={{
                     position: "fixed", inset: "0", display: "flex",
                     "align-items": "center", "justify-content": "center",
-                    background: "rgba(0,0,0,0.6)", "z-index": "9999",
+                    "z-index": "9999", "pointer-events": "none",
                   }}
                 >
-                  <button
-                    onClick={() => setShowOnboardWizard(true)}
+                  <div
                     style={{
-                      padding: "12px 32px", "border-radius": "10px",
-                      background: "#f59e0b", color: "#fff", border: "none",
-                      "font-size": "16px", "font-weight": "600", cursor: "pointer",
-                      "box-shadow": "0 4px 24px rgba(245,158,11,0.4)",
+                      background: "#1e1e1e",
+                      border: "1px solid #3a3a3a",
+                      "border-radius": "16px",
+                      padding: "36px 40px",
+                      display: "flex",
+                      "flex-direction": "column",
+                      "align-items": "center",
+                      gap: "20px",
+                      "box-shadow": "0 8px 40px rgba(0,0,0,0.35)",
+                      "pointer-events": "auto",
                     }}
                   >
-                    Get Started
-                  </button>
+                    <div style={{ "font-size": "18px", "font-weight": "600", color: "#e5e5e5" }}>
+                      Set up your Knowledge Base
+                    </div>
+                    <div style={{ "font-size": "13px", color: "#9ca3af", "text-align": "center", "max-width": "240px" }}>
+                      Organise what you learn into categories and resources.
+                    </div>
+                    <button
+                      onClick={() => setShowOnboardWizard(true)}
+                      style={{
+                        padding: "10px 28px", "border-radius": "8px",
+                        background: "#f59e0b", color: "#fff", border: "none",
+                        "font-size": "15px", "font-weight": "600", cursor: "pointer",
+                        "box-shadow": "0 4px 16px rgba(245,158,11,0.35)",
+                      }}
+                    >
+                      Get Started
+                    </button>
+                  </div>
                 </div>
               </Portal>
             </Show>
