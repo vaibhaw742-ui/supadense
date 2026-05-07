@@ -451,7 +451,7 @@ export function SessionSidePanel(props: {
                     width: `${resourcePct()}%`,
                     background: resourceMilestoneReached()
                       ? "linear-gradient(90deg,#22c55e,#4ade80)"
-                      : "linear-gradient(90deg,#6366f1,#a78bfa)",
+                      : "linear-gradient(90deg,#f59e0b,#fbbf24)",
                   }}
                 />
                 <div class="absolute inset-y-0 right-0 w-px bg-border-base opacity-60" />
