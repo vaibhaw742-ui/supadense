@@ -1454,7 +1454,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   tabIndex={store.mode === "normal" ? undefined : -1}
                   aria-label={language.t("prompt.action.attachFile")}
                 >
-                  <Icon name="plus" class="size-4.5" />
+                  <Icon name="plus" class="size-4.5" style={{ color: "#f59e0b" }} />
                 </Button>
               </TooltipKeybind>
             </div>
