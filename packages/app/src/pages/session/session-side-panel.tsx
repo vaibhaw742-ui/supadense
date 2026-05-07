@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Match, Portal, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { bgProcessAdd, bgProcessUpdate, bgProcesses } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -509,6 +509,32 @@ export function SessionSidePanel(props: {
                   )}
                 </For>
               </div>
+            </Show>
+
+            {/* Full-screen Get Started overlay when KB has no categories */}
+            <Show when={hasNoCategories() && !showOnboardWizard()}>
+              <Portal mount={document.body}>
+                <div
+                  data-prevent-autofocus
+                  style={{
+                    position: "fixed", inset: "0", display: "flex",
+                    "align-items": "center", "justify-content": "center",
+                    background: "rgba(0,0,0,0.6)", "z-index": "9999",
+                  }}
+                >
+                  <button
+                    onClick={() => setShowOnboardWizard(true)}
+                    style={{
+                      padding: "12px 32px", "border-radius": "10px",
+                      background: "#f59e0b", color: "#fff", border: "none",
+                      "font-size": "16px", "font-weight": "600", cursor: "pointer",
+                      "box-shadow": "0 4px 24px rgba(245,158,11,0.4)",
+                    }}
+                  >
+                    Get Started
+                  </button>
+                </div>
+              </Portal>
             </Show>
 
             {/* Onboarding wizard overlay */}
