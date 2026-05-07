@@ -443,6 +443,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
     requestAnimationFrame(() => {
       editorRef?.focus()
+      setCursorPosition(editorRef, text.length)
     })
   }
 
