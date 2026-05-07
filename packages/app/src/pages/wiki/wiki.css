@@ -1636,14 +1636,15 @@ a.wk-resource-title:hover {
 .wk-wizard-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.45);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  pointer-events: none;
 }
 .wk-wizard {
+  pointer-events: auto;
   background: var(--surface-raised-stronger-non-alpha);
   border-radius: var(--radius-xl);
   width: 100%;
