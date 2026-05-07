@@ -525,35 +525,59 @@ export function SessionSidePanel(props: {
                 >
                   <div
                     style={{
-                      background: "#1e1e1e",
-                      border: "1px solid #3a3a3a",
-                      "border-radius": "16px",
-                      padding: "36px 40px",
+                      background: "var(--surface-raised-stronger-non-alpha)",
+                      "border-radius": "var(--radius-xl)",
+                      "box-shadow": "var(--shadow-lg-border-base)",
                       display: "flex",
                       "flex-direction": "column",
-                      "align-items": "center",
-                      gap: "20px",
-                      "box-shadow": "0 8px 40px rgba(0,0,0,0.35)",
+                      "align-items": "flex-start",
                       "pointer-events": "auto",
+                      width: "320px",
                     }}
                   >
-                    <div style={{ "font-size": "18px", "font-weight": "600", color: "#e5e5e5" }}>
-                      Set up your Knowledge Base
+                    {/* Header — matches dialog-header */}
+                    <div style={{
+                      display: "flex", padding: "16px 20px",
+                      "justify-content": "space-between", "align-items": "center",
+                      "align-self": "stretch", "border-bottom": "1px solid var(--border-base)",
+                    }}>
+                      <span style={{
+                        color: "var(--text-strong)",
+                        "font-size": "var(--font-size-large)",
+                        "font-weight": "var(--font-weight-medium)",
+                        "letter-spacing": "var(--letter-spacing-tight)",
+                        "line-height": "var(--line-height-x-large)",
+                      }}>
+                        New Knowledge Base
+                      </span>
                     </div>
-                    <div style={{ "font-size": "13px", color: "#9ca3af", "text-align": "center", "max-width": "240px" }}>
-                      Organise what you learn into categories and resources.
+                    {/* Body — matches dialog-body padding */}
+                    <div style={{ display: "flex", "flex-direction": "column", gap: "16px", padding: "16px 20px 20px" }}>
+                      <div style={{
+                        color: "var(--text-base)",
+                        "font-size": "14px",
+                        "line-height": "var(--line-height-large)",
+                      }}>
+                        Organise what you learn into categories and resources.
+                      </div>
+                      <div style={{ display: "flex", "justify-content": "flex-end" }}>
+                        <button
+                          onClick={() => setShowOnboardWizard(true)}
+                          style={{
+                            padding: "8px 20px",
+                            "border-radius": "var(--radius-md, 8px)",
+                            background: "var(--button-primary-base)",
+                            color: "#fff",
+                            border: "none",
+                            "font-size": "14px",
+                            "font-weight": "var(--font-weight-medium)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Get Started
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => setShowOnboardWizard(true)}
-                      style={{
-                        padding: "10px 28px", "border-radius": "8px",
-                        background: "#f59e0b", color: "#fff", border: "none",
-                        "font-size": "15px", "font-weight": "600", cursor: "pointer",
-                        "box-shadow": "0 4px 16px rgba(245,158,11,0.35)",
-                      }}
-                    >
-                      Get Started
-                    </button>
                   </div>
                 </div>
               </Portal>
@@ -585,18 +609,8 @@ export function SessionSidePanel(props: {
                       )}
                     </Show>
                   }>
-                    {/* Empty state — no categories yet, styled like "Make it Dense" */}
-                    <div class="h-full pb-30 flex items-center justify-center">
-                      <div class="flex flex-col items-center gap-4">
-                        <button
-                          onClick={() => setShowOnboardWizard(true)}
-                          class="px-5 py-2 rounded-lg text-13-semibold text-white"
-                          style={{ background: "var(--wk-accent, #e86f2b)" }}
-                        >
-                          Get Started
-                        </button>
-                      </div>
-                    </div>
+                    {/* Empty state — no categories yet */}
+                    <div class="h-full" />
                   </Show>
                 }
               >
