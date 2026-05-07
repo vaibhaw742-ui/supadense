@@ -187,6 +187,30 @@ export function SessionSidePanel(props: {
   const resourcePct = createMemo(() => Math.min(100, Math.round((resourceCount() / RESOURCE_MILESTONE) * 100)))
   const resourceMilestoneReached = createMemo(() => resourceCount() >= RESOURCE_MILESTONE)
 
+  // ── Resource walkthrough (step 1 = point to button, step 2 = URL hint) ──────
+  const [walkthroughStep, setWalkthroughStep] = createSignal<0 | 1 | 2>(0)
+  const [walkthroughDismissed, setWalkthroughDismissed] = createSignal(false)
+
+  createEffect(() => {
+    if (walkthroughDismissed()) { setWalkthroughStep(0); return }
+    if (showAddSourceTip() && !showOnboardWizard()) setWalkthroughStep(1)
+    else if (!showAddSourceTip()) { setWalkthroughStep(0); setWalkthroughDismissed(false) }
+  })
+
+  createEffect(() => {
+    if (walkthroughStep() === 1) document.body.classList.add("kb-walkthrough-1")
+    else document.body.classList.remove("kb-walkthrough-1")
+    onCleanup(() => document.body.classList.remove("kb-walkthrough-1"))
+  })
+
+  onMount(() => {
+    const onAddResource = () => {
+      if (walkthroughStep() === 1) setWalkthroughStep(2)
+    }
+    window.addEventListener("kb:add-resource-clicked", onAddResource)
+    onCleanup(() => window.removeEventListener("kb:add-resource-clicked", onAddResource))
+  })
+
   const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
 
   const [wikiPageData] = createResource(
@@ -586,6 +610,83 @@ export function SessionSidePanel(props: {
             {/* Onboarding wizard overlay */}
             <Show when={showOnboardWizard()}>
               <OnboardingWizard onComplete={() => { setShowOnboardWizard(false); refetchGraphData() }} />
+            </Show>
+
+            {/* Resource walkthrough tooltip */}
+            <Show when={walkthroughStep() > 0}>
+              <Portal mount={document.body}>
+                <div
+                  data-prevent-autofocus
+                  style={{
+                    position: "fixed", "z-index": "9998", "pointer-events": "none",
+                    inset: "0", display: "flex", "align-items": "flex-end",
+                    "justify-content": "flex-start", padding: "0 0 72px 72px",
+                  }}
+                >
+                  <div
+                    style={{
+                      "pointer-events": "auto",
+                      background: "var(--surface-raised-stronger-non-alpha)",
+                      "border-radius": "var(--radius-xl)",
+                      "box-shadow": "var(--shadow-lg-border-base)",
+                      width: "280px",
+                      display: "flex",
+                      "flex-direction": "column",
+                    }}
+                  >
+                    {/* Header */}
+                    <div style={{
+                      display: "flex", "align-items": "center", "justify-content": "space-between",
+                      padding: "12px 16px", "border-bottom": "1px solid var(--border-base)",
+                    }}>
+                      <span style={{
+                        "font-size": "13px", "font-weight": "var(--font-weight-medium)",
+                        color: "var(--text-strong)",
+                      }}>
+                        {walkthroughStep() === 1 ? "Add your first resource" : "Paste a link"}
+                      </span>
+                      <button
+                        onClick={() => setWalkthroughDismissed(true)}
+                        style={{
+                          background: "none", border: "none", cursor: "pointer",
+                          color: "var(--text-weak)", "font-size": "13px",
+                          padding: "2px 4px", "border-radius": "4px", "line-height": "1",
+                        }}
+                      >✕</button>
+                    </div>
+                    {/* Body */}
+                    <div style={{ padding: "12px 16px 16px", display: "flex", "flex-direction": "column", gap: "10px" }}>
+                      <Show when={walkthroughStep() === 1}>
+                        <p style={{ margin: "0", "font-size": "13px", color: "var(--text-base)", "line-height": "1.5" }}>
+                          Click <strong style={{ color: "var(--text-strong)" }}>+ Add resources</strong> in the chat toolbar below to start adding URLs to your knowledge base.
+                        </p>
+                        <div style={{
+                          display: "flex", "align-items": "center", gap: "8px",
+                          padding: "8px 10px", background: "var(--surface-base)",
+                          "border-radius": "var(--radius-md)", border: "1px solid var(--border-base)",
+                        }}>
+                          <span style={{ color: "#f59e0b", "font-size": "16px", "line-height": "1" }}>＋</span>
+                          <span style={{ "font-size": "12px", color: "var(--text-weak)" }}>Add resources</span>
+                          <span style={{ "margin-left": "auto", "font-size": "11px", color: "var(--text-weak)", opacity: "0.6" }}>↓ below</span>
+                        </div>
+                      </Show>
+                      <Show when={walkthroughStep() === 2}>
+                        <p style={{ margin: "0", "font-size": "13px", color: "var(--text-base)", "line-height": "1.5" }}>
+                          Paste any URL after <code style={{ "font-size": "12px", "background": "var(--surface-base)", padding: "1px 5px", "border-radius": "4px", color: "var(--text-strong)" }}>/memorize</code>, then press <strong style={{ color: "var(--text-strong)" }}>Enter</strong>.
+                        </p>
+                        <div style={{
+                          padding: "8px 10px", background: "var(--surface-base)",
+                          "border-radius": "var(--radius-md)", border: "1px solid var(--border-base)",
+                          "font-size": "12px", color: "var(--text-weak)", "font-family": "monospace",
+                          "word-break": "break-all",
+                        }}>
+                          /memorize https://docs.example.com/guide
+                        </div>
+                      </Show>
+                    </div>
+                  </div>
+                </div>
+              </Portal>
             </Show>
 
             {/* Graph or wiki page */}

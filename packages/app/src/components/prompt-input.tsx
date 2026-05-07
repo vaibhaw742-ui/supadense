@@ -445,6 +445,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef?.focus()
       setCursorPosition(editorRef, text.length)
     })
+    window.dispatchEvent(new CustomEvent("kb:add-resource-clicked"))
   }
 
   const setMode = (mode: "normal" | "shell") => {
@@ -1444,6 +1445,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 keybind={command.keybind("file.attach")}
               >
                 <Button
+                  id="kb-add-resource-btn"
                   data-action="prompt-attach"
                   type="button"
                   variant="ghost"
