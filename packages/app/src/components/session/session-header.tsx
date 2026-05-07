@@ -425,6 +425,7 @@ function KbSelectorDropdown() {
           as={Button}
           variant="ghost"
           class="titlebar-icon h-6 px-2 gap-1 box-border shrink-0 flex items-center max-w-[140px]"
+          style={{ color: "#f59e0b" }}
           aria-label="Switch KB"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
