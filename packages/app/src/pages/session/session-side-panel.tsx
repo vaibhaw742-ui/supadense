@@ -146,7 +146,7 @@ export function SessionSidePanel(props: {
     return typeof http === "string" ? http : (http as { url: string }).url
   }
   const [graphData, { refetch: refetchGraphData }] = createResource(
-    () => graphMode() || null,
+    () => params.dir || null,
     async (): Promise<GraphData | null> => {
       try {
         const token = getAuthToken()
