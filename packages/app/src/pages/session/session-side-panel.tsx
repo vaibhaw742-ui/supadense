@@ -1,4 +1,5 @@
-import { For, Match, Portal, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
+import { Portal } from "solid-js/web"
 import { bgProcessAdd, bgProcessUpdate, bgProcesses } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
