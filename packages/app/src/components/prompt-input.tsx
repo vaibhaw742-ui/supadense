@@ -438,7 +438,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
-  const pick = () => fileInputRef?.click()
+  const pick = () => {
+    const text = "/memorize "
+    prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+    requestAnimationFrame(() => {
+      editorRef?.focus()
+    })
+  }
 
   const setMode = (mode: "normal" | "shell") => {
     setStore("mode", mode)
