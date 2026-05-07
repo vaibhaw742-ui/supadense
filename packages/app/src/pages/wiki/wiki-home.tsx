@@ -48,7 +48,7 @@ type TemplateKey = keyof typeof TEMPLATES
 
 // ── Onboarding Wizard ─────────────────────────────────────────────────────────
 
-export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean }) {
+export function OnboardingWizard(props: { onComplete: () => void }) {
   const api = useWikiApi()
 
   const [step, setStep] = createSignal<1 | 2 | 3>(1)
@@ -128,53 +128,27 @@ export function OnboardingWizard(props: { onComplete: () => void; dark?: boolean
     }
   }
 
-  const darkVars = {
-    "--wk-bg": "#1e1e1e",
-    "--wk-bg-subtle": "#252525",
-    "--wk-bg-hover": "#2a2a2a",
-    "--wk-bg-inset": "#161616",
-    "--wk-bg-active": "#333333",
-    "--wk-border": "#383838",
-    "--wk-border-muted": "#2e2e2e",
-    "--wk-text": "#ffffff",
-    "--wk-text-muted": "#a0a0a0",
-    "--wk-text-faint": "#555555",
-    "--wk-accent": "#3d3d3d",
-    "--wk-accent-hover": "#4a4a4a",
-    "--wk-accent-light": "#282828",
-    "--wk-red": "#f87171",
-  } as Record<string, string>
-
   return (
     <div
       class="wk-wizard-overlay"
       data-prevent-autofocus
-      style={props.dark ? { background: "rgba(0,0,0,0.75)" } : {}}
       onClick={(e) => e.target === e.currentTarget && undefined}
     >
-      <div class="wk-wizard" style={props.dark ? darkVars : {}}>
-        {/* Header */}
+      <div class="wk-wizard">
+        {/* Header — step dots + close button */}
         <div class="wk-wizard-header">
-          <Show
-            when={props.dark}
-            fallback={
-              <div class="wk-wizard-steps">
-                <For each={Array.from({ length: totalSteps() }, (_, i) => i + 1)}>
-                  {(s) => (
-                    <div
-                      class="wk-wizard-step-dot"
-                      classList={{ active: step() === s, done: step() > s }}
-                      onClick={() => step() > s && setStep(s as 1 | 2 | 3)}
-                    />
-                  )}
-                </For>
-              </div>
-            }
-          >
-            <div class="wk-wizard-header-dark">
-              <button class="wk-wizard-close-btn" onClick={props.onComplete}>✕</button>
-            </div>
-          </Show>
+          <div class="wk-wizard-steps">
+            <For each={Array.from({ length: totalSteps() }, (_, i) => i + 1)}>
+              {(s) => (
+                <div
+                  class="wk-wizard-step-dot"
+                  classList={{ active: step() === s, done: step() > s }}
+                  onClick={() => step() > s && setStep(s as 1 | 2 | 3)}
+                />
+              )}
+            </For>
+          </div>
+          <button class="wk-wizard-close-btn" onClick={props.onComplete}>✕</button>
         </div>
 
         {/* Step 1 — Template selection */}
