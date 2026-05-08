@@ -66,7 +66,6 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { clearAuthToken, getAuthToken } from "@/utils/server"
-import { hasSeenTour, startTour } from "@/utils/tour"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -212,12 +211,6 @@ export default function Layout(props: ParentProps) {
     if (sizet !== undefined) clearTimeout(sizet)
     if (peekt !== undefined) clearTimeout(peekt)
     aim.reset()
-  })
-
-  onMount(() => {
-    if (!hasSeenTour()) {
-      setTimeout(startTour, 800)
-    }
   })
 
   onMount(() => {
