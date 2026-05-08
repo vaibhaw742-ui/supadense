@@ -444,6 +444,27 @@ export default function Page() {
     const [store] = globalSync.child(dir)
     return sortedRootSessions(store, Date.now())
   })
+
+  async function archiveTab(session: { id: string; directory: string }) {
+    try {
+      await sdk.client.session.update({
+        directory: session.directory,
+        sessionID: session.id,
+        time: { archived: Date.now() },
+      })
+      // Remove from store optimistically
+      const [, setStore] = globalSync.child(session.directory)
+      setStore("session", (list) => (list ?? []).filter((s) => s.id !== session.id))
+      // Navigate away if closing the active tab
+      if (session.id === params.id) {
+        const remaining = tabSessions().filter((s) => s.id !== session.id)
+        if (remaining.length > 0) navigate(`/${params.dir}/session/${remaining[0].id}`)
+        else navigate(`/${params.dir ?? ""}/session`)
+      }
+    } catch (e) {
+      console.error("archiveTab failed", e)
+    }
+  }
   const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
@@ -1864,10 +1885,10 @@ const reviewEmptyText = createMemo(() => {
       <SessionTabs
         sessions={tabSessions()}
         activeId={params.id}
-        slug={params.dir}
+        slug={params.dir ?? ""}
         onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
         onNew={() => navigate(`/${params.dir}/session`)}
-        onArchive={(session) => void archiveSession(session)}
+        onArchive={(session) => void archiveTab(session)}
       />
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
