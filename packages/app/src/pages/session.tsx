@@ -1883,22 +1883,6 @@ const reviewEmptyText = createMemo(() => {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <SessionTabs
-        sessions={(() => {
-          const all = tabSessions()
-          const top3 = all.slice(0, 3)
-          const activeId = params.id
-          if (!activeId || top3.some((s) => s.id === activeId)) return top3
-          const active = all.find((s) => s.id === activeId)
-          if (!active) return top3
-          return [...top3.slice(0, 2), active]
-        })()}
-        activeId={params.id}
-        slug={params.dir ?? ""}
-        onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
-        onNew={() => navigate(`/${params.dir}/session`)}
-        onArchive={(session) => void archiveTab(session)}
-      />
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
@@ -1937,6 +1921,22 @@ const reviewEmptyText = createMemo(() => {
             width: sessionPanelWidth(),
           }}
         >
+          <SessionTabs
+            sessions={(() => {
+              const all = tabSessions()
+              const top3 = all.slice(0, 3)
+              const activeId = params.id
+              if (!activeId || top3.some((s) => s.id === activeId)) return top3
+              const active = all.find((s) => s.id === activeId)
+              if (!active) return top3
+              return [...top3.slice(0, 2), active]
+            })()}
+            activeId={params.id}
+            slug={params.dir ?? ""}
+            onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
+            onNew={() => navigate(`/${params.dir}/session`)}
+            onArchive={(session) => void archiveTab(session)}
+          />
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
