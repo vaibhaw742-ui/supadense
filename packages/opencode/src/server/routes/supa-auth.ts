@@ -4,6 +4,46 @@ import { Database } from "@/storage/db"
 import { Flag } from "@/flag/flag"
 import { provisionWorkspace } from "@/util/workspace-provision"
 
+async function sendApprovalEmail(toEmail: string, password: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    console.warn("[supa-auth] RESEND_API_KEY not set — skipping approval email")
+    return
+  }
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#1a1a1a">
+      <h2 style="margin:0 0 8px">Welcome to Supadense 🎉</h2>
+      <p style="margin:0 0 24px;color:#555">Your account has been approved. Here are your login details:</p>
+      <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+        <p style="margin:0 0 8px;font-size:13px;color:#888">EMAIL</p>
+        <p style="margin:0 0 16px;font-weight:600">${toEmail}</p>
+        <p style="margin:0 0 8px;font-size:13px;color:#888">TEMPORARY PASSWORD</p>
+        <p style="margin:0;font-weight:600;font-family:monospace;font-size:16px;letter-spacing:1px">${password}</p>
+      </div>
+      <p style="margin:0 0 24px;color:#555">Please change your password after logging in.</p>
+      <a href="https://supadense.com" style="display:inline-block;background:#c44a0e;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600">Log in to Supadense →</a>
+      <p style="margin:32px 0 0;font-size:12px;color:#aaa">You received this because an admin approved your waitlist application.</p>
+    </div>
+  `
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "Supadense <vaibhaw@supadense.com>",
+      to: [toEmail],
+      subject: "Your Supadense account is ready",
+      html,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => "unknown")
+    console.error("[supa-auth] Resend error:", err)
+  }
+}
+
 // ── JWT helpers (HS256, no external deps) ─────────────────────────────────────
 
 function b64url(input: string | Buffer): string {
@@ -245,12 +285,23 @@ export function SupaAuthRoutes() {
     }
     if (!password || password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400)
 
-    const hash = await Bun.password.hash(password)
     const userId = c.req.param("id")
+    const user = Database.Client().$client
+      .prepare("SELECT email FROM auth_users WHERE id = ? AND status = 'pending'")
+      .get(userId) as { email: string } | undefined
+    if (!user) return c.json({ error: "User not found or already approved" }, 404)
+
+    const hash = await Bun.password.hash(password)
     Database.Client().$client
       .prepare("UPDATE auth_users SET status = 'approved', password_hash = ? WHERE id = ? AND status = 'pending'")
       .run(hash, userId)
     provisionWorkspace(userId)
+
+    // fire-and-forget — don't block the response on email delivery
+    sendApprovalEmail(user.email, password).catch((e) =>
+      console.error("[supa-auth] Failed to send approval email:", e),
+    )
+
     return c.json({ ok: true })
   })
 
