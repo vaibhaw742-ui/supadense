@@ -1884,7 +1884,7 @@ const reviewEmptyText = createMemo(() => {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionTabs
-        sessions={tabSessions()}
+        sessions={tabSessions().slice(0, 3)}
         activeId={params.id}
         slug={params.dir ?? ""}
         onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
