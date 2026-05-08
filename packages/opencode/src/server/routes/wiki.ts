@@ -1013,7 +1013,9 @@ export const WikiRoutes = () => {
     const workspace = resolveWorkspace()
     if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
     const id = c.req.param("id")
-    const { content } = await c.req.json() as { content: string }
+    const body = await c.req.json() as { content: string; block_type?: string }
+    const { content } = body
+    const newBlockType = body.block_type
 
     const block = Database.use((db) =>
       db.select().from(LearningPageBlockTable)
@@ -1028,7 +1030,12 @@ export const WikiRoutes = () => {
     const newSource = block.source === "ai" ? "user_edited" : block.source
     Database.use((db) =>
       db.update(LearningPageBlockTable)
-        .set({ content, source: newSource, time_updated: Date.now() })
+        .set({
+          content,
+          source: newSource,
+          time_updated: Date.now(),
+          ...(newBlockType ? { block_type: newBlockType } : {}),
+        })
         .where(eq(LearningPageBlockTable.id, id))
         .run()
     )

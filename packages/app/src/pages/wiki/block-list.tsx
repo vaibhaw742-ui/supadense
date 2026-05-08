@@ -12,7 +12,7 @@ interface Props {
   onFocus: (id: string | null) => void
   onNavigate: (slug: string, label: string) => void
   onCreate: (afterBlockId: string | null, parentId: string | null, depth: number) => void
-  onUpdate: (id: string, content: string, currentSource: string) => void
+  onUpdate: (id: string, content: string, currentSource: string, block_type?: string) => void
   onDelete: (id: string, focusPrevId: string | null) => void
   onIndent: (id: string) => void
   onUnindent: (id: string) => void
@@ -39,7 +39,7 @@ export function BlockList(props: Props) {
                 onBlur={() => {}}
                 onNavigate={props.onNavigate}
                 onCreate={() => props.onCreate(block.id, block.placement_id ?? null, block.depth)}
-                onUpdate={(content) => props.onUpdate(block.id, content, block.source)}
+                onUpdate={(content, block_type) => props.onUpdate(block.id, content, block.source, block_type)}
                 onDelete={() => props.onDelete(block.id, prevBlock()?.id ?? null)}
                 onIndent={() => props.onIndent(block.id)}
                 onUnindent={() => props.onUnindent(block.id)}

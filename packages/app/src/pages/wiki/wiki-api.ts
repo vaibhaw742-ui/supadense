@@ -87,8 +87,8 @@ export function useWikiApi() {
     dirSlug: () => params.dir,
     createBlock: (slug: string, body: { content: string; parent_id?: string | null; order_index: number; block_type?: string; depth?: number }) =>
       post<{ block: PageBlock }>(`/wiki/page/${slug}/blocks`, body),
-    updateBlock: (id: string, content: string) =>
-      put<{ ok: boolean }>(`/wiki/page/blocks/${id}`, { content }),
+    updateBlock: (id: string, content: string, block_type?: string) =>
+      put<{ ok: boolean }>(`/wiki/page/blocks/${id}`, { content, ...(block_type ? { block_type } : {}) }),
     deleteBlock: (id: string) =>
       del<{ ok: boolean }>(`/wiki/page/blocks/${id}`),
     moveBlock: (id: string, body: { new_parent_id: string | null; new_order_index: number }) =>

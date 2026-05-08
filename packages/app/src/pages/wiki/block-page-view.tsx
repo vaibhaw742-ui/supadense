@@ -65,10 +65,10 @@ export function BlockPageView(props: Props) {
     })
   }
 
-  function updateBlockInTree(tree: PageBlock[], id: string, content: string, source: "user" | "user_edited"): PageBlock[] {
+  function updateBlockInTree(tree: PageBlock[], id: string, content: string, source: "user" | "user_edited", block_type?: string): PageBlock[] {
     return tree.map((b) => {
-      if (b.id === id) return { ...b, content, source }
-      if (b.children.length > 0) return { ...b, children: updateBlockInTree(b.children, id, content, source) }
+      if (b.id === id) return { ...b, content, source, ...(block_type ? { block_type } : {}) }
+      if (b.children.length > 0) return { ...b, children: updateBlockInTree(b.children, id, content, source, block_type) }
       return b
     })
   }
@@ -110,12 +110,11 @@ export function BlockPageView(props: Props) {
     }
   }
 
-  async function handleUpdate(id: string, content: string, currentSource: string) {
+  async function handleUpdate(id: string, content: string, currentSource: string, block_type?: string) {
     const newSource = currentSource === "ai" ? "user_edited" : (currentSource as "user" | "user_edited")
-    // Optimistic update
-    setBlocks((prev) => updateBlockInTree(prev, id, content, newSource))
+    setBlocks((prev) => updateBlockInTree(prev, id, content, newSource, block_type))
     try {
-      await wikiApi.updateBlock(id, content)
+      await wikiApi.updateBlock(id, content, block_type)
     } catch (e) {
       console.error("updateBlock failed", e)
     }

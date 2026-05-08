@@ -1,9 +1,4 @@
-/**
- * block-item.tsx — Single editable block.
- * Displays AI blocks with a subtle source indicator.
- * Switches between display mode (inline markdown) and edit mode (raw text).
- */
-import { Show, createEffect, createSignal, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import type { PageBlock } from "./wiki-api"
 
 interface Props {
@@ -12,27 +7,44 @@ interface Props {
   onFocus: () => void
   onBlur: () => void
   onNavigate: (slug: string, label: string) => void
-  onCreate: () => void       // Enter key → new block after
-  onUpdate: (content: string) => void
-  onDelete: () => void       // Backspace on empty block
-  onIndent: () => void       // Tab
-  onUnindent: () => void     // Shift+Tab
+  onCreate: () => void
+  onUpdate: (content: string, block_type?: string) => void
+  onDelete: () => void
+  onIndent: () => void
+  onUnindent: () => void
 }
 
-// Render [[Page Name]] as clickable span, bold, italic inline
+// ── Slash commands ────────────────────────────────────────────────────────────
+
+interface SlashCommand {
+  id: string
+  label: string
+  description: string
+  icon: string
+  blockType: string
+}
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  { id: "text",     label: "Text",       description: "Plain paragraph",         icon: "¶",  blockType: "paragraph" },
+  { id: "h1",       label: "Heading 1",  description: "Large section heading",   icon: "H1", blockType: "heading_2" },
+  { id: "h2",       label: "Heading 2",  description: "Medium section heading",  icon: "H2", blockType: "heading_3" },
+  { id: "quote",    label: "Quote",      description: "Highlighted quote block", icon: "❝",  blockType: "quote"     },
+  { id: "code",     label: "Code",       description: "Code snippet block",      icon: "</>", blockType: "code"     },
+  { id: "bullet",   label: "Bullet",     description: "Unordered list item",     icon: "•",  blockType: "bullet"    },
+  { id: "todo",     label: "To-do",      description: "Checkbox task item",      icon: "☐",  blockType: "todo"      },
+  { id: "divider",  label: "Divider",    description: "Horizontal separator",    icon: "—",  blockType: "divider"   },
+]
+
+// ── Inline markdown renderer ──────────────────────────────────────────────────
+
 function renderInlineMarkdown(content: string): string {
-  // Escape HTML
   let html = content
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-  // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-  // Italic
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>")
-  // Inline code
   html = html.replace(/`(.+?)`/g, "<code>$1</code>")
-  // [[links]] — use a data attribute; onclick handled via event delegation
   html = html.replace(/\[\[(.+?)\]\]/g, (_, text) => {
     const slug = text.toLowerCase().replace(/\s+/g, "_")
     return `<span class="block-link" data-slug="${slug}" data-label="${text}">${text}</span>`
@@ -42,42 +54,118 @@ function renderInlineMarkdown(content: string): string {
 
 export function BlockItem(props: Props) {
   let editorRef: HTMLDivElement | undefined
+  let menuRef: HTMLDivElement | undefined
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
   const [editing, setEditing] = createSignal(false)
   const [localContent, setLocalContent] = createSignal(props.block.content)
 
-  // When focused prop changes from outside, focus the DOM element
+  // ── Slash menu state ─────────────────────────────────────────────────────
+  const [slashQuery, setSlashQuery] = createSignal<string | null>(null) // null = closed
+  const [menuIndex, setMenuIndex] = createSignal(0)
+
+  const filteredCommands = createMemo(() => {
+    const q = slashQuery()
+    if (q === null) return []
+    if (q === "") return SLASH_COMMANDS
+    const lower = q.toLowerCase()
+    return SLASH_COMMANDS.filter(
+      (c) => c.label.toLowerCase().includes(lower) || c.id.includes(lower)
+    )
+  })
+
+  // Reset menu index when filter changes
+  createEffect(() => {
+    filteredCommands() // track
+    setMenuIndex(0)
+  })
+
+  // Close menu on outside click
+  function handleOutsideClick(e: MouseEvent) {
+    if (menuRef && !menuRef.contains(e.target as Node)) {
+      setSlashQuery(null)
+    }
+  }
+
+  createEffect(() => {
+    if (slashQuery() !== null) {
+      document.addEventListener("mousedown", handleOutsideClick)
+      onCleanup(() => document.removeEventListener("mousedown", handleOutsideClick))
+    }
+  })
+
+  // ── Sync display when not editing ────────────────────────────────────────
   onMount(() => {
     if (props.focused && editorRef) editorRef.focus()
   })
 
-  // Keep display HTML in sync when not editing
   createEffect(() => {
     if (!editing() && editorRef) {
       editorRef.innerHTML = renderInlineMarkdown(props.block.content)
     }
   })
 
-  // Keep localContent in sync when block content changes from outside
   createEffect(() => {
     setLocalContent(props.block.content)
   })
 
+  // ── Save helpers ─────────────────────────────────────────────────────────
   function scheduleSave(content: string) {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      props.onUpdate(content)
-    }, 500)
+    saveTimer = setTimeout(() => props.onUpdate(content), 500)
   }
 
+  // ── Apply a slash command ────────────────────────────────────────────────
+  function applyCommand(cmd: SlashCommand) {
+    setSlashQuery(null)
+    if (!editorRef) return
+
+    // Remove the slash + query text from content
+    const raw = editorRef.innerText ?? ""
+    const slashIdx = raw.lastIndexOf("/")
+    const newContent = slashIdx >= 0 ? raw.slice(0, slashIdx) : raw
+
+    // Special case: divider sets content to "---"
+    const finalContent = cmd.blockType === "divider" ? "---" : newContent
+
+    clearTimeout(saveTimer)
+    editorRef.innerText = finalContent
+    setLocalContent(finalContent)
+    props.onUpdate(finalContent, cmd.blockType)
+  }
+
+  // ── Keyboard handler ─────────────────────────────────────────────────────
   function handleKeyDown(e: KeyboardEvent) {
     const el = editorRef!
     const content = el.innerText ?? ""
 
+    // Slash menu navigation
+    if (slashQuery() !== null) {
+      const cmds = filteredCommands()
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setMenuIndex((i) => Math.min(i + 1, cmds.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setMenuIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === "Enter" && cmds.length > 0) {
+        e.preventDefault()
+        applyCommand(cmds[menuIndex()])
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setSlashQuery(null)
+        return
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      // Flush pending save first
       clearTimeout(saveTimer)
       if (content !== props.block.content) props.onUpdate(content)
       props.onCreate()
@@ -98,19 +186,26 @@ export function BlockItem(props: Props) {
     }
   }
 
+  // ── Input handler — detect slash trigger ────────────────────────────────
   function handleInput(e: InputEvent) {
     const content = (e.currentTarget as HTMLDivElement).innerText ?? ""
     setLocalContent(content)
     scheduleSave(content)
+
+    // Detect /query at end of content (allows slash anywhere in line)
+    const match = content.match(/\/(\w*)$/)
+    if (match) {
+      setSlashQuery(match[1])
+    } else {
+      setSlashQuery(null)
+    }
   }
 
   function handleFocus() {
     setEditing(true)
     props.onFocus()
-    // Set innerText to raw content for editing
     if (editorRef) {
       editorRef.innerText = localContent()
-      // Move cursor to end
       const range = document.createRange()
       const sel = window.getSelection()
       range.selectNodeContents(editorRef)
@@ -121,18 +216,18 @@ export function BlockItem(props: Props) {
   }
 
   function handleBlur() {
-    setEditing(false)
-    props.onBlur()
-    clearTimeout(saveTimer)
-    const content = editorRef?.innerText ?? ""
-    if (content !== props.block.content) props.onUpdate(content)
-    // Restore rendered HTML
-    if (editorRef) {
-      editorRef.innerHTML = renderInlineMarkdown(content)
-    }
+    // Delay so menu clicks register first
+    setTimeout(() => {
+      if (slashQuery() !== null) return
+      setEditing(false)
+      props.onBlur()
+      clearTimeout(saveTimer)
+      const content = editorRef?.innerText ?? ""
+      if (content !== props.block.content) props.onUpdate(content)
+      if (editorRef) editorRef.innerHTML = renderInlineMarkdown(content)
+    }, 120)
   }
 
-  // Handle clicks on [[links]] via event delegation
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement
     if (target.classList.contains("block-link")) {
@@ -148,12 +243,17 @@ export function BlockItem(props: Props) {
     const type = props.block.block_type
     if (type === "heading_2") return "block-heading-2"
     if (type === "heading_3") return "block-heading-3"
-    if (type === "concept") return "block-concept"
+    if (type === "concept")   return "block-concept"
+    if (type === "quote")     return "block-quote"
+    if (type === "code")      return "block-code"
+    if (type === "bullet")    return "block-bullet"
+    if (type === "todo")      return "block-todo"
+    if (type === "divider")   return "block-divider"
     return "block-content"
   }
 
   return (
-    <div class="block-row" classList={{ "block-row--focused": props.focused }}>
+    <div class="block-row" classList={{ "block-row--focused": props.focused }} style={{ position: "relative" }}>
       {/* Source indicator */}
       <div class="block-gutter">
         <Show when={isAi()}>
@@ -172,6 +272,27 @@ export function BlockItem(props: Props) {
         onBlur={handleBlur}
         onClick={handleClick}
       />
+
+      {/* Slash command dropdown */}
+      <Show when={slashQuery() !== null && filteredCommands().length > 0}>
+        <div ref={menuRef} class="slash-menu">
+          <For each={filteredCommands()}>
+            {(cmd, i) => (
+              <button
+                type="button"
+                class="slash-menu-item"
+                classList={{ "slash-menu-item--active": menuIndex() === i() }}
+                onMouseDown={(e) => { e.preventDefault(); applyCommand(cmd) }}
+                onMouseEnter={() => setMenuIndex(i())}
+              >
+                <span class="slash-menu-icon">{cmd.icon}</span>
+                <span class="slash-menu-label">{cmd.label}</span>
+                <span class="slash-menu-desc">{cmd.description}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   )
 }
