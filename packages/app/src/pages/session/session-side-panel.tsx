@@ -32,16 +32,9 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
-import { renderMarkdown } from "@/pages/wiki/markdown"
 import { OnboardingWizard } from "@/pages/wiki/wiki-home"
+import { BlockPageView } from "@/pages/wiki/block-page-view"
 import "@/pages/wiki/wiki.css"
-type WikiPageData = {
-  page: { slug: string; title: string; type: string; category_slug: string | null; resource_count: number; time_updated: number }
-  category: { slug: string; name: string; depth: string } | null
-  parent_category: { slug: string; name: string } | null
-  content: string
-  category_tabs: { nav_slug: string; title: string; type: string }[]
-}
 type GraphData = { nodes: { id: string; type: "category" | "subcategory" | "resource" | "group"; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
 
 const WikiGraph = lazy(() => import("@/pages/wiki/wiki-graph").then((m) => ({ default: m.WikiGraph })))
@@ -152,6 +145,7 @@ export function SessionSidePanel(props: {
         const token = getAuthToken()
         const directory = decode64(params.dir) ?? ""
         const res = await fetch(`${wikiBase()}/wiki/home`, {
+          cache: "no-store",
           headers: {
             "x-opencode-directory": directory,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -212,26 +206,6 @@ export function SessionSidePanel(props: {
   })
 
   const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
-
-  const [wikiPageData] = createResource(
-    () => graphMode() ? (graphNav()?.slug ?? null) : null,
-    async (slug): Promise<WikiPageData | null> => {
-      try {
-        const token = getAuthToken()
-        const directory = decode64(params.dir) ?? ""
-        const res = await fetch(`${wikiBase()}/wiki/page/${encodeURIComponent(slug)}`, {
-          headers: {
-            "x-opencode-directory": directory,
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        })
-        if (!res.ok) return null
-        return res.json() as Promise<WikiPageData>
-      } catch {
-        return null
-      }
-    },
-  )
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
@@ -413,55 +387,10 @@ export function SessionSidePanel(props: {
                 Home
               </button>
               <Show when={graphNav()}>
-                <Show
-                  when={wikiPageData()}
-                  fallback={
-                    <>
-                      <span class="text-text-weak">›</span>
-                      <span class="text-text-base">{graphNav()!.label}</span>
-                    </>
-                  }
-                >
-                  {(d) => (
-                    <>
-                      <Show when={d().parent_category}>
-                        {(parent) => (
-                          <>
-                            <span class="text-text-weak">›</span>
-                            <button
-                              class="text-text-link hover:underline"
-                              onClick={() => setGraphNav({ slug: parent().slug, label: parent().name })}
-                            >
-                              {parent().name}
-                            </button>
-                          </>
-                        )}
-                      </Show>
-                      <Show when={d().category}>
-                        {(cat) => (
-                          <>
-                            <span class="text-text-weak">›</span>
-                            <Show
-                              when={d().page.type !== "overview" || d().parent_category}
-                              fallback={<span class="text-text-base">{cat().name}</span>}
-                            >
-                              <button
-                                class="text-text-link hover:underline"
-                                onClick={() => setGraphNav({ slug: cat().slug, label: cat().name })}
-                              >
-                                {cat().name}
-                              </button>
-                            </Show>
-                          </>
-                        )}
-                      </Show>
-                      <Show when={d().page.type === "section"}>
-                        <span class="text-text-weak">›</span>
-                        <span class="text-text-base">{d().page.title}</span>
-                      </Show>
-                    </>
-                  )}
-                </Show>
+                <>
+                  <span class="text-text-weak">›</span>
+                  <span class="text-text-base">{graphNav()!.label}</span>
+                </>
               </Show>
               {/* spacer */}
               <div class="flex-1" />
@@ -609,7 +538,11 @@ export function SessionSidePanel(props: {
 
             {/* Onboarding wizard overlay */}
             <Show when={showOnboardWizard()}>
-              <OnboardingWizard onComplete={() => { setShowOnboardWizard(false); refetchGraphData() }} />
+              <OnboardingWizard onComplete={() => {
+                setShowOnboardWizard(false)
+                refetchGraphData()
+                setTimeout(refetchGraphData, 600)
+              }} />
             </Show>
 
             {/* Resource walkthrough tooltip */}
@@ -715,44 +648,12 @@ export function SessionSidePanel(props: {
                   </Show>
                 }
               >
-                {/* Wiki page content */}
-                <div class="h-full overflow-y-auto">
-                  <Show when={wikiPageData.loading}>
-                    <div class="p-6 text-12-regular text-text-weak">Loading…</div>
-                  </Show>
-                  <Show when={!wikiPageData.loading && wikiPageData()}>
-                    {(d) => (
-                      <div class="px-6 py-4 max-w-3xl">
-                        <h1 class="text-18-semibold text-text-strong mb-1">{d().page.title}</h1>
-                        <div class="text-12-regular text-text-weak mb-4">
-                          {d().page.resource_count} source{d().page.resource_count !== 1 ? "s" : ""}
-                        </div>
-                        <Show when={d().category_tabs.length > 1}>
-                          <div class="flex gap-2 mb-4 flex-wrap">
-                            <For each={d().category_tabs}>
-                              {(tab) => (
-                                <button
-                                  class="px-3 py-1 rounded text-12-regular border border-border-weaker-base hover:bg-surface-base-hover"
-                                  classList={{ "bg-surface-base-active font-medium": tab.nav_slug === graphNav()?.slug }}
-                                  onClick={() => setGraphNav({ slug: tab.nav_slug, label: tab.title })}
-                                >
-                                  {tab.title}
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                        <div
-                          class="wk-content text-14-regular text-text-base prose"
-                          innerHTML={renderMarkdown(d().content)}
-                        />
-                      </div>
-                    )}
-                  </Show>
-                  <Show when={!wikiPageData.loading && wikiPageData() === null}>
-                    <div class="p-6 text-12-regular text-text-weak">Page not found.</div>
-                  </Show>
-                </div>
+                {/* Block-based page editor */}
+                <BlockPageView
+                  slug={graphNav()!.slug}
+                  label={graphNav()!.label}
+                  onNavigate={(slug, label) => setGraphNav({ slug, label })}
+                />
               </Show>
             </div>
           </div>

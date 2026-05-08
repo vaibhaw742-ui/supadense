@@ -5,7 +5,7 @@
 import { Hono } from "hono"
 import { readFileSync, existsSync, readdirSync } from "fs"
 import path from "path"
-import { eq, desc, inArray, isNotNull } from "drizzle-orm"
+import { eq, desc, inArray, isNotNull, and } from "drizzle-orm"
 import { Instance } from "../../project/instance"
 import { ProjectTable } from "../../project/project.sql"
 import { Workspace } from "../../learning/workspace"
@@ -18,7 +18,10 @@ import {
   LearningKbWorkspaceTable,
   LearningResourceWikiPlacementTable,
   LearningMediaAssetTable,
+  LearningPageBlockTable,
 } from "../../learning/schema.sql"
+import { BlockBuilder } from "../../learning/block-builder"
+import type { BlockNode } from "../../learning/block-builder"
 import { Auth } from "../../auth"
 import { SessionStatus } from "../../session/status"
 import { SessionTable } from "../../session/session.sql"
@@ -446,6 +449,15 @@ export const WikiRoutes = () => {
       type: p.type as string,
     }))
 
+    // Lazy-init block tree (populated by wiki-builder on first build after migration)
+    let blocks: BlockNode[] = BlockBuilder.getBlockTree(page.id)
+    if (blocks.length === 0 && placements.length > 0) {
+      try {
+        BlockBuilder.syncPage(page.id)
+        blocks = BlockBuilder.getBlockTree(page.id)
+      } catch { /* non-blocking */ }
+    }
+
     return c.json({
       page: {
         id: page.id,
@@ -493,6 +505,7 @@ export const WikiRoutes = () => {
       })),
       resources: pageResources,
       images: pageImages,
+      blocks,
     })
   })
 
@@ -932,6 +945,242 @@ export const WikiRoutes = () => {
     }))
 
     return c.json({ jobs })
+  })
+
+  // ── Block CRUD ────────────────────────────────────────────────────────────────
+
+  app.post("/page/:slug/blocks", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    const slug = c.req.param("slug")
+    const pages = Workspace.getWikiPages(workspace.id)
+    const page = pages.find((p) => p.slug === slug)
+      ?? pages.find((p) => p.category_slug === slug && p.page_type === "category")
+    if (!page) return c.json({ error: "Page not found" }, 404)
+
+    const body = await c.req.json() as {
+      content: string
+      parent_id?: string | null
+      order_index: number
+      block_type?: string
+      depth?: number
+    }
+
+    const now = Date.now()
+    const parentIdVal = body.parent_id ?? null
+
+    // Open gap at insert position
+    const allBlocks = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(eq(LearningPageBlockTable.wiki_page_id, page.id))
+        .all()
+    )
+    const siblings = allBlocks.filter(
+      (b) => b.parent_id === parentIdVal && b.order_index >= body.order_index
+    )
+    for (const sib of siblings) {
+      Database.use((db) =>
+        db.update(LearningPageBlockTable)
+          .set({ order_index: sib.order_index + 1, time_updated: now })
+          .where(eq(LearningPageBlockTable.id, sib.id))
+          .run()
+      )
+    }
+
+    const newBlock = {
+      id: crypto.randomUUID(),
+      workspace_id: workspace.id,
+      wiki_page_id: page.id,
+      parent_id: parentIdVal,
+      content: body.content,
+      block_type: body.block_type ?? "paragraph",
+      source: "user" as const,
+      placement_id: null,
+      order_index: body.order_index,
+      depth: body.depth ?? 0,
+      properties: null,
+      time_created: now,
+      time_updated: now,
+    }
+
+    Database.use((db) => db.insert(LearningPageBlockTable).values(newBlock).run())
+    try { BlockBuilder.rebuildMdFromBlocks(page.id) } catch { /* non-blocking */ }
+
+    return c.json({ block: newBlock })
+  })
+
+  app.put("/page/blocks/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    const id = c.req.param("id")
+    const { content } = await c.req.json() as { content: string }
+
+    const block = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(and(
+          eq(LearningPageBlockTable.id, id),
+          eq(LearningPageBlockTable.workspace_id, workspace.id)
+        ))
+        .get()
+    )
+    if (!block) return c.json({ error: "Block not found" }, 404)
+
+    const newSource = block.source === "ai" ? "user_edited" : block.source
+    Database.use((db) =>
+      db.update(LearningPageBlockTable)
+        .set({ content, source: newSource, time_updated: Date.now() })
+        .where(eq(LearningPageBlockTable.id, id))
+        .run()
+    )
+    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
+
+    return c.json({ ok: true })
+  })
+
+  app.delete("/page/blocks/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    const id = c.req.param("id")
+
+    const block = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(and(
+          eq(LearningPageBlockTable.id, id),
+          eq(LearningPageBlockTable.workspace_id, workspace.id)
+        ))
+        .get()
+    )
+    if (!block) return c.json({ error: "Block not found" }, 404)
+
+    const allPageBlocks = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(eq(LearningPageBlockTable.wiki_page_id, block.wiki_page_id))
+        .all()
+    )
+
+    function collectDescendants(parentId: string): string[] {
+      const children = allPageBlocks.filter((b) => b.parent_id === parentId)
+      return [parentId, ...children.flatMap((ch) => collectDescendants(ch.id))]
+    }
+
+    const toDelete = collectDescendants(id)
+    Database.use((db) =>
+      db.delete(LearningPageBlockTable)
+        .where(inArray(LearningPageBlockTable.id, toDelete))
+        .run()
+    )
+
+    // Close gap
+    const now = Date.now()
+    const remainingSiblings = allPageBlocks.filter(
+      (b) => !toDelete.includes(b.id) && b.parent_id === block.parent_id && b.order_index > block.order_index
+    )
+    for (const sib of remainingSiblings) {
+      Database.use((db) =>
+        db.update(LearningPageBlockTable)
+          .set({ order_index: sib.order_index - 1, time_updated: now })
+          .where(eq(LearningPageBlockTable.id, sib.id))
+          .run()
+      )
+    }
+
+    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
+    return c.json({ ok: true })
+  })
+
+  app.post("/page/blocks/:id/move", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    const id = c.req.param("id")
+    const { new_parent_id, new_order_index } = await c.req.json() as {
+      new_parent_id: string | null
+      new_order_index: number
+    }
+
+    const block = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(and(
+          eq(LearningPageBlockTable.id, id),
+          eq(LearningPageBlockTable.workspace_id, workspace.id)
+        ))
+        .get()
+    )
+    if (!block) return c.json({ error: "Block not found" }, 404)
+
+    const allPageBlocks = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(eq(LearningPageBlockTable.wiki_page_id, block.wiki_page_id))
+        .all()
+    )
+    const now = Date.now()
+
+    // Close gap at old position
+    for (const sib of allPageBlocks.filter(
+      (b) => b.id !== id && b.parent_id === block.parent_id && b.order_index > block.order_index
+    )) {
+      Database.use((db) =>
+        db.update(LearningPageBlockTable)
+          .set({ order_index: sib.order_index - 1, time_updated: now })
+          .where(eq(LearningPageBlockTable.id, sib.id))
+          .run()
+      )
+    }
+
+    // Open gap at new position
+    for (const sib of allPageBlocks.filter(
+      (b) => b.id !== id && b.parent_id === (new_parent_id ?? null) && b.order_index >= new_order_index
+    )) {
+      Database.use((db) =>
+        db.update(LearningPageBlockTable)
+          .set({ order_index: sib.order_index + 1, time_updated: now })
+          .where(eq(LearningPageBlockTable.id, sib.id))
+          .run()
+      )
+    }
+
+    const newParent = new_parent_id ? allPageBlocks.find((b) => b.id === new_parent_id) : null
+    const newDepth = newParent ? newParent.depth + 1 : 0
+
+    Database.use((db) =>
+      db.update(LearningPageBlockTable)
+        .set({ parent_id: new_parent_id ?? null, order_index: new_order_index, depth: newDepth, time_updated: now })
+        .where(eq(LearningPageBlockTable.id, id))
+        .run()
+    )
+
+    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
+    return c.json({ ok: true })
+  })
+
+  app.get("/page/:slug/backlinks", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    const slug = c.req.param("slug")
+    const pages = Workspace.getWikiPages(workspace.id)
+    const page = pages.find((p) => p.slug === slug)
+      ?? pages.find((p) => p.category_slug === slug && p.page_type === "category")
+    if (!page) return c.json({ error: "Page not found" }, 404)
+
+    const searchTerms = [`[[${page.title}]]`, `[[${slug}]]`]
+    const allBlocks = Database.use((db) =>
+      db.select().from(LearningPageBlockTable)
+        .where(eq(LearningPageBlockTable.workspace_id, workspace.id))
+        .all()
+    )
+
+    const matchingBlocks = allBlocks.filter(
+      (b) => b.wiki_page_id !== page.id && searchTerms.some((t) => b.content.includes(t))
+    )
+
+    const backlinks = matchingBlocks.map((b) => {
+      const fromPage = pages.find((p) => p.id === b.wiki_page_id)
+      return {
+        from_page: fromPage ? { slug: fromPage.slug ?? "", title: fromPage.title } : { slug: "", title: "Unknown" },
+        block: { id: b.id, content: b.content },
+      }
+    })
+
+    return c.json({ backlinks })
   })
 
   return app

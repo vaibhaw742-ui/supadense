@@ -405,3 +405,43 @@ export const LearningKbEventTable = sqliteTable(
     index("learning_kb_events_type_idx").on(t.event_type),
   ],
 )
+
+// ─── Page Blocks ─────────────────────────────────────────────────────────────
+// Unified content model for all wiki pages. Every content unit — whether
+// AI-generated from a placement or user-typed — is a block row here.
+// The .md files on disk are derived output serialized from this table.
+//
+// source values:
+//   "ai"           — created by block-builder from a placement
+//   "user"         — created entirely by the user
+//   "user_edited"  — was "ai", user modified content (never overwritten by AI again)
+
+export const LearningPageBlockTable = sqliteTable(
+  "learning_page_blocks",
+  {
+    id: text().primaryKey(),
+    workspace_id: text()
+      .notNull()
+      .references(() => LearningKbWorkspaceTable.id, { onDelete: "cascade" }),
+    wiki_page_id: text()
+      .notNull()
+      .references(() => LearningWikiPageTable.id, { onDelete: "cascade" }),
+    parent_id: text(), // self-reference: enforced in app logic
+    content: text().notNull().default(""),
+    block_type: text().notNull().default("paragraph"),
+    // "heading_2" | "heading_3" | "paragraph" | "content" | "concept" | "image" | "link" | "divider"
+    source: text().notNull().default("ai"),
+    // "ai" | "user" | "user_edited"
+    placement_id: text().references(() => LearningResourceWikiPlacementTable.id, { onDelete: "set null" }),
+    order_index: integer().notNull().default(0),
+    depth: integer().notNull().default(0),
+    properties: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    ...Timestamps,
+  },
+  (t) => [
+    index("learning_page_blocks_page_idx").on(t.wiki_page_id),
+    index("learning_page_blocks_workspace_idx").on(t.workspace_id),
+    index("learning_page_blocks_order_idx").on(t.wiki_page_id, t.parent_id, t.order_index),
+    index("learning_page_blocks_content_idx").on(t.workspace_id, t.content),
+  ],
+)

@@ -45,6 +45,31 @@ export function useWikiApi() {
     return res.json() as Promise<T>
   }
 
+  async function put<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${baseUrl()}${path}`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+      throw new Error(err?.error ?? res.statusText)
+    }
+    return res.json() as Promise<T>
+  }
+
+  async function del<T>(path: string): Promise<T> {
+    const res = await fetch(`${baseUrl()}${path}`, {
+      method: "DELETE",
+      headers: headers(),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+      throw new Error(err?.error ?? res.statusText)
+    }
+    return res.json() as Promise<T>
+  }
+
   return {
     home: () => get<WikiHomeData>("/wiki/home"),
     page: (slug: string) => get<WikiPageData>(`/wiki/page/${slug}`),
@@ -60,6 +85,16 @@ export function useWikiApi() {
       categories?: { slug: string; name: string; description?: string; icon?: string }[]
     }) => post<{ ok: boolean; categories: string[] }>("/wiki/onboard", params),
     dirSlug: () => params.dir,
+    createBlock: (slug: string, body: { content: string; parent_id?: string | null; order_index: number; block_type?: string; depth?: number }) =>
+      post<{ block: PageBlock }>(`/wiki/page/${slug}/blocks`, body),
+    updateBlock: (id: string, content: string) =>
+      put<{ ok: boolean }>(`/wiki/page/blocks/${id}`, { content }),
+    deleteBlock: (id: string) =>
+      del<{ ok: boolean }>(`/wiki/page/blocks/${id}`),
+    moveBlock: (id: string, body: { new_parent_id: string | null; new_order_index: number }) =>
+      post<{ ok: boolean }>(`/wiki/page/blocks/${id}/move`, body),
+    backlinks: (slug: string) =>
+      get<{ backlinks: BacklinkResult[] }>(`/wiki/page/${slug}/backlinks`),
   }
 }
 
@@ -175,6 +210,7 @@ export interface WikiPageData {
     name: string
   } | null
   content: string
+  blocks: PageBlock[]
   category_tabs: {
     nav_slug: string
     title: string
@@ -223,4 +259,21 @@ export interface WikiSearchResult {
   locations: { file_path: string; abs_path: string; section_heading: string | null; summary: string; match_type: string; relevance: number }[]
   concepts: WikiConcept[]
   sources: { title: string | null; url: string | null; author: string | null; modality: string }[]
+}
+
+export interface PageBlock {
+  id: string
+  content: string
+  block_type: string
+  source: "ai" | "user" | "user_edited"
+  placement_id: string | null
+  order_index: number
+  depth: number
+  properties: Record<string, unknown> | null
+  children: PageBlock[]
+}
+
+export interface BacklinkResult {
+  from_page: { slug: string; title: string }
+  block: { id: string; content: string }
 }

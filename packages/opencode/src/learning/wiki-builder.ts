@@ -28,6 +28,7 @@ import {
 } from "./schema.sql"
 import { Placement } from "./resource"
 import { Workspace as WorkspaceUtil } from "./workspace"
+import { BlockBuilder } from "./block-builder"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,6 +239,8 @@ export namespace WikiBuilder {
     const fullPath = path.join(workspace.kb_path, page.file_path)
     mkdirSync(path.dirname(fullPath), { recursive: true })
     writeFileSync(fullPath, content, "utf8")
+    // Sync blocks from freshly-built placements (non-blocking)
+    try { BlockBuilder.syncPage(page.id) } catch { /* non-blocking */ }
 
     const wordCount = content.split(/\s+/).filter(Boolean).length
     Database.use((db) =>
