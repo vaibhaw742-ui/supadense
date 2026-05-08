@@ -440,7 +440,8 @@ export default function Page() {
   const isChildSession = createMemo(() => !!info()?.parentID)
 
   const tabSessions = createMemo(() => {
-    const dir = decode64(params.dir) ?? ""
+    const dir = decode64(params.dir)
+    if (!dir) return []
     const [store] = globalSync.child(dir)
     return sortedRootSessions(store, Date.now())
   })

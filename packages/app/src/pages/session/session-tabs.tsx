@@ -20,29 +20,32 @@ export function SessionTabs(props: Props) {
             const active = () => props.activeId === session.id
             const title = () => sessionTitle(session.title)
             return (
-              <button
-                type="button"
+              <div
                 class="session-tab"
                 classList={{ "session-tab--active": active() }}
+                role="button"
+                tabIndex={0}
                 onClick={() => props.onNavigate(session.id)}
+                onKeyDown={(e) => e.key === "Enter" && props.onNavigate(session.id)}
                 title={title()}
               >
-                {/* Session icon */}
                 <span class="session-tab-icon">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <circle cx="5" cy="5" r="4" fill="currentColor" opacity="0.7" />
                   </svg>
                 </span>
                 <span class="session-tab-title">{title()}</span>
-                <button
-                  type="button"
+                <span
                   class="session-tab-close"
-                  onClick={(e) => { e.stopPropagation(); props.onArchive(session) }}
+                  role="button"
+                  tabIndex={0}
                   title="Close"
+                  onClick={(e) => { e.stopPropagation(); props.onArchive(session) }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); props.onArchive(session) } }}
                 >
                   ×
-                </button>
-              </button>
+                </span>
+              </div>
             )
           }}
         </For>

@@ -198,6 +198,7 @@ body.kb-walkthrough-1 #kb-add-resource-btn {
   white-space: nowrap;
   transition: background 0.1s, color 0.1s;
   position: relative;
+  user-select: none;
 }
 
 .session-tab:hover {
