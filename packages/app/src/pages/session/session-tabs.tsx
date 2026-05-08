@@ -50,16 +50,6 @@ export function SessionTabs(props: Props) {
           }}
         </For>
       </div>
-
-      {/* New session button */}
-      <button
-        type="button"
-        class="session-tabs-new"
-        onClick={props.onNew}
-        title="New session"
-      >
-        +
-      </button>
     </div>
   )
 }
