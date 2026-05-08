@@ -421,17 +421,7 @@ export const SortableWorkspace = (props: {
         </div>
 
         <Collapsible.Content>
-          <WorkspaceSessionList
-            slug={slug}
-            mobile={props.mobile}
-            ctx={props.ctx}
-            showNew={showNew}
-            loading={loading}
-            sessions={sessions}
-            hasMore={hasMore}
-            loadMore={loadMore}
-            language={language}
-          />
+          {/* Sessions moved to top tab bar in session view */}
         </Collapsible.Content>
       </Collapsible>
     </div>
@@ -466,17 +456,7 @@ export const LocalWorkspace = (props: {
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
       class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
     >
-      <WorkspaceSessionList
-        slug={slug}
-        mobile={props.mobile}
-        ctx={props.ctx}
-        showNew={() => false}
-        loading={loading}
-        sessions={sessions}
-        hasMore={hasMore}
-        loadMore={loadMore}
-        language={language}
-      />
+      {/* Sessions moved to top tab bar in session view */}
     </div>
   )
 }

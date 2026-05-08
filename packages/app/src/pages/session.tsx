@@ -29,8 +29,11 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/util/encode"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { SessionTabs } from "@/pages/session/session-tabs"
+import { decode64 } from "@/utils/base64"
+import { sortedRootSessions } from "@/pages/layout/helpers"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -320,6 +323,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
 export default function Page() {
   const globalSync = useGlobalSync()
+  const navigate = useNavigate()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -434,6 +438,12 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
+
+  const tabSessions = createMemo(() => {
+    const dir = decode64(params.dir) ?? ""
+    const [store] = globalSync.child(dir)
+    return sortedRootSessions(store, Date.now())
+  })
   const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
@@ -1851,6 +1861,14 @@ const reviewEmptyText = createMemo(() => {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+      <SessionTabs
+        sessions={tabSessions()}
+        activeId={params.id}
+        slug={params.dir}
+        onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
+        onNew={() => navigate(`/${params.dir}/session`)}
+        onArchive={(session) => void archiveSession(session)}
+      />
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
