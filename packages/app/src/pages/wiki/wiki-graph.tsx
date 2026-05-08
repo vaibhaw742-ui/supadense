@@ -291,7 +291,7 @@ export function WikiGraph(props: Props) {
   })
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#ffffff" }}>
       <div ref={container} class="wk-graph-container" style={{ width: "100%", height: "100%" }} />
       <button
         class="wk-graph-fit-btn"
