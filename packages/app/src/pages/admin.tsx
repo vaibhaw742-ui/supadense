@@ -20,6 +20,13 @@ type UserDetail = {
   message_count: number
 }
 
+type WaitlistUser = {
+  id: string
+  email: string
+  years_of_experience: string | null
+  created_at: string
+}
+
 async function fetchAnalytics(): Promise<AnalyticsData | null> {
   const token = getAuthToken()
   if (!token) return null
@@ -41,6 +48,16 @@ async function fetchUsers(): Promise<UserDetail[] | null> {
   const token = getAuthToken()
   if (!token) return null
   const res = await fetch(`${getBackendUrl()}/supa-auth/admin/users-detail`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchWaitlist(): Promise<WaitlistUser[] | null> {
+  const token = getAuthToken()
+  if (!token) return null
+  const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) return null
@@ -192,12 +209,16 @@ export default function AdminPage() {
   const [isAdmin] = createResource(checkAdmin)
   const [analytics] = createResource(() => isAdmin() === true || undefined, fetchAnalytics)
   const [users] = createResource(() => isAdmin() === true || undefined, fetchUsers)
-  const [tab, setTab] = createSignal<"overview" | "users">("overview")
+  const [waitlist, { refetch: refetchWaitlist }] = createResource(() => isAdmin() === true || undefined, fetchWaitlist)
+  const [tab, setTab] = createSignal<"overview" | "users" | "waitlist">("overview")
   const [expandedUser, setExpandedUser] = createSignal<string | null>(null)
   const [queriesCache, setQueriesCache] = createSignal<Record<string, UserQuery[]>>({})
   const [queriesLoading, setQueriesLoading] = createSignal<string | null>(null)
   const [deletingUser, setDeletingUser] = createSignal<string | null>(null)
   const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set())
+  const [approvingId, setApprovingId] = createSignal<string | null>(null)
+  const [approvePassword, setApprovePassword] = createSignal<Record<string, string>>({})
+  const [rejectingId, setRejectingId] = createSignal<string | null>(null)
 
   async function deleteUser(e: MouseEvent, userId: string) {
     e.stopPropagation()
@@ -234,6 +255,55 @@ export default function AdminPage() {
     const queries = await fetchUserQueries(userId)
     setQueriesCache((prev) => ({ ...prev, [userId]: queries }))
     setQueriesLoading(null)
+  }
+
+  async function approveUser(userId: string) {
+    const password = approvePassword()[userId]?.trim()
+    if (!password || password.length < 6) {
+      alert("Enter a password of at least 6 characters")
+      return
+    }
+    setApprovingId(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist/${userId}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token ?? ""}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      if (res.ok) {
+        refetchWaitlist()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to approve user")
+      }
+    } catch {
+      alert("Failed to approve user — check connection")
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
+  async function rejectUser(userId: string) {
+    if (!confirm("Reject and remove this user from the waitlist?")) return
+    setRejectingId(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      })
+      if (res.ok) {
+        refetchWaitlist()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to reject user")
+      }
+    } catch {
+      alert("Failed to reject user — check connection")
+    } finally {
+      setRejectingId(null)
+    }
   }
 
   createEffect(() => {
@@ -302,6 +372,18 @@ export default function AdminPage() {
             onClick={() => setTab("users")}
           >
             Users
+          </button>
+          <button
+            type="button"
+            class={`px-4 py-1.5 rounded-md text-14-medium transition-colors flex items-center gap-1.5 ${tab() === "waitlist" ? "bg-[var(--surface-raised-stronger-non-alpha)] text-text-strong" : "text-text-weak hover:text-text-strong"}`}
+            onClick={() => setTab("waitlist")}
+          >
+            Waitlist
+            <Show when={(waitlist() ?? []).length > 0}>
+              <span class="bg-orange-500 text-white text-10-medium rounded-full px-1.5 py-0.5 leading-none">
+                {(waitlist() ?? []).length}
+              </span>
+            </Show>
           </button>
         </div>
 
@@ -462,6 +544,72 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+        </Show>
+        {/* Waitlist tab */}
+        <Show when={tab() === "waitlist"}>
+          <div class="flex flex-col gap-4">
+            <div class="text-14-regular text-text-weak">
+              {(waitlist() ?? []).length} pending
+            </div>
+            <Show when={(waitlist() ?? []).length === 0}>
+              <div class="text-14-regular text-text-weak">No one on the waitlist.</div>
+            </Show>
+            <Show when={(waitlist() ?? []).length > 0}>
+              <div class="rounded-xl border border-[var(--border-weak-base)] overflow-hidden">
+                <table class="w-full text-14-regular">
+                  <thead>
+                    <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-raised-base)]">
+                      <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Email</th>
+                      <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Experience</th>
+                      <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Applied</th>
+                      <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Set Password</th>
+                      <th class="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <For each={waitlist() ?? []}>
+                      {(u) => (
+                        <tr class="border-b border-[var(--border-weak-base)] hover:bg-[var(--surface-raised-base)] transition-colors">
+                          <td class="px-4 py-3 text-text-strong">{u.email}</td>
+                          <td class="px-4 py-3 text-text-weak">{u.years_of_experience ?? "—"}</td>
+                          <td class="px-4 py-3 text-text-weak">{fmtDate(u.created_at)}</td>
+                          <td class="px-4 py-3">
+                            <input
+                              type="password"
+                              placeholder="min 6 chars"
+                              class="bg-[var(--surface-base)] border border-[var(--border-weak-base)] rounded px-2 py-1 text-12-regular text-text-strong w-36 outline-none focus:border-orange-500"
+                              value={approvePassword()[u.id] ?? ""}
+                              onInput={(e) =>
+                                setApprovePassword((prev) => ({ ...prev, [u.id]: e.currentTarget.value }))
+                              }
+                            />
+                          </td>
+                          <td class="px-4 py-3 text-right flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              class="text-11-regular text-green-400 hover:text-green-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                              disabled={approvingId() === u.id}
+                              onClick={() => approveUser(u.id)}
+                            >
+                              {approvingId() === u.id ? "…" : "Approve"}
+                            </button>
+                            <button
+                              type="button"
+                              class="text-11-regular text-red-400 hover:text-red-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                              disabled={rejectingId() === u.id}
+                              onClick={() => rejectUser(u.id)}
+                            >
+                              {rejectingId() === u.id ? "…" : "Reject"}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
+              </div>
+            </Show>
+          </div>
         </Show>
       </div>
     </div>
