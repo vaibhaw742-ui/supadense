@@ -5,27 +5,20 @@ import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { TextField } from "@opencode-ai/ui/text-field"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
-import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
-import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -233,14 +226,12 @@ export function MessageTimeline(props: {
   let touchGesture: number | undefined
 
   const navigate = useNavigate()
-  const globalSDK = useGlobalSDK()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
-  const platform = usePlatform()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionID = createMemo(() => params.id)
@@ -303,9 +294,7 @@ export function MessageTimeline(props: {
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
-  const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const parentID = createMemo(() => info()?.parentID)
+const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
     if (!id) return
@@ -350,15 +339,47 @@ export function MessageTimeline(props: {
   })
   let titleRef: HTMLInputElement | undefined
 
-  const [share, setShare] = createStore({
-    open: false,
-    dismiss: null as "escape" | "outside" | null,
+  const [historyOpen, setHistoryOpen] = createSignal(false)
+  const [historySearch, setHistorySearch] = createSignal("")
+
+  const historySessions = createMemo(() => {
+    const now = Date.now()
+    const all = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const q = historySearch().toLowerCase()
+    const filtered = q
+      ? all.filter((s) => (sessionTitle(s.title) ?? "").toLowerCase().includes(q))
+      : all
+    return [...filtered].sort((a, b) => {
+      const at = a.time?.updated ?? a.time?.created ?? 0
+      const bt = b.time?.updated ?? b.time?.created ?? 0
+      return bt - at
+    })
+  })
+
+  const timeAgo = (ts: number | undefined) => {
+    if (!ts) return ""
+    const diff = Math.floor((Date.now() - ts) / 1000)
+    if (diff < 60) return `${diff}s`
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`
+    return `${Math.floor(diff / 86400)}d`
+  }
+
+  createEffect(() => {
+    if (!historyOpen()) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element
+      if (!target.closest(".session-history-dropdown") && !target.closest("[title='Session history']")) {
+        setHistoryOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    onCleanup(() => document.removeEventListener("mousedown", handler))
   })
   const [bar, setBar] = createStore({
     ms: pace(640),
   })
 
-  let more: HTMLButtonElement | undefined
   let head: HTMLDivElement | undefined
 
   createResizeObserver(
@@ -369,12 +390,6 @@ export function MessageTimeline(props: {
     },
   )
 
-  const viewShare = () => {
-    const url = shareUrl()
-    if (!url) return
-    platform.openLink(url)
-  }
-
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { message?: string } }).data
@@ -383,20 +398,6 @@ export function MessageTimeline(props: {
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
   }
-
-  const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => globalSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
-    onError: (err) => {
-      console.error("Failed to share session", err)
-    },
-  }))
-
-  const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => globalSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
-    onError: (err) => {
-      console.error("Failed to unshare session", err)
-    },
-  }))
 
   const titleMutation = useMutation(() => ({
     mutationFn: (input: { id: string; title: string }) =>
@@ -418,19 +419,7 @@ export function MessageTimeline(props: {
     },
   }))
 
-  const shareSession = () => {
-    const id = sessionID()
-    if (!id || shareMutation.isPending) return
-    if (!shareEnabled()) return
-    shareMutation.mutate(id)
-  }
 
-  const unshareSession = () => {
-    const id = sessionID()
-    if (!id || unshareMutation.isPending) return
-    if (!shareEnabled()) return
-    unshareMutation.mutate(id)
-  }
 
   createEffect(
     on(
@@ -812,185 +801,126 @@ export function MessageTimeline(props: {
                       </Show>
                     </div>
                   </div>
-                  <Show when={sessionID()}>
-                    {(id) => (
-                      <div class="shrink-0 flex items-center gap-3">
-                        <SessionContextUsage placement="bottom" />
-                        <Show when={!parentID()}>
-                          <DropdownMenu
-                            gutter={4}
-                            placement="bottom-end"
-                            open={title.menuOpen}
-                            onOpenChange={(open) => {
-                              setTitle("menuOpen", open)
-                              if (open) return
-                            }}
+                  <Show when={!parentID()}>
+                    <div class="shrink-0 flex items-center gap-1">
+                      {/* History dropdown */}
+                      <div style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          class="size-7 rounded-md flex items-center justify-center text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors"
+                          classList={{ "bg-surface-base-active text-text-strong": historyOpen() }}
+                          onClick={() => { setHistorySearch(""); setHistoryOpen(!historyOpen()) }}
+                          title="Session history"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                          </svg>
+                        </button>
+                        <Show when={historyOpen()}>
+                          <div
+                            class="session-history-dropdown"
+                            onMouseDown={(e) => e.stopPropagation()}
                           >
-                            <DropdownMenu.Trigger
-                              as={IconButton}
-                              icon="dot-grid"
-                              variant="ghost"
-                              class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                              classList={{
-                                "bg-surface-base-active": share.open || title.pendingShare,
-                              }}
-                              aria-label={language.t("common.moreOptions")}
-                              aria-expanded={title.menuOpen || share.open || title.pendingShare}
-                              ref={(el: HTMLButtonElement) => {
-                                more = el
-                              }}
-                            />
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content
-                                style={{ "min-width": "104px" }}
-                                onCloseAutoFocus={(event) => {
-                                  if (title.pendingRename) {
-                                    event.preventDefault()
-                                    setTitle("pendingRename", false)
-                                    openTitleEditor()
-                                    return
-                                  }
-                                  if (title.pendingShare) {
-                                    event.preventDefault()
-                                    requestAnimationFrame(() => {
-                                      setShare({ open: true, dismiss: null })
-                                      setTitle("pendingShare", false)
-                                    })
-                                  }
-                                }}
-                              >
-                                <DropdownMenu.Item
-                                  onSelect={() => {
-                                    setTitle("pendingRename", true)
-                                    setTitle("menuOpen", false)
-                                  }}
-                                >
-                                  <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                                <Show when={shareEnabled()}>
-                                  <DropdownMenu.Item
-                                    onSelect={() => {
-                                      setTitle({ pendingShare: true, menuOpen: false })
-                                    }}
-                                  >
-                                    <DropdownMenu.ItemLabel>
-                                      {language.t("session.share.action.share")}
-                                    </DropdownMenu.ItemLabel>
-                                  </DropdownMenu.Item>
-                                </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Separator />
-                                <DropdownMenu.Item
-                                  onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
-                                >
-                                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu>
-
-                          <KobaltePopover
-                            open={share.open}
-                            anchorRef={() => more}
-                            placement="bottom-end"
-                            gutter={4}
-                            modal={false}
-                            onOpenChange={(open) => {
-                              if (open) setShare("dismiss", null)
-                              setShare("open", open)
-                            }}
-                          >
-                            <KobaltePopover.Portal>
-                              <KobaltePopover.Content
-                                data-component="popover-content"
-                                style={{ "min-width": "320px" }}
-                                onEscapeKeyDown={(event) => {
-                                  setShare({ dismiss: "escape", open: false })
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                }}
-                                onPointerDownOutside={() => {
-                                  setShare({ dismiss: "outside", open: false })
-                                }}
-                                onFocusOutside={() => {
-                                  setShare({ dismiss: "outside", open: false })
-                                }}
-                                onCloseAutoFocus={(event) => {
-                                  if (share.dismiss === "outside") event.preventDefault()
-                                  setShare("dismiss", null)
-                                }}
-                              >
-                                <div class="flex flex-col p-3">
-                                  <div class="flex flex-col gap-1">
-                                    <div class="text-13-medium text-text-strong">
-                                      {language.t("session.share.popover.title")}
-                                    </div>
-                                    <div class="text-12-regular text-text-weak">
-                                      {shareUrl()
-                                        ? language.t("session.share.popover.description.shared")
-                                        : language.t("session.share.popover.description.unshared")}
-                                    </div>
-                                  </div>
-                                  <div class="mt-3 flex flex-col gap-2">
-                                    <Show
-                                      when={shareUrl()}
-                                      fallback={
-                                        <Button
-                                          size="large"
-                                          variant="primary"
-                                          class="w-full"
-                                          onClick={shareSession}
-                                          disabled={shareMutation.isPending}
-                                        >
-                                          {shareMutation.isPending
-                                            ? language.t("session.share.action.publishing")
-                                            : language.t("session.share.action.publish")}
-                                        </Button>
-                                      }
+                            {/* Tabs */}
+                            <div class="session-history-tabs">
+                              <button type="button" class="session-history-tab session-history-tab--active">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                  <line x1="8" y1="21" x2="16" y2="21"/>
+                                  <line x1="12" y1="17" x2="12" y2="21"/>
+                                </svg>
+                                Local
+                              </button>
+                              <button type="button" class="session-history-tab" disabled>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                  <circle cx="12" cy="12" r="10"/>
+                                  <line x1="2" y1="12" x2="22" y2="12"/>
+                                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                                </svg>
+                                Web
+                              </button>
+                            </div>
+                            {/* Search */}
+                            <div class="session-history-search-wrap">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="session-history-search-icon">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                              </svg>
+                              <input
+                                type="text"
+                                class="session-history-search"
+                                placeholder="Search sessions..."
+                                value={historySearch()}
+                                onInput={(e) => setHistorySearch(e.currentTarget.value)}
+                                autofocus
+                              />
+                            </div>
+                            {/* Session list */}
+                            <div class="session-history-list">
+                              <For each={historySessions()}>
+                                {(session) => {
+                                  const isActive = () => session.id === params.id
+                                  const ts = session.time?.updated ?? session.time?.created
+                                  return (
+                                    <div
+                                      class="session-history-item"
+                                      classList={{ "session-history-item--active": isActive() }}
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={() => {
+                                        setHistoryOpen(false)
+                                        navigate(`/${params.dir}/session/${session.id}`)
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          setHistoryOpen(false)
+                                          navigate(`/${params.dir}/session/${session.id}`)
+                                        }
+                                      }}
                                     >
-                                      <div class="flex flex-col gap-2">
-                                        <TextField
-                                          value={shareUrl() ?? ""}
-                                          readOnly
-                                          copyable
-                                          copyKind="link"
-                                          tabIndex={-1}
-                                          class="w-full"
-                                        />
-                                        <div class="grid grid-cols-2 gap-2">
-                                          <Button
-                                            size="large"
-                                            variant="secondary"
-                                            class="w-full shadow-none border border-border-weak-base"
-                                            onClick={unshareSession}
-                                            disabled={unshareMutation.isPending}
-                                          >
-                                            {unshareMutation.isPending
-                                              ? language.t("session.share.action.unpublishing")
-                                              : language.t("session.share.action.unpublish")}
-                                          </Button>
-                                          <Button
-                                            size="large"
-                                            variant="primary"
-                                            class="w-full"
-                                            onClick={viewShare}
-                                            disabled={unshareMutation.isPending}
-                                          >
-                                            {language.t("session.share.action.view")}
-                                          </Button>
-                                        </div>
+                                      <span class="session-history-item-title">{sessionTitle(session.title) ?? "Untitled"}</span>
+                                      <span class="session-history-item-time">{timeAgo(ts)}</span>
+                                      <div class="session-history-item-actions">
+                                        <button
+                                          type="button"
+                                          class="session-history-action"
+                                          title="Delete"
+                                          onClick={(e) => { e.stopPropagation(); void archiveSession(session.id); setHistoryOpen(false) }}
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                            <path d="M10 11v6"/>
+                                            <path d="M14 11v6"/>
+                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                          </svg>
+                                        </button>
                                       </div>
-                                    </Show>
-                                  </div>
-                                </div>
-                              </KobaltePopover.Content>
-                            </KobaltePopover.Portal>
-                          </KobaltePopover>
+                                    </div>
+                                  )
+                                }}
+                              </For>
+                              <Show when={historySessions().length === 0}>
+                                <div class="session-history-empty">No sessions found</div>
+                              </Show>
+                            </div>
+                          </div>
                         </Show>
                       </div>
-                    )}
+                      {/* New session button */}
+                      <button
+                        type="button"
+                        class="size-7 rounded-md flex items-center justify-center text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors"
+                        onClick={() => { setHistoryOpen(false); navigate(`/${params.dir}/session`) }}
+                        title="New session"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="12" y1="5" x2="12" y2="19"/>
+                          <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                      </button>
+                    </div>
                   </Show>
                 </div>
               </div>
