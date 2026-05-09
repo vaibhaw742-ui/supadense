@@ -409,9 +409,9 @@ export default function Page() {
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    if (!isDesktop()) return "100%"
+    if (desktopFileTreeOpen()) return `calc(100% - ${layout.fileTree.width()}px)`
+    return `${layout.session.width()}px`
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
@@ -2051,13 +2051,13 @@ const reviewEmptyText = createMemo(() => {
           />
           </div>
 
-          <Show when={desktopReviewOpen()}>
+          <Show when={isDesktop() && !desktopFileTreeOpen()}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 direction="horizontal"
                 size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                min={400}
+                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.8}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)
