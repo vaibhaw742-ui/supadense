@@ -817,28 +817,6 @@ export function SessionHeader() {
                 </div>
               </Show>
             </div>
-            <Show when={handleLogout} fallback={
-              <Tooltip placement="bottom" value="Account">
-                <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
-              </Tooltip>
-            }>
-              <DropdownMenu placement="bottom-end">
-                <Tooltip placement="bottom" value={userEmail ?? "Account"}>
-                  <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
-                </Tooltip>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content>
-                    <Show when={userEmail}>
-                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                        {userEmail}
-                      </div>
-                      <DropdownMenu.Separator />
-                    </Show>
-                    <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu>
-            </Show>
           </Portal>
         )}
       </Show>
@@ -846,7 +824,6 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-1">
-              <KbSelectorDropdown />
               <AllFilesButton />
               <DocsButton />
               <Show when={projectDirectory()}>
@@ -860,6 +837,28 @@ export function SessionHeader() {
               <Tooltip placement="bottom" value="Help">
                 <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
               </Tooltip>
+              <Show when={handleLogout} fallback={
+                <Tooltip placement="bottom" value="Account">
+                  <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+                </Tooltip>
+              }>
+                <DropdownMenu placement="bottom-end">
+                  <Tooltip placement="bottom" value={userEmail ?? "Account"}>
+                    <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
+                  </Tooltip>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content>
+                      <Show when={userEmail}>
+                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {userEmail}
+                        </div>
+                        <DropdownMenu.Separator />
+                      </Show>
+                      <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
+              </Show>
             </div>
           </Portal>
         )}
