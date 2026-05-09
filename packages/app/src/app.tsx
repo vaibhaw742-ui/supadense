@@ -124,6 +124,18 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
+function HomeShellProviders(props: ParentProps) {
+  return (
+    <SettingsProvider>
+      <PermissionProvider>
+        <ModelsProvider>
+          <CommandProvider>{props.children}</CommandProvider>
+        </ModelsProvider>
+      </PermissionProvider>
+    </SettingsProvider>
+  )
+}
+
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const location = useLocation()
   const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
@@ -135,9 +147,16 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
     <Show
       when={!isStandalone()}
       fallback={
-        <Suspense fallback={<Loading />}>
-          {props.children}
-        </Suspense>
+        <Show
+          when={isHome()}
+          fallback={
+            <Suspense fallback={<Loading />}>{props.children}</Suspense>
+          }
+        >
+          <HomeShellProviders>
+            <Suspense fallback={<Loading />}>{props.children}</Suspense>
+          </HomeShellProviders>
+        </Show>
       }
     >
       <AppShellProviders>
