@@ -1,41 +1,18 @@
-import { createSignal, For, onMount, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
-import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { usePlatform } from "@/context/platform"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
-import { useLanguage } from "@/context/language"
 import { getAuthToken, getBackendUrl } from "@/utils/server"
 
 export default function Home() {
   const sync = useGlobalSync()
-  const layout = useLayout()
-  const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
-  const language = useLanguage()
-
-  // Auto-redirect authenticated users to their default workspace
-  onMount(async () => {
-    const token = getAuthToken()
-    if (!token) return
-    try {
-      const res = await fetch(`${getBackendUrl()}/supa-auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) return
-      const { userId } = (await res.json()) as { userId?: string }
-      if (!userId) return
-      const defaultDir = `/workspaces/${userId}/default`
-      server.projects.touch(defaultDir)
-      navigate(`/${base64Encode(defaultDir)}/session`)
-    } catch {}
-  })
 
   // KB creation state — lives directly in Home so signals are always reactive
   const [kbOpen, setKbOpen] = createSignal(false)
@@ -92,7 +69,6 @@ export default function Home() {
     const dir = kbCreatedDir()
     if (!dir) return
     closeKbDialog()
-    layout.projects.open(dir)
     server.projects.touch(dir)
     navigate(
       `/${base64Encode(dir)}/session?prompt=${encodeURIComponent("Setup my knowledge base")}&send=1`,
@@ -100,34 +76,8 @@ export default function Home() {
   }
 
   function openProject(directory: string) {
-    layout.projects.open(directory)
     server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}/session`)
-  }
-
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory)
-        }
-      } else if (result) {
-        openProject(result)
-      }
-    }
-
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
-    }
   }
 
   const [filterTab, setFilterTab] = createSignal<"all" | "synced">("all")

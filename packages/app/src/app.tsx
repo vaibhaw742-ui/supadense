@@ -128,7 +128,8 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const location = useLocation()
   const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
   const isFiles = () => /\/files(?:\/|$)/.test(location.pathname)
-  const isStandalone = () => isWiki() || isFiles()
+  const isHome = () => location.pathname === "/"
+  const isStandalone = () => isWiki() || isFiles() || isHome()
 
   return (
     <Show
