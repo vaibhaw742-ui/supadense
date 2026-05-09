@@ -213,8 +213,8 @@ export default function Home() {
       {/* Header */}
       <div class="flex items-center justify-between px-8 pt-4 pb-4">
         <div>
-          <div class="text-14-regular text-text-weak">All Workspaces</div>
-          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">Knowledge base</div>
+          <div class="text-14-regular text-text-weak">Knowledge base</div>
+          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
         </div>
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
