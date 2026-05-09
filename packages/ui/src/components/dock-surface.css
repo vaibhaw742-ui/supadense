@@ -25,12 +25,12 @@
 /* When shell + tray share a single outer container */
 .dock-outer-container [data-dock-surface="shell"] {
   box-shadow: none;
-  border-radius: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .dock-outer-container [data-dock-surface="tray"][data-dock-attach="top"] {
   border: none;
   border-top: 1px solid var(--border-weak-base);
   margin-top: 0;
-  border-radius: 0;
+  border-radius: 0 0 12px 12px;
 }

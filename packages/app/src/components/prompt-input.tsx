@@ -1298,7 +1298,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <div class="dock-outer-container rounded-[12px] overflow-hidden border border-border-weak-base focus-within:shadow-xs-border">
+      <div class="dock-outer-container rounded-[12px] border border-border-weak-base focus-within:shadow-xs-border">
       <DockShellForm
         onSubmit={handleSubmit}
         classList={{
