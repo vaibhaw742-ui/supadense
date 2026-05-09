@@ -2,7 +2,6 @@ import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
@@ -185,17 +184,6 @@ export function Titlebar() {
             />
           </div>
         </Show>
-        <div class="hidden xl:flex items-center px-1">
-          <Tooltip placement="right" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
-            <IconButton
-              icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
-              variant="ghost"
-              class="titlebar-icon rounded-md"
-              onClick={layout.sidebar.toggle}
-              aria-label={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}
-            />
-          </Tooltip>
-        </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
