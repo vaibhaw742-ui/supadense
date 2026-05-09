@@ -91,10 +91,10 @@
   --text-mix-blend-mode: multiply;
 
   /* OC-2 fallback variables (light) */
-  --background-base: #f8f8f8;
-  --background-weak: #f3f3f3;
-  --background-strong: #fcfcfc;
-  --background-stronger: #fcfcfc;
+  --background-base: #ffffff;
+  --background-weak: #f0efeb;
+  --background-strong: #e8e7e3;
+  --background-stronger: #e4e4e0;
   --surface-base: rgba(0, 0, 0, 0.031);
   --base: rgba(0, 0, 0, 0.034);
   --surface-base-hover: rgba(0, 0, 0, 0.059);
