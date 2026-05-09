@@ -125,10 +125,9 @@ export function SessionSidePanel(props: {
   const reviewTab = createMemo(() => isDesktop())
   const graphMode = createMemo(() => fileOpen() && !layout.fileTree.allFilesOpen())
   const panelWidth = createMemo(() => {
-    if (!isDesktop()) return "0px"
-    if (graphMode() || reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
-    if (fileOpen()) return `${layout.fileTree.width()}px`
-    return `calc(100% - ${layout.session.width()}px)`
+    if (!open()) return "0px"
+    if (reviewOpen() || graphMode()) return `calc(100% - ${layout.session.width()}px)`
+    return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() && !graphMode() ? `${layout.fileTree.width()}px` : "0px"))
 
