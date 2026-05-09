@@ -17,10 +17,12 @@ async function checkIsAdmin(): Promise<boolean> {
   const token = getAuthToken()
   if (!token) return false
   try {
-    const res = await fetch(`${getBackendUrl()}/supa-auth/users`, {
+    const res = await fetch(`${getBackendUrl()}/supa-auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    return res.ok
+    if (!res.ok) return false
+    const data = await res.json() as { is_admin?: boolean }
+    return !!data.is_admin
   } catch {
     return false
   }
