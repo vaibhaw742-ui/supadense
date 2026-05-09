@@ -1884,7 +1884,7 @@ const reviewEmptyText = createMemo(() => {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row p-2 gap-2">
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row px-2 pb-2 gap-2">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
