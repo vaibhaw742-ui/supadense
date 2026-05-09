@@ -213,10 +213,27 @@ export default function Home() {
   return (
     <div class="size-full flex flex-col bg-background-base overflow-y-auto">
       {/* Header */}
-      <div class="flex items-center justify-between px-8 pt-8 pb-4">
-        <div>
-          <div class="text-14-regular text-text-weak">Knowledge base</div>
-          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
+      <div class="flex items-center justify-between px-8 pt-4 pb-4">
+        <div class="flex items-end gap-4">
+          <div>
+            <div class="text-14-regular text-text-weak">Knowledge base</div>
+            <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
+          </div>
+          <div class="flex items-center gap-1 pb-1">
+            {(["all", "synced"] as const).map((tab) => (
+              <button
+                type="button"
+                class="px-3 py-1 rounded-md text-13-medium transition-colors"
+                classList={{
+                  "bg-surface-base-active text-text-strong": filterTab() === tab,
+                  "text-text-weak hover:text-text-base": filterTab() !== tab,
+                }}
+                onClick={() => setFilterTab(tab)}
+              >
+                {tab === "all" ? "All" : "Synced"}
+              </button>
+            ))}
+          </div>
         </div>
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
@@ -264,25 +281,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div class="flex items-center gap-1 px-8 pb-6">
-        {(["all", "synced"] as const).map((tab) => (
-          <button
-            type="button"
-            class="px-3 py-1 rounded-md text-13-medium transition-colors"
-            classList={{
-              "bg-surface-base-active text-text-strong": filterTab() === tab,
-              "text-text-weak hover:text-text-base": filterTab() !== tab,
-            }}
-            onClick={() => setFilterTab(tab)}
-          >
-            {tab === "all" ? "All" : "Synced"}
-          </button>
-        ))}
-      </div>
-
       {/* Workspace grid */}
-      <div class="px-8 py-6">
+      <div class="px-8 pb-6">
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {/* Create new */}
           <button
