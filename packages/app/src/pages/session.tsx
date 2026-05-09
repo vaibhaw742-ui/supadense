@@ -1884,7 +1884,7 @@ const reviewEmptyText = createMemo(() => {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row px-2 pb-2 gap-2">
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
@@ -1913,7 +1913,7 @@ const reviewEmptyText = createMemo(() => {
         {/* Session panel */}
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 bg-background-base border border-border-weak-base flex-1 md:flex-none rounded-[12px] overflow-hidden": true,
+            "@container relative shrink-0 flex flex-col min-h-0 bg-background-base border-r border-border-weak-base flex-1 md:flex-none overflow-hidden": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
