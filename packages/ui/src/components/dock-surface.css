@@ -17,20 +17,10 @@
 }
 
 [data-dock-surface="tray"][data-dock-attach="top"] {
-  margin-top: -0.875rem;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-
-/* When shell + tray share a single outer container */
-.dock-outer-container [data-dock-surface="shell"] {
-  box-shadow: none;
-  border-radius: 12px 12px 0 0;
-}
-
-.dock-outer-container [data-dock-surface="tray"][data-dock-attach="top"] {
+  background-color: transparent;
   border: none;
-  border-top: 1px solid var(--border-weak-base);
+  box-shadow: none;
+  border-radius: 0;
   margin-top: 0;
-  border-radius: 0 0 12px 12px;
 }
+

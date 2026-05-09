@@ -1298,11 +1298,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <div class="dock-outer-container rounded-[12px] border border-border-weak-base focus-within:shadow-xs-border">
       <DockShellForm
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
+          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1465,7 +1465,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </DockShellForm>
       <Show when={store.mode === "normal" || store.mode === "shell"}>
         <DockTray attach="top">
-          <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
+          <div class="px-1 pt-2 pb-1 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
               <div
                 class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
@@ -1603,7 +1603,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </DockTray>
       </Show>
-      </div>
     </div>
   )
 }
