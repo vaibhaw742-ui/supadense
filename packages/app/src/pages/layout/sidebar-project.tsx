@@ -2,7 +2,6 @@ import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Button } from "@opencode-ai/ui/button"
-import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createSortable } from "@thisbeyond/solid-dnd"
@@ -26,10 +25,6 @@ export type ProjectSidebarContext = {
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
-  deleteProject: (project: LocalProject) => void
-  showEditProjectDialog: (project: LocalProject) => void
-  toggleProjectWorkspaces: (project: LocalProject) => void
-  workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
   sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "mobile" | "dense">
@@ -54,135 +49,72 @@ export const ProjectDragOverlay = (props: {
 const ProjectTile = (props: {
   project: LocalProject
   mobile?: boolean
-  sidebarHovering: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
   overlay: Accessor<boolean>
   suppressHover: Accessor<boolean>
-  dirs: Accessor<string[]>
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
-  showEditProjectDialog: (project: LocalProject) => void
-  toggleProjectWorkspaces: (project: LocalProject) => void
-  workspacesEnabled: (project: LocalProject) => boolean
-  closeProject: (directory: string) => void
-  deleteProject: (project: LocalProject) => void
-  setMenu: (value: boolean) => void
   setOpen: (value: boolean) => void
   setSuppressHover: (value: boolean) => void
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => {
-  const notification = useNotification()
   const layout = useLayout()
-  const unseenCount = createMemo(() =>
-    props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
-  )
-
-  const clear = () =>
-    props
-      .dirs()
-      .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
 
   return (
-    <ContextMenu
-      modal={!props.sidebarHovering()}
-      onOpenChange={(value) => {
-        props.setMenu(value)
-        props.setSuppressHover(value)
-        if (value) props.setOpen(false)
+    <button
+      type="button"
+      aria-label={displayName(props.project)}
+      data-action="project-switch"
+      data-project={base64Encode(props.project.worktree)}
+      classList={{
+        "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+        "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
+        "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+          !props.selected() && !props.active(),
+        "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
       }}
-    >
-      <ContextMenu.Trigger
-        as="button"
-        type="button"
-        aria-label={displayName(props.project)}
-        data-action="project-switch"
-        data-project={base64Encode(props.project.worktree)}
-        classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !props.selected() && !props.active(),
-          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
-        }}
-        onPointerDown={(event) => {
-          if (event.button === 0 && !event.ctrlKey) {
-            props.setOpen(false)
-            props.setSuppressHover(true)
-            return
-          }
-          if (!props.overlay()) return
-          if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+      onPointerDown={(event) => {
+        if (event.button === 0 && !event.ctrlKey) {
           props.setOpen(false)
           props.setSuppressHover(true)
-          event.preventDefault()
-        }}
-        onMouseEnter={(event: MouseEvent) => {
-          if (!props.overlay()) return
-          if (props.suppressHover()) return
-          props.onProjectMouseEnter(props.project.worktree, event)
-        }}
-        onMouseLeave={() => {
-          if (props.suppressHover()) props.setSuppressHover(false)
-          if (!props.overlay()) return
-          props.onProjectMouseLeave(props.project.worktree)
-        }}
-        onFocus={() => {
-          if (!props.overlay()) return
-          if (props.suppressHover()) return
-          props.onProjectFocus(props.project.worktree)
-        }}
-        onClick={() => {
-          props.setOpen(false)
-          if (props.selected()) {
-            layout.sidebar.toggle()
-            return
-          }
-          props.navigateToProject(props.project.worktree)
-        }}
-        onBlur={() => props.setOpen(false)}
-      >
-        <ProjectIcon project={props.project} notify />
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content>
-          <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
-            <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            data-action="project-workspaces-toggle"
-            data-project={base64Encode(props.project.worktree)}
-            disabled={props.project.vcs !== "git" && !props.workspacesEnabled(props.project)}
-            onSelect={() => props.toggleProjectWorkspaces(props.project)}
-          >
-            <ContextMenu.ItemLabel>
-              {props.workspacesEnabled(props.project)
-                ? props.language.t("sidebar.workspaces.disable")
-                : props.language.t("sidebar.workspaces.enable")}
-            </ContextMenu.ItemLabel>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            data-action="project-clear-notifications"
-            data-project={base64Encode(props.project.worktree)}
-            disabled={unseenCount() === 0}
-            onSelect={clear}
-          >
-            <ContextMenu.ItemLabel>{props.language.t("sidebar.project.clearNotifications")}</ContextMenu.ItemLabel>
-          </ContextMenu.Item>
-          <ContextMenu.Separator />
-          <ContextMenu.Item
-            data-action="project-delete"
-            data-project={base64Encode(props.project.worktree)}
-            onSelect={() => props.deleteProject(props.project)}
-          >
-            <ContextMenu.ItemLabel>Delete</ContextMenu.ItemLabel>
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu.Portal>
-    </ContextMenu>
+          return
+        }
+        if (!props.overlay()) return
+        if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+        props.setOpen(false)
+        props.setSuppressHover(true)
+        event.preventDefault()
+      }}
+      onMouseEnter={(event: MouseEvent) => {
+        if (!props.overlay()) return
+        if (props.suppressHover()) return
+        props.onProjectMouseEnter(props.project.worktree, event)
+      }}
+      onMouseLeave={() => {
+        if (props.suppressHover()) props.setSuppressHover(false)
+        if (!props.overlay()) return
+        props.onProjectMouseLeave(props.project.worktree)
+      }}
+      onFocus={() => {
+        if (!props.overlay()) return
+        if (props.suppressHover()) return
+        props.onProjectFocus(props.project.worktree)
+      }}
+      onClick={() => {
+        props.setOpen(false)
+        if (props.selected()) {
+          layout.sidebar.toggle()
+          return
+        }
+        props.navigateToProject(props.project.worktree)
+      }}
+      onBlur={() => props.setOpen(false)}
+    >
+      <ProjectIcon project={props.project} notify />
+    </button>
   )
 }
 
@@ -280,7 +212,7 @@ export const SortableProject = (props: {
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
-  const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
+  const workspaceEnabled = createMemo(() => false)
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [state, setState] = createStore({
     menu: false,
@@ -312,22 +244,14 @@ export const SortableProject = (props: {
     <ProjectTile
       project={props.project}
       mobile={props.mobile}
-      sidebarHovering={props.ctx.sidebarHovering}
       selected={selected}
       active={active}
       overlay={overlay}
       suppressHover={() => state.suppressHover}
-      dirs={dirs}
       onProjectMouseEnter={props.ctx.onProjectMouseEnter}
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
-      showEditProjectDialog={props.ctx.showEditProjectDialog}
-      toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
-      workspacesEnabled={props.ctx.workspacesEnabled}
-      closeProject={props.ctx.closeProject}
-      deleteProject={props.ctx.deleteProject}
-      setMenu={(value) => setState("menu", value)}
       setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
       setSuppressHover={(value) => setState("suppressHover", value)}
       language={language}

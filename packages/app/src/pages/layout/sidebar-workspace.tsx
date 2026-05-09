@@ -7,11 +7,8 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -48,8 +45,6 @@ export type WorkspaceSidebarContext = {
   isBusy: (directory: string) => boolean
   workspaceExpanded: (directory: string, local: boolean) => boolean
   setWorkspaceExpanded: (directory: string, value: boolean) => void
-  showResetWorkspaceDialog: (root: string, directory: string) => void
-  showDeleteWorkspaceDialog: (root: string, directory: string) => void
   setScrollContainerRef: (el: HTMLDivElement | undefined, mobile?: boolean) => void
 }
 
@@ -133,84 +128,6 @@ const WorkspaceHeader = (props: {
   </div>
 )
 
-const WorkspaceActions = (props: {
-  directory: string
-  local: Accessor<boolean>
-  busy: Accessor<boolean>
-  menuOpen: Accessor<boolean>
-  pendingRename: Accessor<boolean>
-  setMenuOpen: (open: boolean) => void
-  setPendingRename: (value: boolean) => void
-  sidebarHovering: Accessor<boolean>
-  touch: Accessor<boolean>
-  language: ReturnType<typeof useLanguage>
-  workspaceValue: Accessor<string>
-  openEditor: WorkspaceSidebarContext["openEditor"]
-  showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
-  showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
-  root: string
-  clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
-}): JSX.Element => (
-  <div
-    class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
-    classList={{
-      "opacity-100 pointer-events-auto": props.menuOpen(),
-      "opacity-0 pointer-events-none": !props.menuOpen(),
-      "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
-      "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
-    }}
-  >
-    <DropdownMenu
-      modal={!props.sidebarHovering()}
-      open={props.menuOpen()}
-      onOpenChange={(open) => props.setMenuOpen(open)}
-    >
-      <Tooltip value={props.language.t("common.moreOptions")} placement="top">
-        <DropdownMenu.Trigger
-          as={IconButton}
-          icon="dot-grid"
-          variant="ghost"
-          class="size-6 rounded-md"
-          data-action="workspace-menu"
-          data-workspace={base64Encode(props.directory)}
-          aria-label={props.language.t("common.moreOptions")}
-        />
-      </Tooltip>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          onCloseAutoFocus={(event) => {
-            if (!props.pendingRename()) return
-            event.preventDefault()
-            props.setPendingRename(false)
-            props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
-          }}
-        >
-          <DropdownMenu.Item
-            disabled={props.local()}
-            onSelect={() => {
-              props.setPendingRename(true)
-              props.setMenuOpen(false)
-            }}
-          >
-            <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            disabled={props.local() || props.busy()}
-            onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
-          >
-            <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            disabled={props.local() || props.busy()}
-            onSelect={() => props.showDeleteWorkspaceDialog(props.root, props.directory)}
-          >
-            <DropdownMenu.ItemLabel>{props.language.t("common.delete")}</DropdownMenu.ItemLabel>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
-  </div>
-)
 
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
@@ -282,10 +199,6 @@ export const SortableWorkspace = (props: {
   const language = useLanguage()
   const sortable = createSortable(props.directory)
   const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
-  const [menu, setMenu] = createStore({
-    open: false,
-    pendingRename: false,
-  })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const local = createMemo(() => props.directory === props.project.worktree)
@@ -360,9 +273,7 @@ export const SortableWorkspace = (props: {
                 when={workspaceEditActive()}
                 fallback={
                   <Collapsible.Trigger
-                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
-                      menu.open ? "pr-16" : "pr-2"
-                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                    class="flex items-center justify-between w-full pl-2 pr-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
@@ -370,32 +281,10 @@ export const SortableWorkspace = (props: {
                   </Collapsible.Trigger>
                 }
               >
-                <div
-                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
-                    menu.open ? "pr-16" : "pr-2"
-                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
-                >
+                <div class="flex items-center justify-between w-full pl-2 pr-2 py-1.5 rounded-md">
                   {header()}
                 </div>
               </Show>
-              <WorkspaceActions
-                directory={props.directory}
-                local={local}
-                busy={busy}
-                menuOpen={() => menu.open}
-                pendingRename={() => menu.pendingRename}
-                setMenuOpen={(open) => setMenu("open", open)}
-                setPendingRename={(value) => setMenu("pendingRename", value)}
-                sidebarHovering={props.ctx.sidebarHovering}
-                touch={touch}
-                language={language}
-                workspaceValue={workspaceValue}
-                openEditor={props.ctx.openEditor}
-                showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
-                showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
-                root={props.project.worktree}
-                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-              />
             </div>
           </div>
         </div>
