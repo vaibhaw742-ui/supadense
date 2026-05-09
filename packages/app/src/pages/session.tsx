@@ -1921,8 +1921,8 @@ const reviewEmptyText = createMemo(() => {
             width: sessionPanelWidth(),
           }}
         >
-          <SessionTabs
-            sessions={(() => {
+          {(() => {
+            const sessions = (() => {
               const all = tabSessions()
               const top3 = all.slice(0, 3)
               const activeId = params.id
@@ -1930,13 +1930,18 @@ const reviewEmptyText = createMemo(() => {
               const active = all.find((s) => s.id === activeId)
               if (!active) return top3
               return [...top3.slice(0, 2), active]
-            })()}
-            activeId={params.id}
-            slug={params.dir ?? ""}
-            onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
-            onNew={() => navigate(`/${params.dir}/session`)}
-            onArchive={(session) => void archiveTab(session)}
-          />
+            })()
+            return sessions.length > 0 ? (
+              <SessionTabs
+                sessions={sessions}
+                activeId={params.id}
+                slug={params.dir ?? ""}
+                onNavigate={(id) => navigate(`/${params.dir}/session/${id}`)}
+                onNew={() => navigate(`/${params.dir}/session`)}
+                onArchive={(session) => void archiveTab(session)}
+              />
+            ) : null
+          })()}
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
@@ -1989,6 +1994,9 @@ const reviewEmptyText = createMemo(() => {
             </Switch>
           </div>
 
+          <Show when={!params.id}>
+            <div class="h-px bg-border-weaker-base shrink-0 mx-0" />
+          </Show>
           <div data-tour="chat-composer">
           <SessionComposerRegion
             state={composer}

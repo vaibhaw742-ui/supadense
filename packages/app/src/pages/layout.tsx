@@ -1807,7 +1807,7 @@ export default function Layout(props: ParentProps) {
   const SIDEBAR_COLLAPSED_WIDTH = 56
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : SIDEBAR_COLLAPSED_WIDTH
+    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 0
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
     document.documentElement.style.setProperty(
       "--session-panel-left",
@@ -2254,7 +2254,8 @@ export default function Layout(props: ParentProps) {
               aria-label={language.t("sidebar.nav.projectsAndSessions")}
               data-component="sidebar-nav-desktop"
               classList={{
-                "hidden xl:block": true,
+                "hidden xl:block": layout.sidebar.opened(),
+                "hidden": !layout.sidebar.opened(),
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
               }}
@@ -2335,7 +2336,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "0px",
               }}
             >
               <main

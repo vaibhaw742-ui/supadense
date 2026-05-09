@@ -1344,7 +1344,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
         >
           <div
-            class="relative min-h-[180px] max-h-[400px] overflow-y-auto no-scrollbar"
+            class="relative min-h-[90px] max-h-[300px] overflow-y-auto no-scrollbar"
             ref={(el) => (scrollRef = el)}
             style={{ "scroll-padding-bottom": space }}
           >
