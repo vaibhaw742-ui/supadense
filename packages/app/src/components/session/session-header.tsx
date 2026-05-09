@@ -824,7 +824,6 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-1">
-              <AllFilesButton />
               <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
                 <IconButton
                   icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
@@ -834,6 +833,7 @@ export function SessionHeader() {
                   aria-label={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}
                 />
               </Tooltip>
+              <AllFilesButton />
               <DocsButton />
               <Show when={projectDirectory()}>
                 {(dir) => <GitHubButton directory={dir()} />}
