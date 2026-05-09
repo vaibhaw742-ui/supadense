@@ -2411,19 +2411,20 @@ export default function Layout(props: ParentProps) {
             </div>
 
             <div class="flex-1 min-h-0 flex flex-col">
-              <div class="shrink-0 py-4">
-                <Button
-                  size="large"
-                  icon="new-session"
-                  class="w-full"
-                  onClick={() => {
-                    const dir = worktree()
-                    if (!dir) return
-                    navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
-                  }}
+              <div class="shrink-0 py-2">
+                <button
+                  type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                  onClick={() => navigateWithSidebarReset("/")}
                 >
-                  {language.t("command.session.new")}
-                </Button>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  All Workspaces
+                </button>
               </div>
               <div class="flex-1 min-h-0">
                 <LocalWorkspace
