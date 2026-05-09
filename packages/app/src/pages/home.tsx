@@ -77,11 +77,6 @@ export default function Home() {
   const [kbLoading, setKbLoading] = createSignal(false)
   const [kbCreatedDir, setKbCreatedDir] = createSignal("")
 
-  // Edit modal state
-  const [editWorktree, setEditWorktree] = createSignal<string | null>(null)
-  const [editName, setEditName] = createSignal("")
-  const [editDesc, setEditDesc] = createSignal("")
-
   // Remove confirm state
   const [removeWorktree, setRemoveWorktree] = createSignal<string | null>(null)
 
@@ -148,20 +143,11 @@ export default function Home() {
 
   function openEditModal(worktree: string, e: MouseEvent) {
     e.stopPropagation()
-    setEditWorktree(worktree)
-    setEditName(workspaceName(worktree))
-    setEditDesc("")
-  }
-
-  function saveEdit() {
-    // Name editing is display-only (stored in localStorage)
-    const wt = editWorktree()
-    if (!wt) return
-    const trimmed = editName().trim()
-    if (trimmed) {
-      try { localStorage.setItem(`ws-name:${wt}`, trimmed) } catch {}
-    }
-    setEditWorktree(null)
+    const project = sync.data.project.find((p) => p.worktree === worktree)
+    if (!project) return
+    void import("@/components/dialog-edit-project").then((x) => {
+      dialog.show(() => <x.DialogEditProject project={{ ...project, expanded: false }} />)
+    })
   }
 
   function openRemoveConfirm(worktree: string, e: MouseEvent) {
@@ -496,50 +482,6 @@ export default function Home() {
                 </div>
               </div>
             </Show>
-          </div>
-        </div>
-      </Show>
-
-      {/* Edit workspace modal */}
-      <Show when={editWorktree()}>
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center"
-          onClick={(e) => { if (e.target === e.currentTarget) setEditWorktree(null) }}
-        >
-          <div class="rounded-xl shadow-lg border w-full max-w-sm mx-4" style={{ background: "var(--surface-raised-stronger-non-alpha)", "border-color": "var(--border-weak-base)" }}>
-            <div class="flex items-center justify-between px-5 py-4 border-b" style={{ "border-color": "var(--border-weak-base)" }}>
-              <span class="text-16-medium text-text-strong">Edit Workspace</span>
-              <button type="button" class="text-text-weak hover:text-text-strong transition-colors text-lg leading-none" onClick={() => setEditWorktree(null)}>✕</button>
-            </div>
-            <div class="flex flex-col gap-4 px-6 py-5">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-12-medium text-text-weak">Name</label>
-                <input
-                  autofocus
-                  class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus"
-                  value={editName()}
-                  onInput={(e) => setEditName(e.currentTarget.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditWorktree(null) }}
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-12-medium text-text-weak">Description <span class="text-text-weak opacity-60">(optional)</span></label>
-                <textarea
-                  class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus resize-none"
-                  rows={2}
-                  value={editDesc()}
-                  onInput={(e) => setEditDesc(e.currentTarget.value)}
-                />
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-12-medium text-text-weak">Location</span>
-                <span class="text-12-regular text-text-weak font-mono truncate">{editWorktree()}</span>
-              </div>
-              <div class="flex justify-end gap-2 pt-1">
-                <Button variant="ghost" size="large" onClick={() => setEditWorktree(null)}>Cancel</Button>
-                <Button variant="primary" size="large" onClick={saveEdit}>Save</Button>
-              </div>
-            </div>
           </div>
         </div>
       </Show>
