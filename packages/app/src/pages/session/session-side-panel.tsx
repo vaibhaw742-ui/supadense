@@ -411,35 +411,6 @@ export function SessionSidePanel(props: {
         {/* Graph mode: full-width wiki graph spanning both panels */}
         <Show when={graphMode()}>
           <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
-            {/* Resource milestone progress bar */}
-            <div class="shrink-0 w-full">
-              <div class="relative h-[3px] w-full overflow-hidden">
-                <div class="absolute inset-0 bg-border-weaker-base" />
-                <div
-                  class="absolute inset-y-0 left-0 transition-[width] duration-500"
-                  style={{
-                    width: `${resourcePct()}%`,
-                    background: resourceMilestoneReached()
-                      ? "linear-gradient(90deg,#22c55e,#4ade80)"
-                      : "linear-gradient(90deg,#f59e0b,#fbbf24)",
-                  }}
-                />
-                <div class="absolute inset-y-0 right-0 w-px bg-border-base opacity-60" />
-              </div>
-              <div class="px-3 pt-1 pb-0.5">
-                <span
-                  class="text-10-regular"
-                  style={{
-                    color: resourceMilestoneReached() ? "#22c55e" : "var(--text-weakest, var(--text-weak))",
-                  }}
-                >
-                  {resourceMilestoneReached()
-                    ? `${resourceCount()} resources — milestone reached!`
-                    : `${resourceCount()} / ${RESOURCE_MILESTONE} resources`}
-                </span>
-              </div>
-            </div>
-
             {/* Source queue dropdown */}
             <Show when={bgProcesses().length > 0}>
               <div class="shrink-0 border-t border-border-weaker-base bg-surface-panel px-3 py-2 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
