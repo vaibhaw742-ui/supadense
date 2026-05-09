@@ -834,6 +834,7 @@ export function SessionHeader() {
                 />
               </Tooltip>
               <AllFilesButton />
+              <span id="opencode-graph-nav-mount" class="flex items-center" />
               <DocsButton />
               <Show when={projectDirectory()}>
                 {(dir) => <GitHubButton directory={dir()} />}

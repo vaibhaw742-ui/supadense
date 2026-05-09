@@ -209,6 +209,8 @@ export function SessionSidePanel(props: {
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
+  const graphNavMount = createMemo(() => document.getElementById("opencode-graph-nav-mount"))
+
   const [addSourceOpen, setAddSourceOpen] = createSignal(false)
   const [addSourceUrl, setAddSourceUrl] = createSignal("")
 
@@ -364,6 +366,24 @@ export function SessionSidePanel(props: {
   })
 
   return (
+    <>
+      <Show when={graphNavMount() && graphMode()}>
+        {(_) => (
+          <Portal mount={graphNavMount()!}>
+            <div class="flex items-center gap-1 text-13-regular px-1">
+              <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
+                Home
+              </button>
+              <Show when={graphNav()}>
+                <>
+                  <span class="text-text-weak">›</span>
+                  <span class="text-text-base">{graphNav()!.label}</span>
+                </>
+              </Show>
+            </div>
+          </Portal>
+        )}
+      </Show>
     <Show when={isDesktop()}>
       <aside
         id="review-panel"
@@ -381,20 +401,6 @@ export function SessionSidePanel(props: {
         {/* Graph mode: full-width wiki graph spanning both panels */}
         <Show when={graphMode()}>
           <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-base">
-            {/* Breadcrumb nav */}
-            <div class="shrink-0 flex items-center gap-1 px-3 h-9 text-13-regular">
-              <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
-                Home
-              </button>
-              <Show when={graphNav()}>
-                <>
-                  <span class="text-text-weak">›</span>
-                  <span class="text-text-base">{graphNav()!.label}</span>
-                </>
-              </Show>
-              {/* spacer */}
-              <div class="flex-1" />
-            </div>
             {/* Resource milestone progress bar */}
             <div class="shrink-0 w-full">
               <div class="relative h-[3px] w-full overflow-hidden">
@@ -1068,5 +1074,6 @@ export function SessionSidePanel(props: {
         </div>
       </aside>
     </Show>
+    </>
   )
 }
