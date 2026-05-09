@@ -150,7 +150,7 @@ export function Titlebar() {
       class="h-10 shrink-0 relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
       style={{
         "min-height": minHeight(),
-        background: "linear-gradient(to right, var(--background-stronger) 0, var(--background-stronger) var(--session-panel-left, 0px), var(--background-base) var(--session-panel-left, 0px))",
+        background: "var(--background-base)",
       }}
       data-tauri-drag-region
       onMouseDown={drag}
