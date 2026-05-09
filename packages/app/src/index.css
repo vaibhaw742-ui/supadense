@@ -164,7 +164,7 @@ body.kb-walkthrough-1 #kb-add-resource-btn {
 .session-tabs-bar {
   display: flex;
   align-items: stretch;
-  background: var(--background-stronger);
+  background: var(--background-base);
   border-bottom: 1px solid var(--border-weaker-base);
   height: 36px;
   flex-shrink: 0;
