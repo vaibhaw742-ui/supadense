@@ -734,6 +734,40 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              <DocsButton />
+              <Show when={projectDirectory()}>
+                {(dir) => <GitHubButton directory={dir()} />}
+              </Show>
+              <BgProcessMonitor directory={() => projectDirectory() || undefined} />
+              <KbNotificationBell directory={() => projectDirectory() || undefined} />
+              <Tooltip placement="bottom" value="Settings">
+                <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
+              </Tooltip>
+              <Tooltip placement="bottom" value="Help">
+                <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
+              </Tooltip>
+              <Show when={handleLogout} fallback={
+                <Tooltip placement="bottom" value="Account">
+                  <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+                </Tooltip>
+              }>
+                <DropdownMenu placement="bottom-end">
+                  <Tooltip placement="bottom" value={userEmail ?? "Account"}>
+                    <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
+                  </Tooltip>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content>
+                      <Show when={userEmail}>
+                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {userEmail}
+                        </div>
+                        <DropdownMenu.Separator />
+                      </Show>
+                      <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
+              </Show>
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show when={canOpen()}>
@@ -823,7 +857,7 @@ export function SessionHeader() {
       <Show when={panelMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-1 pl-3">
+            <div class="flex items-center gap-2 pl-3">
               <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
                 <IconButton
                   icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
@@ -835,40 +869,6 @@ export function SessionHeader() {
               </Tooltip>
               <AllFilesButton />
               <span id="opencode-graph-nav-mount" class="flex items-center" />
-              <DocsButton />
-              <Show when={projectDirectory()}>
-                {(dir) => <GitHubButton directory={dir()} />}
-              </Show>
-              <BgProcessMonitor directory={() => projectDirectory() || undefined} />
-              <KbNotificationBell directory={() => projectDirectory() || undefined} />
-              <Tooltip placement="bottom" value="Settings">
-                <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
-              </Tooltip>
-              <Tooltip placement="bottom" value="Help">
-                <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
-              </Tooltip>
-              <Show when={handleLogout} fallback={
-                <Tooltip placement="bottom" value="Account">
-                  <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
-                </Tooltip>
-              }>
-                <DropdownMenu placement="bottom-end">
-                  <Tooltip placement="bottom" value={userEmail ?? "Account"}>
-                    <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
-                  </Tooltip>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content>
-                      <Show when={userEmail}>
-                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                          {userEmail}
-                        </div>
-                        <DropdownMenu.Separator />
-                      </Show>
-                      <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu>
-              </Show>
             </div>
           </Portal>
         )}
