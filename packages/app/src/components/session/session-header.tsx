@@ -817,36 +817,6 @@ export function SessionHeader() {
                 </div>
               </Show>
             </div>
-            <BgProcessMonitor directory={() => projectDirectory() || undefined} />
-            <KbNotificationBell directory={() => projectDirectory() || undefined} />
-            <Tooltip placement="bottom" value="Settings">
-              <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
-            </Tooltip>
-            <Tooltip placement="bottom" value="Help">
-              <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
-            </Tooltip>
-            <Show when={handleLogout} fallback={
-              <Tooltip placement="bottom" value="Account">
-                <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
-              </Tooltip>
-            }>
-              <DropdownMenu placement="bottom-end">
-                <Tooltip placement="bottom" value={userEmail ?? "Account"}>
-                  <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
-                </Tooltip>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content>
-                    <Show when={userEmail}>
-                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                        {userEmail}
-                      </div>
-                      <DropdownMenu.Separator />
-                    </Show>
-                    <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu>
-            </Show>
           </Portal>
         )}
       </Show>
@@ -859,6 +829,36 @@ export function SessionHeader() {
               <DocsButton />
               <Show when={projectDirectory()}>
                 {(dir) => <GitHubButton directory={dir()} />}
+              </Show>
+              <BgProcessMonitor directory={() => projectDirectory() || undefined} />
+              <KbNotificationBell directory={() => projectDirectory() || undefined} />
+              <Tooltip placement="bottom" value="Settings">
+                <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
+              </Tooltip>
+              <Tooltip placement="bottom" value="Help">
+                <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
+              </Tooltip>
+              <Show when={handleLogout} fallback={
+                <Tooltip placement="bottom" value="Account">
+                  <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+                </Tooltip>
+              }>
+                <DropdownMenu placement="bottom-end">
+                  <Tooltip placement="bottom" value={userEmail ?? "Account"}>
+                    <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
+                  </Tooltip>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content>
+                      <Show when={userEmail}>
+                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {userEmail}
+                        </div>
+                        <DropdownMenu.Separator />
+                      </Show>
+                      <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
               </Show>
             </div>
           </Portal>
