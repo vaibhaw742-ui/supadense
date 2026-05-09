@@ -1497,7 +1497,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
                       triggerProps={{ "data-action": "prompt-agent" }}
-                      variant="ghost"
+                      variant="secondary"
                     />
                   </TooltipKeybind>
                 </div>
@@ -1515,7 +1515,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           <Button
                             data-action="prompt-model"
                             as="div"
-                            variant="ghost"
+                            variant="secondary"
                             size="normal"
                             class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                             style={control()}
@@ -1550,7 +1550,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           model={local.model}
                           triggerAs={Button}
                           triggerProps={{
-                            variant: "ghost",
+                            variant: "secondary",
                             size: "normal",
                             style: control(),
                             class: "min-w-0 max-w-[320px] text-13-regular text-text-base group",
@@ -1593,7 +1593,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         valueClass="truncate text-13-regular text-text-base"
                         triggerStyle={control()}
                         triggerProps={{ "data-action": "prompt-model-variant" }}
-                        variant="ghost"
+                        variant="secondary"
                       />
                     </TooltipKeybind>
                   </div>
