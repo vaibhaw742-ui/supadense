@@ -128,9 +128,11 @@ function HomeShellProviders(props: ParentProps) {
   return (
     <SettingsProvider>
       <PermissionProvider>
-        <ModelsProvider>
-          <CommandProvider>{props.children}</CommandProvider>
-        </ModelsProvider>
+        <NotificationProvider>
+          <ModelsProvider>
+            <CommandProvider>{props.children}</CommandProvider>
+          </ModelsProvider>
+        </NotificationProvider>
       </PermissionProvider>
     </SettingsProvider>
   )
