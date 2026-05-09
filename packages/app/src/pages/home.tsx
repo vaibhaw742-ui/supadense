@@ -7,10 +7,26 @@ import { useGlobalSync } from "@/context/global-sync"
 import { getAuthToken } from "@/utils/server"
 
 const COLOR_SWATCHES = [
-  "#8b9e7a", "#7a9e8b", "#9e8b7a", "#7a8b9e", "#9e7a8b",
-  "#6b8f6b", "#8f6b6b", "#6b6b8f", "#8f8f6b", "#6b8f8f",
-  "#a07060", "#607080", "#806070", "#708060", "#607060",
-  "#5a7a9a", "#9a7a5a", "#7a5a9a", "#5a9a7a", "#9a5a7a",
+  // Reds / dark reds
+  "#6b1a1a", "#7d2020", "#8b2020", "#9b1c1c", "#a31c1c", "#b91c1c", "#c0392b",
+  // Pinks / hot pinks
+  "#9d174d", "#be185d", "#db2777", "#ec4899", "#f472b6", "#f9a8d4", "#e879a4",
+  // Magentas / purples
+  "#d946ef", "#c026d3", "#a21caf", "#7e22ce", "#6d28d9", "#ea00ff", "#cc00cc",
+  // Salmon / coral
+  "#e07070", "#e05555", "#e06060", "#e07878", "#e08888", "#d06060", "#c05050",
+  // Peach / light pink
+  "#f4a7a7", "#f7c4c4", "#f9d5d5", "#fce4e4", "#ffb3b3", "#ffc4c4", "#f8c8c8",
+  // Brown / terracotta
+  "#7c2d12", "#9a3412", "#c2410c", "#d97706", "#b45309", "#92400e", "#78350f",
+  // Orange
+  "#ea580c", "#f97316", "#fb923c", "#fdba74", "#f59e0b", "#fbbf24", "#fcd34d",
+  // Cream / light yellow
+  "#fef3c7", "#fef9c3", "#fefce8", "#fffde7", "#fff9c4", "#fefce4", "#fffacd",
+  // Yellow / lime
+  "#eab308", "#facc15", "#fde047", "#a3e635", "#84cc16", "#65a30d", "#4d7c0f",
+  // Greens
+  "#166534", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#bbf7d0",
 ]
 
 function getStoredColor(worktree: string): string | null {
@@ -288,7 +304,7 @@ export default function Home() {
                         {/* Color picker dropdown */}
                         <Show when={isColorOpen()}>
                           <div
-                            class="absolute top-9 left-0 z-50 rounded-xl shadow-xl border w-56 overflow-hidden"
+                            class="absolute top-9 left-0 z-50 rounded-xl shadow-xl border w-72 overflow-hidden"
                             style={{ background: "var(--surface-raised-stronger-non-alpha)", "border-color": "var(--border-weak-base)" }}
                             data-color-picker
                           >
@@ -310,13 +326,13 @@ export default function Home() {
                             </div>
 
                             <Show when={colorTab() === "color"}>
-                              <div class="p-3">
-                                <div class="grid grid-cols-5 gap-2">
+                              <div class="p-3 max-h-64 overflow-y-auto">
+                                <div class="grid grid-cols-7 gap-1.5">
                                   <For each={COLOR_SWATCHES}>
                                     {(swatch) => (
                                       <button
                                         type="button"
-                                        class="w-8 h-8 rounded-lg transition-transform hover:scale-110 active:scale-95 ring-offset-1"
+                                        class="w-7 h-7 rounded-md transition-transform hover:scale-110 active:scale-95 ring-offset-1"
                                         classList={{ "ring-2 ring-white": color() === swatch }}
                                         style={{ background: swatch }}
                                         onClick={() => applyColor(project.worktree, swatch)}
