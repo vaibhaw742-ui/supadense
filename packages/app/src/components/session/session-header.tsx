@@ -823,7 +823,7 @@ export function SessionHeader() {
       <Show when={panelMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 pl-3">
               <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
                 <IconButton
                   icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
