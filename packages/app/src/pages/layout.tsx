@@ -89,8 +89,6 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { KbNotificationBell } from "./session/kb-files-panel"
-import { BgProcessMonitor } from "@/components/bg-process-monitor"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2447,23 +2445,6 @@ export default function Layout(props: ParentProps) {
   const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
 
-  const getSessionEmail = (): string | undefined => {
-    const token = getAuthToken()
-    if (!token) return undefined
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
-      return typeof payload.email === "string" ? payload.email : undefined
-    } catch {
-      return undefined
-    }
-  }
-
-  const handleLogout = getAuthToken()
-    ? () => {
-        clearAuthToken()
-        location.reload()
-      }
-    : undefined
 
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
@@ -2481,20 +2462,11 @@ export default function Layout(props: ParentProps) {
       openProjectKeybind={() => undefined}
       onOpenProject={createNewKB}
       renderProjectOverlay={projectOverlay}
-      settingsLabel={() => language.t("sidebar.settings")}
-      settingsKeybind={() => command.keybind("settings.open")}
-      onOpenSettings={openSettings}
-      helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openLink("https://x.com/vaibhawkhemka6")}
       renderPanel={() =>
         mobile
           ? <SidebarPanel project={currentProject} mobile />
           : <SidebarPanel project={currentProject} merged onCollapse={() => layout.sidebar.toggle()} />
       }
-      userEmail={getSessionEmail()}
-      onLogout={handleLogout}
-      bgProcessMonitor={<BgProcessMonitor directory={() => currentProject()?.worktree} />}
-      notificationBell={<KbNotificationBell directory={() => currentProject()?.worktree} />}
       onToggleSessions={() => layout.sidebar.toggle()}
       onNewSession={() => {
         const dir = currentProject()?.worktree
