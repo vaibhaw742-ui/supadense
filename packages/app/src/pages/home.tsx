@@ -172,22 +172,51 @@ export default function Home() {
     <div class="size-full flex flex-col bg-background-base overflow-y-auto">
       {/* Header */}
       <div class="flex items-center justify-between px-8 pt-8 pb-4">
-        <div class="flex items-center gap-4">
-          <div class="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 shadow-md" style={{ background: "#000" }}>
-            <img src="/logo-globe.png" alt="Logo" class="w-full h-full object-cover" />
-          </div>
-          <div>
-            <div class="text-14-regular text-text-weak">Knowledge base</div>
-            <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
-          </div>
+        <div>
+          <div class="text-14-regular text-text-weak">Knowledge base</div>
+          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
         </div>
-        <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={openKbDialog}>
-          Create Workspace
-        </Button>
+        <div class="flex items-center gap-1">
+          {/* Activity */}
+          <button type="button" title="Activity" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </button>
+          {/* Notifications */}
+          <button type="button" title="Notifications" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+          </button>
+          {/* Settings */}
+          <button type="button" title="Settings" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors" onClick={() => navigate("/admin")}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          {/* Help */}
+          <button type="button" title="Help" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </button>
+          {/* Profile */}
+          <button type="button" title="Profile" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Filter tabs */}
-      <div class="flex items-center gap-1 px-8 pb-6 border-b border-border-weak-base">
+      <div class="flex items-center gap-1 px-8 pb-6">
         {(["all", "synced"] as const).map((tab) => (
           <button
             type="button"
