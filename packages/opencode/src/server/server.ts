@@ -297,6 +297,19 @@ export namespace Server {
         const userId = (c as any).get("userId") as string | undefined
         return c.json(Project.list(userId))
       })
+      .patch("/project/:projectID", async (c) => {
+        const projectID = ProjectID.make(c.req.param("projectID"))
+        const userId = (c as any).get("userId") as string | undefined
+        if (userId) {
+          const row = Database.Client().$client
+            .prepare("SELECT user_id FROM project WHERE id = ?")
+            .get(projectID) as { user_id: string | null } | undefined
+          if (row?.user_id !== userId) return c.json({ error: "Not found" }, 404)
+        }
+        const body = (await c.req.json()) as { name?: string; icon?: { color?: string; override?: string; url?: string }; commands?: { start?: string } }
+        const project = await Project.update({ projectID, ...body })
+        return c.json(project)
+      })
       .delete("/project/:projectID", async (c) => {
         const projectID = ProjectID.make(c.req.param("projectID"))
         const userId = (c as any).get("userId") as string | undefined
