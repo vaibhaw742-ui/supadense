@@ -172,9 +172,14 @@ export default function Home() {
     <div class="size-full flex flex-col bg-background-base overflow-y-auto">
       {/* Header */}
       <div class="flex items-center justify-between px-8 pt-8 pb-4">
-        <div>
-          <div class="text-13-regular text-text-weak">All Workspaces</div>
-          <div class="text-24-medium text-text-strong mt-0.5">Knowledge Bases</div>
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 shadow-md" style={{ background: "#000" }}>
+            <img src="/logo-globe.png" alt="Logo" class="w-full h-full object-cover" />
+          </div>
+          <div>
+            <div class="text-14-regular text-text-weak">Knowledge base</div>
+            <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
+          </div>
         </div>
         <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={openKbDialog}>
           Create Workspace
