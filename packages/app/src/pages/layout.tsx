@@ -14,7 +14,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -114,6 +114,7 @@ export default function Layout(props: ParentProps) {
   let dialogDead = false
 
   const params = useParams()
+  const routeLocation = useLocation()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
@@ -601,6 +602,7 @@ export default function Layout(props: ParentProps) {
     await ready.promise
     await layout.ready.promise
     if (!untrack(() => state.autoselect)) return
+    if (routeLocation.pathname === "/admin") return
 
     const list = layout.projects.list()
     const last = server.projects.last()
