@@ -1,0 +1,568 @@
+import { createSignal, For, onMount, Show } from "solid-js"
+import { createResource } from "solid-js"
+import { getAuthToken, getBackendUrl } from "@/utils/server"
+import * as d3 from "d3"
+
+type AnalyticsData = {
+  totalUsers: number
+  dau: { day: string; users: number }[]
+  hourly: { hour: number; events: number }[]
+  retention: { cohort_size: number; retained: number }
+  messageStats: { day: string; messages: number }[]
+}
+
+type UserDetail = {
+  id: string
+  email: string
+  created_at: string
+  last_login: string | null
+  login_count: number
+  message_count: number
+}
+
+type WaitlistUser = {
+  id: string
+  email: string
+  years_of_experience: string | null
+  created_at: string
+}
+
+type UserQuery = {
+  message_id: string
+  time_created: number
+  session_title: string
+  query_text: string
+}
+
+async function fetchAnalytics(): Promise<AnalyticsData | null> {
+  const token = getAuthToken()
+  if (!token) return null
+  const res = await fetch(`${getBackendUrl()}/supa-auth/admin/analytics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchUsers(): Promise<UserDetail[] | null> {
+  const token = getAuthToken()
+  if (!token) return null
+  const res = await fetch(`${getBackendUrl()}/supa-auth/admin/users-detail`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchWaitlist(): Promise<WaitlistUser[] | null> {
+  const token = getAuthToken()
+  if (!token) return null
+  const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function fetchUserQueries(userId: string): Promise<UserQuery[]> {
+  const token = getAuthToken()
+  if (!token) return []
+  const res = await fetch(`${getBackendUrl()}/supa-auth/admin/user-queries?userId=${encodeURIComponent(userId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return []
+  return res.json()
+}
+
+function BarChart(props: {
+  data: { label: string; value: number }[]
+  color: string
+  height?: number
+}) {
+  let svgRef: SVGSVGElement | undefined
+
+  onMount(() => {
+    if (!svgRef || props.data.length === 0) return
+
+    const margin = { top: 16, right: 16, bottom: 40, left: 48 }
+    const width = svgRef.clientWidth - margin.left - margin.right
+    const height = (props.height ?? 200) - margin.top - margin.bottom
+
+    const svg = d3.select(svgRef)
+    svg.selectAll("*").remove()
+
+    const g = svg
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`)
+
+    const x = d3
+      .scaleBand()
+      .domain(props.data.map((d) => d.label))
+      .range([0, width])
+      .padding(0.25)
+
+    const y = d3
+      .scaleLinear()
+      .domain([0, d3.max(props.data, (d) => d.value) ?? 1])
+      .nice()
+      .range([height, 0])
+
+    g.append("g")
+      .attr("class", "grid")
+      .call(
+        d3.axisLeft(y)
+          .tickSize(-width)
+          .tickFormat(() => "")
+          .ticks(5),
+      )
+      .call((gg) => {
+        gg.select(".domain").remove()
+        gg.selectAll(".tick line")
+          .attr("stroke", "rgba(255,255,255,0.07)")
+          .attr("stroke-dasharray", "3,3")
+      })
+
+    const tickEvery = Math.ceil(props.data.length / 10)
+    g.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(
+        d3.axisBottom(x).tickValues(
+          props.data.filter((_, i) => i % tickEvery === 0).map((d) => d.label),
+        ),
+      )
+      .call((gg) => {
+        gg.select(".domain").attr("stroke", "rgba(255,255,255,0.15)")
+        gg.selectAll(".tick line").remove()
+        gg.selectAll(".tick text")
+          .attr("fill", "rgba(255,255,255,0.45)")
+          .attr("font-size", "11px")
+          .attr("dy", "1em")
+      })
+
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("d")))
+      .call((gg) => {
+        gg.select(".domain").remove()
+        gg.selectAll(".tick line").remove()
+        gg.selectAll(".tick text")
+          .attr("fill", "rgba(255,255,255,0.45)")
+          .attr("font-size", "11px")
+      })
+
+    g.selectAll(".bar")
+      .data(props.data)
+      .enter()
+      .append("rect")
+      .attr("class", "bar")
+      .attr("x", (d) => x(d.label) ?? 0)
+      .attr("y", (d) => y(d.value))
+      .attr("width", x.bandwidth())
+      .attr("height", (d) => height - y(d.value))
+      .attr("rx", 3)
+      .attr("fill", props.color)
+      .attr("opacity", 0.85)
+  })
+
+  return <svg ref={svgRef!} width="100%" height={props.height ?? 200} />
+}
+
+function StatCard(props: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div class="rounded-xl border border-[var(--border-weak-base)] bg-[var(--surface-raised-base)] px-5 py-4 flex flex-col gap-1">
+      <div class="text-12-regular text-text-weak uppercase tracking-wide">{props.label}</div>
+      <div class="text-28-medium text-text-strong">{props.value}</div>
+      <Show when={props.sub}>
+        <div class="text-12-regular text-text-weak">{props.sub}</div>
+      </Show>
+    </div>
+  )
+}
+
+export function SettingsAnalytics() {
+  const [analytics] = createResource(fetchAnalytics)
+  const [users] = createResource(fetchUsers)
+  const [waitlist, { refetch: refetchWaitlist }] = createResource(fetchWaitlist)
+  const [tab, setTab] = createSignal<"overview" | "users" | "waitlist">("overview")
+  const [expandedUser, setExpandedUser] = createSignal<string | null>(null)
+  const [queriesCache, setQueriesCache] = createSignal<Record<string, UserQuery[]>>({})
+  const [queriesLoading, setQueriesLoading] = createSignal<string | null>(null)
+  const [deletingUser, setDeletingUser] = createSignal<string | null>(null)
+  const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set())
+  const [approvingId, setApprovingId] = createSignal<string | null>(null)
+  const [approvePassword, setApprovePassword] = createSignal<Record<string, string>>({})
+  const [rejectingId, setRejectingId] = createSignal<string | null>(null)
+
+  async function deleteUser(e: MouseEvent, userId: string) {
+    e.stopPropagation()
+    if (!confirm("Remove this user? This cannot be undone.")) return
+    setDeletingUser(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/users/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      })
+      if (res.ok) {
+        setDeletedIds((prev) => new Set([...prev, userId]))
+        if (expandedUser() === userId) setExpandedUser(null)
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to delete user")
+      }
+    } catch {
+      alert("Failed to delete user — check connection")
+    } finally {
+      setDeletingUser(null)
+    }
+  }
+
+  async function toggleUserQueries(userId: string) {
+    if (expandedUser() === userId) {
+      setExpandedUser(null)
+      return
+    }
+    setExpandedUser(userId)
+    if (queriesCache()[userId]) return
+    setQueriesLoading(userId)
+    const queries = await fetchUserQueries(userId)
+    setQueriesCache((prev) => ({ ...prev, [userId]: queries }))
+    setQueriesLoading(null)
+  }
+
+  async function approveUser(userId: string) {
+    const password = approvePassword()[userId]?.trim()
+    if (!password || password.length < 6) {
+      alert("Enter a password of at least 6 characters")
+      return
+    }
+    setApprovingId(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist/${userId}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token ?? ""}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      if (res.ok) {
+        refetchWaitlist()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to approve user")
+      }
+    } catch {
+      alert("Failed to approve user — check connection")
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
+  async function rejectUser(userId: string) {
+    if (!confirm("Reject and remove this user from the waitlist?")) return
+    setRejectingId(userId)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${getBackendUrl()}/supa-auth/waitlist/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      })
+      if (res.ok) {
+        refetchWaitlist()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        alert(err.error ?? "Failed to reject user")
+      }
+    } catch {
+      alert("Failed to reject user — check connection")
+    } finally {
+      setRejectingId(null)
+    }
+  }
+
+  const dauData = () =>
+    (analytics()?.dau ?? []).map((d) => ({ label: d.day.slice(5), value: d.users }))
+
+  const hourlyData = () => {
+    const hourly = analytics()?.hourly ?? []
+    return Array.from({ length: 24 }, (_, h) => ({
+      label: `${h.toString().padStart(2, "0")}h`,
+      value: hourly.find((x) => x.hour === h)?.events ?? 0,
+    }))
+  }
+
+  const msgData = () =>
+    (analytics()?.messageStats ?? []).map((d) => ({ label: d.day.slice(5), value: d.messages }))
+
+  const retentionPct = () => {
+    const r = analytics()?.retention
+    if (!r || r.cohort_size === 0) return "—"
+    return `${Math.round((r.retained / r.cohort_size) * 100)}%`
+  }
+
+  function fmtDate(s: string | null) {
+    if (!s) return "Never"
+    const d = new Date(s)
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  }
+
+  function daysSince(s: string | null) {
+    if (!s) return null
+    const diff = Date.now() - new Date(s).getTime()
+    return Math.floor(diff / 86400000)
+  }
+
+  return (
+    <div class="flex flex-col gap-6 p-6 text-text-strong">
+      <div class="text-16-medium text-text-strong">Analytics</div>
+
+      {/* Sub-tabs */}
+      <div class="flex gap-1 bg-[var(--surface-raised-base)] rounded-lg p-1 w-fit">
+        <button
+          type="button"
+          class={`px-4 py-1.5 rounded-md text-14-medium transition-colors ${tab() === "overview" ? "bg-[var(--surface-raised-stronger-non-alpha)] text-text-strong" : "text-text-weak hover:text-text-strong"}`}
+          onClick={() => setTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          class={`px-4 py-1.5 rounded-md text-14-medium transition-colors ${tab() === "users" ? "bg-[var(--surface-raised-stronger-non-alpha)] text-text-strong" : "text-text-weak hover:text-text-strong"}`}
+          onClick={() => setTab("users")}
+        >
+          Users
+        </button>
+        <button
+          type="button"
+          class={`px-4 py-1.5 rounded-md text-14-medium transition-colors flex items-center gap-1.5 ${tab() === "waitlist" ? "bg-[var(--surface-raised-stronger-non-alpha)] text-text-strong" : "text-text-weak hover:text-text-strong"}`}
+          onClick={() => setTab("waitlist")}
+        >
+          Waitlist
+          <Show when={(waitlist() ?? []).length > 0}>
+            <span class="bg-orange-500 text-white text-10-medium rounded-full px-1.5 py-0.5 leading-none">
+              {(waitlist() ?? []).length}
+            </span>
+          </Show>
+        </button>
+      </div>
+
+      <Show when={analytics.loading || users.loading}>
+        <div class="text-text-weak text-14-regular">Loading...</div>
+      </Show>
+
+      <Show when={analytics.error}>
+        <div class="text-red-400 text-14-regular">Failed to load analytics.</div>
+      </Show>
+
+      {/* Overview */}
+      <Show when={tab() === "overview" && analytics()}>
+        {(data) => (
+          <div class="flex flex-col gap-6">
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <StatCard label="Total Users" value={data().totalUsers} />
+              <StatCard
+                label="DAU (today)"
+                value={data().dau.at(-1)?.users ?? 0}
+                sub="unique logins today"
+              />
+              <StatCard
+                label="DAU (7-day avg)"
+                value={
+                  data().dau.length
+                    ? Math.round(
+                        data().dau.slice(-7).reduce((s, d) => s + d.users, 0) /
+                          Math.min(data().dau.slice(-7).length, 7),
+                      )
+                    : 0
+                }
+                sub="avg unique logins/day"
+              />
+              <StatCard
+                label="Week-1 Retention"
+                value={retentionPct()}
+                sub={`${data().retention.retained} of ${data().retention.cohort_size} returned`}
+              />
+            </div>
+
+            <div class="rounded-xl border border-[var(--border-weak-base)] bg-[var(--surface-raised-base)] p-5 flex flex-col gap-3">
+              <div class="text-14-medium text-text-strong">Daily Active Users — last 30 days</div>
+              <BarChart data={dauData()} color="hsl(20,87%,52%)" height={200} />
+            </div>
+
+            <div class="rounded-xl border border-[var(--border-weak-base)] bg-[var(--surface-raised-base)] p-5 flex flex-col gap-3">
+              <div class="text-14-medium text-text-strong">Messages per Day — last 30 days</div>
+              <BarChart data={msgData()} color="hsl(210,80%,55%)" height={200} />
+            </div>
+
+            <div class="rounded-xl border border-[var(--border-weak-base)] bg-[var(--surface-raised-base)] p-5 flex flex-col gap-3">
+              <div class="text-14-medium text-text-strong">Login Activity by Hour (UTC) — last 30 days</div>
+              <BarChart data={hourlyData()} color="hsl(270,70%,60%)" height={180} />
+            </div>
+          </div>
+        )}
+      </Show>
+
+      {/* Users */}
+      <Show when={tab() === "users" && users()}>
+        {(list) => (
+          <div class="flex flex-col gap-4">
+            <div class="text-14-regular text-text-weak">{list().length} approved users</div>
+            <div class="rounded-xl border border-[var(--border-weak-base)] overflow-hidden">
+              <table class="w-full text-14-regular">
+                <thead>
+                  <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-raised-base)]">
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Email</th>
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Joined</th>
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Last Login</th>
+                    <th class="text-right px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Logins</th>
+                    <th class="text-right px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Messages</th>
+                    <th class="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={list().filter((u) => !deletedIds().has(u.id))}>
+                    {(u) => {
+                      const days = daysSince(u.last_login)
+                      const lastLoginClass =
+                        days === null
+                          ? "text-text-weak"
+                          : days <= 1
+                            ? "text-green-400"
+                            : days <= 7
+                              ? "text-yellow-400"
+                              : "text-text-weak"
+                      const isExpanded = () => expandedUser() === u.id
+                      const queries = () => queriesCache()[u.id] ?? []
+                      const isLoading = () => queriesLoading() === u.id
+                      return (
+                        <>
+                          <tr
+                            class="border-b border-[var(--border-weak-base)] hover:bg-[var(--surface-raised-base)] transition-colors cursor-pointer select-none"
+                            onClick={() => toggleUserQueries(u.id)}
+                          >
+                            <td class="px-4 py-3 text-text-strong flex items-center gap-2">
+                              <span class="text-text-weak text-10-regular transition-transform" style={{ display: "inline-block", transform: isExpanded() ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+                              {u.email}
+                            </td>
+                            <td class="px-4 py-3 text-text-weak">{fmtDate(u.created_at)}</td>
+                            <td class={`px-4 py-3 ${lastLoginClass}`}>{fmtDate(u.last_login)}</td>
+                            <td class="px-4 py-3 text-right text-text-weak">{u.login_count}</td>
+                            <td class="px-4 py-3 text-right text-text-weak">{u.message_count}</td>
+                            <td class="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                class="text-11-regular text-red-400 hover:text-red-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                                disabled={deletingUser() === u.id}
+                                onClick={(e) => deleteUser(e, u.id)}
+                              >
+                                {deletingUser() === u.id ? "…" : "Remove"}
+                              </button>
+                            </td>
+                          </tr>
+                          <Show when={isExpanded()}>
+                            <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-base)]">
+                              <td colspan="5" class="px-8 py-4">
+                                <div class="text-12-medium text-text-weak uppercase tracking-wide mb-3">Last 10 chat queries</div>
+                                <Show when={isLoading()}>
+                                  <div class="text-12-regular text-text-weak">Loading...</div>
+                                </Show>
+                                <Show when={!isLoading() && queries().length === 0}>
+                                  <div class="text-12-regular text-text-weak">No queries found.</div>
+                                </Show>
+                                <Show when={!isLoading() && queries().length > 0}>
+                                  <div class="flex flex-col gap-2">
+                                    <For each={queries()}>
+                                      {(q) => (
+                                        <div class="flex items-start gap-3 rounded-lg bg-[var(--surface-raised-base)] px-3 py-2">
+                                          <span class="text-11-regular text-text-weak whitespace-nowrap pt-0.5 min-w-[120px]">
+                                            {new Date(q.time_created).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                                            {" "}
+                                            {new Date(q.time_created).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                          </span>
+                                          <span class="text-12-regular text-text-weak shrink-0">·</span>
+                                          <span class="text-12-regular text-text-strong line-clamp-2 flex-1">{q.query_text}</span>
+                                          <span class="text-11-regular text-text-weak whitespace-nowrap pt-0.5 shrink-0">{q.session_title}</span>
+                                        </div>
+                                      )}
+                                    </For>
+                                  </div>
+                                </Show>
+                              </td>
+                            </tr>
+                          </Show>
+                        </>
+                      )
+                    }}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Show>
+
+      {/* Waitlist */}
+      <Show when={tab() === "waitlist"}>
+        <div class="flex flex-col gap-4">
+          <div class="text-14-regular text-text-weak">{(waitlist() ?? []).length} pending</div>
+          <Show when={(waitlist() ?? []).length === 0}>
+            <div class="text-14-regular text-text-weak">No one on the waitlist.</div>
+          </Show>
+          <Show when={(waitlist() ?? []).length > 0}>
+            <div class="rounded-xl border border-[var(--border-weak-base)] overflow-hidden">
+              <table class="w-full text-14-regular">
+                <thead>
+                  <tr class="border-b border-[var(--border-weak-base)] bg-[var(--surface-raised-base)]">
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Email</th>
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Experience</th>
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Applied</th>
+                    <th class="text-left px-4 py-3 text-12-medium text-text-weak uppercase tracking-wide">Set Password</th>
+                    <th class="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={waitlist() ?? []}>
+                    {(u) => (
+                      <tr class="border-b border-[var(--border-weak-base)] hover:bg-[var(--surface-raised-base)] transition-colors">
+                        <td class="px-4 py-3 text-text-strong">{u.email}</td>
+                        <td class="px-4 py-3 text-text-weak">{u.years_of_experience ?? "—"}</td>
+                        <td class="px-4 py-3 text-text-weak">{fmtDate(u.created_at)}</td>
+                        <td class="px-4 py-3">
+                          <input
+                            type="password"
+                            placeholder="min 6 chars"
+                            class="bg-[var(--surface-base)] border border-[var(--border-weak-base)] rounded px-2 py-1 text-12-regular text-text-strong w-36 outline-none focus:border-orange-500"
+                            value={approvePassword()[u.id] ?? ""}
+                            onInput={(e) =>
+                              setApprovePassword((prev) => ({ ...prev, [u.id]: e.currentTarget.value }))
+                            }
+                          />
+                        </td>
+                        <td class="px-4 py-3 text-right flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            class="text-11-regular text-green-400 hover:text-green-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                            disabled={approvingId() === u.id}
+                            onClick={() => approveUser(u.id)}
+                          >
+                            {approvingId() === u.id ? "…" : "Approve"}
+                          </button>
+                          <button
+                            type="button"
+                            class="text-11-regular text-red-400 hover:text-red-300 disabled:opacity-40 transition-colors px-2 py-1 rounded"
+                            disabled={rejectingId() === u.id}
+                            onClick={() => rejectUser(u.id)}
+                          >
+                            {rejectingId() === u.id ? "…" : "Reject"}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
+        </div>
+      </Show>
+    </div>
+  )
+}
