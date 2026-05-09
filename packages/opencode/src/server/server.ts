@@ -14,6 +14,9 @@ import { WorkspaceRouterMiddleware } from "./router"
 import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
 import { Project } from "../project/project"
+import { ProjectID } from "../project/schema"
+import { Database } from "../storage/db"
+import { rmSync, existsSync } from "node:fs"
 import { SupaAuthRoutes, seedAdminUser, verifyToken } from "./routes/supa-auth"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
@@ -288,11 +291,30 @@ export namespace Server {
           return c.json(true)
         },
       )
-      // Serve project list directly so it works even when no workspace directory exists.
-      // WorkspaceRouterMiddleware would auto-create the default workspace dir on this call.
+      // Serve project list and delete directly so they work even when no workspace directory
+      // exists. WorkspaceRouterMiddleware would require a bootstrapped Instance for these.
       .get("/project", async (c) => {
         const userId = (c as any).get("userId") as string | undefined
         return c.json(Project.list(userId))
+      })
+      .delete("/project/:projectID", async (c) => {
+        const projectID = ProjectID.make(c.req.param("projectID"))
+        const userId = (c as any).get("userId") as string | undefined
+        if (userId) {
+          const row = Database.Client().$client
+            .prepare("SELECT user_id FROM project WHERE id = ?")
+            .get(projectID) as { user_id: string | null } | undefined
+          if (row?.user_id !== userId) return c.json({ error: "Not found" }, 404)
+        }
+        const project = Project.get(projectID)
+        Project.remove(projectID)
+        if (project?.worktree && userId) {
+          const prefix = `/workspaces/${userId}/`
+          if (project.worktree.startsWith(prefix) && existsSync(project.worktree)) {
+            rmSync(project.worktree, { recursive: true, force: true })
+          }
+        }
+        return c.json(true)
       })
       .route("/kb", KBRoutes())
       .route("/kb/git", KBGitRoutes())
