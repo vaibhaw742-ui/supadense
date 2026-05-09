@@ -1,10 +1,16 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
-import { getAuthToken } from "@/utils/server"
+import { getAuthToken, clearAuthToken } from "@/utils/server"
+import { BgProcessMonitor } from "@/components/bg-process-monitor"
+import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
 const COLOR_SWATCHES = [
   // Reds / dark reds
@@ -43,6 +49,26 @@ export default function Home() {
   const sync = useGlobalSync()
   const navigate = useNavigate()
   const server = useServer()
+  const dialog = useDialog()
+
+  function openSettings() {
+    void import("@/components/dialog-settings").then((x) => {
+      dialog.show(() => <x.DialogSettings />)
+    })
+  }
+
+  const userEmail = (() => {
+    const token = getAuthToken()
+    if (!token) return undefined
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+      return typeof payload.email === "string" ? payload.email : undefined
+    } catch { return undefined }
+  })()
+
+  const handleLogout = getAuthToken()
+    ? () => { clearAuthToken(); location.reload() }
+    : undefined
 
   // KB creation state
   const [kbOpen, setKbOpen] = createSignal(false)
@@ -193,41 +219,48 @@ export default function Home() {
           <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
         </div>
         <div class="flex items-center gap-1">
-          {/* Activity */}
-          <button type="button" title="Activity" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-          </button>
-          {/* Notifications */}
-          <button type="button" title="Notifications" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-          </button>
-          {/* Settings */}
-          <button type="button" title="Settings" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors" onClick={() => navigate("/admin")}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-          {/* Help */}
-          <button type="button" title="Help" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          </button>
-          {/* Profile */}
-          <button type="button" title="Profile" class="w-9 h-9 flex items-center justify-center rounded-lg text-text-weak hover:text-text-base hover:bg-surface-base transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </button>
+          <BgProcessMonitor directory={() => undefined} />
+          <KbNotificationBell directory={() => undefined} />
+          <Tooltip placement="bottom" value="Settings">
+            <IconButton
+              icon="settings-gear"
+              variant="ghost"
+              size="large"
+              onClick={openSettings}
+              aria-label="Settings"
+            />
+          </Tooltip>
+          <Tooltip placement="bottom" value="Help">
+            <IconButton
+              icon="help"
+              variant="ghost"
+              size="large"
+              onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")}
+              aria-label="Help"
+            />
+          </Tooltip>
+          <Show when={handleLogout} fallback={
+            <Tooltip placement="bottom" value="Account">
+              <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+            </Tooltip>
+          }>
+            <DropdownMenu placement="bottom-end">
+              <Tooltip placement="bottom" value={userEmail ?? "Account"}>
+                <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
+              </Tooltip>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  <Show when={userEmail}>
+                    <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                      {userEmail}
+                    </div>
+                    <DropdownMenu.Separator />
+                  </Show>
+                  <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
+          </Show>
         </div>
       </div>
 
