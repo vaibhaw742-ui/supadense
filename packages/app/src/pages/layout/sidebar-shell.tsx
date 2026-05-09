@@ -62,6 +62,19 @@ export const SidebarContent = (props: {
         }}
         aria-hidden={!expanded()}
       >
+        <Show when={!props.mobile}>
+          <div class="shrink-0 flex items-center px-3 pt-2 pb-0">
+            <Tooltip placement="right" value="Hide Sessions">
+              <IconButton
+                icon="sidebar-active"
+                variant="ghost"
+                size="large"
+                onClick={props.onToggleSessions}
+                aria-label="Hide Sessions"
+              />
+            </Tooltip>
+          </div>
+        </Show>
         <div class="flex-1 min-h-0 overflow-hidden">
           {props.renderPanel()}
         </div>
