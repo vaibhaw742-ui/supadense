@@ -1,6 +1,4 @@
-import { createEffect, createMemo, Show, type Accessor, type JSX } from "solid-js"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { createEffect, createMemo, type Accessor, type JSX } from "solid-js"
 import { type LocalProject } from "@/context/layout"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 
@@ -36,24 +34,6 @@ export const SidebarContent = (props: {
 
   return (
     <div class="flex h-full w-full min-w-0 overflow-hidden" onMouseMove={props.aimMove}>
-      {/* Collapsed state: thin strip with toggle */}
-      <Show when={!expanded()}>
-        <div class="w-full h-full bg-background-base flex flex-col items-center overflow-hidden">
-          <div class="flex-1 min-h-0 flex flex-col items-center pt-3 gap-2">
-            <Tooltip placement="right" value="Show Sessions">
-              <IconButton
-                icon="sidebar"
-                variant="ghost"
-                size="large"
-                onClick={props.onToggleSessions}
-                aria-label="Show Sessions"
-              />
-            </Tooltip>
-          </div>
-        </div>
-      </Show>
-
-      {/* Expanded state: full sessions panel */}
       <div
         ref={(el) => { panel = el }}
         classList={{
