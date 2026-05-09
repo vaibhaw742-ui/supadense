@@ -16,6 +16,8 @@
       "diffDelete": "#fc533a"
     },
     "overrides": {
+      "background-base": "#ffffff",
+      "background-stronger": "#e4e4e0",
       "text-strong": "#171717",
       "text-base": "#6F6F6F",
       "text-weak": "#8F8F8F",

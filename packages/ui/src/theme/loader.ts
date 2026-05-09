@@ -38,13 +38,13 @@ function buildThemeCss(light: ResolvedTheme, dark: ResolvedTheme, themeId: strin
   --text-mix-blend-mode: multiply;
 
   ${lightCss}
+}
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-    --text-mix-blend-mode: plus-lighter;
+html[data-color-scheme="dark"] {
+  color-scheme: dark;
+  --text-mix-blend-mode: plus-lighter;
 
-    ${darkCss}
-  }
+  ${darkCss}
 }
 `
   }
@@ -55,13 +55,13 @@ html[data-theme="${themeId}"] {
   --text-mix-blend-mode: multiply;
 
   ${lightCss}
+}
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-    --text-mix-blend-mode: plus-lighter;
+html[data-theme="${themeId}"][data-color-scheme="dark"] {
+  color-scheme: dark;
+  --text-mix-blend-mode: plus-lighter;
 
-    ${darkCss}
-  }
+  ${darkCss}
 }
 `
 }
