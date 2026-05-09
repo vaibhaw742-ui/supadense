@@ -23,8 +23,10 @@ import { useSync } from "@/context/sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
-import { getAuthToken } from "@/utils/server"
+import { getAuthToken, clearAuthToken } from "@/utils/server"
 import { Persist, persisted } from "@/utils/persist"
+import { BgProcessMonitor } from "@/components/bg-process-monitor"
+import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
 
 const OPEN_APPS = [
@@ -572,7 +574,27 @@ export function SessionHeader() {
   const platform = usePlatform()
   const language = useLanguage()
   const sync = useSync()
+  const dialog = useDialog()
   const { params, view } = useSessionLayout()
+
+  const userEmail = (() => {
+    const token = getAuthToken()
+    if (!token) return undefined
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+      return typeof payload.email === "string" ? payload.email : undefined
+    } catch { return undefined }
+  })()
+
+  const handleLogout = getAuthToken()
+    ? () => { clearAuthToken(); location.reload() }
+    : undefined
+
+  function openSettings() {
+    void import("@/components/dialog-settings").then((x) => {
+      dialog.show(() => <x.DialogSettings />)
+    })
+  }
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -795,6 +817,36 @@ export function SessionHeader() {
                 </div>
               </Show>
             </div>
+            <BgProcessMonitor directory={() => projectDirectory() || undefined} />
+            <KbNotificationBell directory={() => projectDirectory() || undefined} />
+            <Tooltip placement="bottom" value="Settings">
+              <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
+            </Tooltip>
+            <Tooltip placement="bottom" value="Help">
+              <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
+            </Tooltip>
+            <Show when={handleLogout} fallback={
+              <Tooltip placement="bottom" value="Account">
+                <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+              </Tooltip>
+            }>
+              <DropdownMenu placement="bottom-end">
+                <Tooltip placement="bottom" value={userEmail ?? "Account"}>
+                  <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>
+                    <Show when={userEmail}>
+                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {userEmail}
+                      </div>
+                      <DropdownMenu.Separator />
+                    </Show>
+                    <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </Show>
           </Portal>
         )}
       </Show>
