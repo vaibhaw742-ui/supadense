@@ -75,7 +75,6 @@ export default function Home() {
   const [kbName, setKbName] = createSignal("")
   const [kbError, setKbError] = createSignal("")
   const [kbLoading, setKbLoading] = createSignal(false)
-  const [kbCreatedDir, setKbCreatedDir] = createSignal("")
 
   // Remove confirm state
   const [removeWorktree, setRemoveWorktree] = createSignal<string | null>(null)
@@ -97,7 +96,7 @@ export default function Home() {
   })
 
   function openKbDialog() {
-    setKbName(""); setKbError(""); setKbLoading(false); setKbCreatedDir(""); setKbOpen(true)
+    setKbName(""); setKbError(""); setKbLoading(false); setKbOpen(true)
   }
   function closeKbDialog() { setKbOpen(false) }
 
@@ -120,20 +119,13 @@ export default function Home() {
         setKbError(err.error ?? "Failed to create KB"); return
       }
       const { directory } = (await res.json()) as { directory: string }
-      setKbCreatedDir(directory)
+      closeKbDialog()
+      openProject(directory)
     } catch {
       setKbError("Failed to create KB — check connection")
     } finally {
       setKbLoading(false)
     }
-  }
-
-  function handleKbSetup() {
-    const dir = kbCreatedDir()
-    if (!dir) return
-    closeKbDialog()
-    server.projects.touch(dir)
-    navigate(`/${base64Encode(dir)}/session?prompt=${encodeURIComponent("Setup my knowledge base")}&send=1`)
   }
 
   function openProject(directory: string) {
@@ -440,48 +432,31 @@ export default function Home() {
         >
           <div class="rounded-xl shadow-lg border w-full max-w-sm mx-4" style={{ background: "var(--surface-raised-stronger-non-alpha)", "border-color": "var(--border-weak-base)" }}>
             <div class="flex items-center justify-between px-5 py-4 border-b" style={{ "border-color": "var(--border-weak-base)" }}>
-              <span class="text-16-medium text-text-strong">
-                {kbCreatedDir() ? "Knowledge Base Created" : "New KB"}
-              </span>
+              <span class="text-16-medium text-text-strong">New KB</span>
               <button type="button" class="text-text-weak hover:text-text-strong transition-colors text-lg leading-none" onClick={closeKbDialog}>✕</button>
             </div>
-            <Show
-              when={kbCreatedDir()}
-              fallback={
-                <div class="flex flex-col gap-4 px-6 py-4">
-                  <input
-                    autofocus
-                    class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak"
-                    classList={{ "border-red-500 focus:border-red-500": !!kbError() }}
-                    placeholder="e.g. Machine Learning"
-                    onInput={(e) => { setKbName(e.currentTarget.value); setKbError("") }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleKbCreate()
-                      if (e.key === "Escape") closeKbDialog()
-                    }}
-                  />
-                  <Show when={kbError()}>
-                    <div class="text-12-regular text-red-500">{kbError()}</div>
-                  </Show>
-                  <div class="flex justify-end gap-2">
-                    <Button variant="ghost" size="large" onClick={closeKbDialog}>Cancel</Button>
-                    <Button variant="primary" size="large" disabled={kbLoading()} onClick={handleKbCreate}>
-                      {kbLoading() ? "Creating…" : "Create"}
-                    </Button>
-                  </div>
-                </div>
-              }
-            >
-              <div class="flex flex-col gap-5 px-6 py-4">
-                <div class="flex flex-col gap-1.5">
-                  <div class="text-14-regular text-text-strong">Your Knowledge Base is ready.</div>
-                  <div class="text-12-regular text-text-weak">Click below to start the setup conversation.</div>
-                </div>
-                <div class="flex justify-end">
-                  <Button variant="primary" size="large" onClick={handleKbSetup}>Setup My Knowledge Base</Button>
-                </div>
+            <div class="flex flex-col gap-4 px-6 py-4">
+              <input
+                autofocus
+                class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak"
+                classList={{ "border-red-500 focus:border-red-500": !!kbError() }}
+                placeholder="e.g. Machine Learning"
+                onInput={(e) => { setKbName(e.currentTarget.value); setKbError("") }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleKbCreate()
+                  if (e.key === "Escape") closeKbDialog()
+                }}
+              />
+              <Show when={kbError()}>
+                <div class="text-12-regular text-red-500">{kbError()}</div>
+              </Show>
+              <div class="flex justify-end gap-2">
+                <Button variant="ghost" size="large" onClick={closeKbDialog}>Cancel</Button>
+                <Button variant="primary" size="large" disabled={kbLoading()} onClick={handleKbCreate}>
+                  {kbLoading() ? "Creating…" : "Create"}
+                </Button>
               </div>
-            </Show>
+            </div>
           </div>
         </div>
       </Show>
