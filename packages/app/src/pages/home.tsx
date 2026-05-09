@@ -169,13 +169,23 @@ export default function Home() {
     setRemoveWorktree(worktree)
   }
 
-  function confirmRemove() {
+  async function confirmRemove() {
     const wt = removeWorktree()
     if (!wt) return
+    const project = sync.data.project.find((p) => p.worktree === wt)
     server.projects.close(wt)
     clearStoredColor(wt)
     try { localStorage.removeItem(`ws-name:${wt}`) } catch {}
     setRemoveWorktree(null)
+    if (!project?.id || project.id === "global") return
+    const base = import.meta.env.DEV
+      ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+      : `${location.origin}/api`
+    const token = getAuthToken()
+    await fetch(
+      `${base}/project/${encodeURIComponent(project.id)}?directory=${encodeURIComponent(wt)}`,
+      { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    )
   }
 
   function openColorPicker(worktree: string, e: MouseEvent) {
