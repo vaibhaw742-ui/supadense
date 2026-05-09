@@ -1815,7 +1815,7 @@ export default function Layout(props: ParentProps) {
     )
   })
 
-  const side = createMemo(() => layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 244) : SIDEBAR_COLLAPSED_WIDTH)
+  const side = createMemo(() => layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 160) : SIDEBAR_COLLAPSED_WIDTH)
   const panel = createMemo(() => side())
 
   const loadedSessionDirs = new Set<string>()
