@@ -209,7 +209,15 @@ export function SessionSidePanel(props: {
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
-  const graphNavMount = createMemo(() => document.getElementById("opencode-graph-nav-mount"))
+  const [graphNavMount, setGraphNavMount] = createSignal<HTMLElement | null>(null)
+  onMount(() => {
+    const find = () => {
+      const el = document.getElementById("opencode-graph-nav-mount")
+      if (el) { setGraphNavMount(el); return }
+      setTimeout(find, 50)
+    }
+    find()
+  })
 
   const [addSourceOpen, setAddSourceOpen] = createSignal(false)
   const [addSourceUrl, setAddSourceUrl] = createSignal("")
@@ -367,20 +375,22 @@ export function SessionSidePanel(props: {
 
   return (
     <>
-      <Show when={graphNavMount() && graphMode()}>
-        {(_) => (
-          <Portal mount={graphNavMount()!}>
-            <div class="flex items-center gap-1 text-13-regular px-1">
-              <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
-                Home
-              </button>
-              <Show when={graphNav()}>
-                <>
-                  <span class="text-text-weak">›</span>
-                  <span class="text-text-base">{graphNav()!.label}</span>
-                </>
-              </Show>
-            </div>
+      <Show when={graphNavMount()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <Show when={graphMode()}>
+              <div class="flex items-center gap-1 text-13-regular px-1">
+                <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
+                  Home
+                </button>
+                <Show when={graphNav()}>
+                  <>
+                    <span class="text-text-weak">›</span>
+                    <span class="text-text-base">{graphNav()!.label}</span>
+                  </>
+                </Show>
+              </div>
+            </Show>
           </Portal>
         )}
       </Show>
