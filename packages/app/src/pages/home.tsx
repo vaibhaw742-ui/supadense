@@ -1,15 +1,11 @@
-import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
+import { createSignal, For, onMount, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
-import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -23,20 +19,6 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
-  const homedir = createMemo(() => sync.data.path.home)
-  const recent = createMemo(() => {
-    return sync.data.project
-      .slice()
-      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-      .slice(0, 5)
-  })
-
-  const serverDotClass = createMemo(() => {
-    const healthy = server.healthy()
-    if (healthy === true) return "bg-icon-success-base"
-    if (healthy === false) return "bg-icon-critical-base"
-    return "bg-border-weak-base"
-  })
 
   // Auto-redirect authenticated users to their default workspace
   onMount(async () => {
@@ -148,72 +130,104 @@ export default function Home() {
     }
   }
 
+  const [filterTab, setFilterTab] = createSignal<"all" | "synced">("all")
+
+  const workspaceColor = (name: string) => {
+    const colors = [
+      "#8b9e7a", "#7a9e8b", "#9e8b7a", "#7a8b9e", "#9e7a8b",
+      "#6b8f6b", "#8f6b6b", "#6b6b8f", "#8f8f6b", "#6b8f8f",
+    ]
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
+    return colors[Math.abs(hash) % colors.length]
+  }
+
+  const workspaceName = (worktree: string) =>
+    worktree.replace(/^\/workspaces\/[^/]+\//, "").split("/").pop() ?? worktree.split("/").pop() ?? worktree
+
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
-      <Button
-        size="large"
-        variant="ghost"
-        class="mt-4 mx-auto text-14-regular text-text-weak"
-        onClick={() => dialog.show(() => <DialogSelectServer />)}
-      >
-        <div
+    <div class="size-full flex flex-col bg-background-base overflow-y-auto">
+      {/* Header */}
+      <div class="flex items-center justify-between px-8 pt-8 pb-4">
+        <div>
+          <div class="text-13-regular text-text-weak">All Workspaces</div>
+          <div class="text-24-medium text-text-strong mt-0.5">Knowledge Bases</div>
+        </div>
+        <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={openKbDialog}>
+          Create Workspace
+        </Button>
+      </div>
+
+      {/* Filter tabs */}
+      <div class="flex items-center gap-1 px-8 pb-6 border-b border-border-weak-base">
+        <button
+          type="button"
+          class="px-3 py-1 rounded-md text-13-medium transition-colors"
           classList={{
-            "size-2 rounded-full": true,
-            [serverDotClass()]: true,
+            "bg-surface-base-active text-text-strong": filterTab() === "all",
+            "text-text-weak hover:text-text-base": filterTab() !== "all",
           }}
-        />
-        {server.name}
-      </Button>
-      <Switch>
-        <Match when={sync.data.project.length > 0}>
-          <div class="mt-20 w-full flex flex-col gap-4">
-            <div class="flex gap-2 items-center justify-between pl-3">
-              <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={openKbDialog}>
-                Create Knowledge Base
-              </Button>
-            </div>
-            <ul class="flex flex-col gap-2">
-              <For each={recent()}>
-                {(project) => (
-                  <Button
-                    size="large"
-                    variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
-                  >
-                    {project.worktree.replace(/^\/workspaces\/[^/]+\//, "~/").replace(homedir(), "~")}
-                    <div class="text-14-regular text-text-weak">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </Button>
-                )}
-              </For>
-            </ul>
+          onClick={() => setFilterTab("all")}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1 rounded-md text-13-medium transition-colors"
+          classList={{
+            "bg-surface-base-active text-text-strong": filterTab() === "synced",
+            "text-text-weak hover:text-text-base": filterTab() !== "synced",
+          }}
+          onClick={() => setFilterTab("synced")}
+        >
+          Synced
+        </button>
+      </div>
+
+      {/* Workspace grid */}
+      <div class="px-8 py-6">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          {/* Create new */}
+          <button
+            type="button"
+            class="aspect-square rounded-xl border-2 border-dashed border-border-base flex flex-col items-center justify-center gap-2 text-text-weak hover:text-text-base hover:border-border-stronger transition-colors"
+            onClick={openKbDialog}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span class="text-12-regular">Create Workspace</span>
+          </button>
+
+          <For each={sync.data.project}>
+            {(project) => {
+              const name = workspaceName(project.worktree)
+              const color = workspaceColor(name)
+              return (
+                <button
+                  type="button"
+                  class="aspect-square rounded-xl flex flex-col justify-end p-3 text-left hover:opacity-90 active:scale-[0.98] transition-all shadow-sm"
+                  style={{ background: color }}
+                  onClick={() => openProject(project.worktree)}
+                >
+                  <div class="text-14-medium text-white truncate">{name}</div>
+                  <div class="text-12-regular mt-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>
+                    knowledge base
+                  </div>
+                </button>
+              )
+            }}
+          </For>
+        </div>
+
+        <Show when={sync.data.project.length === 0 && sync.ready}>
+          <div class="mt-16 flex flex-col items-center gap-3 text-center">
+            <div class="text-14-medium text-text-strong">No workspaces yet</div>
+            <div class="text-13-regular text-text-weak">Create your first Knowledge Base to get started</div>
           </div>
-        </Match>
-        <Match when={!sync.ready}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
-            <Button class="px-3" onClick={openKbDialog}>
-              Create Knowledge Base
-            </Button>
-          </div>
-        </Match>
-        <Match when={true}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <Icon name="folder-add-left" size="large" />
-            <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-14-medium text-text-strong">No recent Knowledge Base</div>
-              <div class="text-12-regular text-text-weak">Get started by creating a Knowledge Base</div>
-            </div>
-            <Button class="px-3 mt-1" onClick={openKbDialog}>
-              Create Knowledge Base
-            </Button>
-          </div>
-        </Match>
-      </Switch>
+        </Show>
+      </div>
 
       {/* KB creation modal — rendered inline so signals are always reactive */}
       <Show when={kbOpen()}>
