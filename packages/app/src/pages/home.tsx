@@ -190,8 +190,6 @@ export default function Home() {
     setColorWorktree(null)
   }
 
-  const [filterTab, setFilterTab] = createSignal<"all" | "synced">("all")
-
   const defaultWorkspaceColor = (name: string) => {
     let hash = 0
     for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
@@ -214,26 +212,9 @@ export default function Home() {
     <div class="size-full flex flex-col bg-background-base overflow-y-auto">
       {/* Header */}
       <div class="flex items-center justify-between px-8 pt-4 pb-4">
-        <div class="flex items-end gap-4">
-          <div>
-            <div class="text-14-regular text-text-weak">Knowledge base</div>
-            <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
-          </div>
-          <div class="flex items-center gap-1 pb-1">
-            {(["all", "synced"] as const).map((tab) => (
-              <button
-                type="button"
-                class="px-3 py-1 rounded-md text-13-medium transition-colors"
-                classList={{
-                  "bg-surface-base-active text-text-strong": filterTab() === tab,
-                  "text-text-weak hover:text-text-base": filterTab() !== tab,
-                }}
-                onClick={() => setFilterTab(tab)}
-              >
-                {tab === "all" ? "All" : "Synced"}
-              </button>
-            ))}
-          </div>
+        <div>
+          <div class="text-14-regular text-text-weak">All Workspaces</div>
+          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">Knowledge base</div>
         </div>
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
