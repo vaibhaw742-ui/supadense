@@ -733,12 +733,7 @@ export function SessionHeader() {
       <Show when={rightMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-2 w-full">
-              <DocsButton />
-              <Show when={projectDirectory()}>
-                {(dir) => <GitHubButton directory={dir()} />}
-              </Show>
-              <div class="ml-auto flex items-center gap-2">
+            <div class="flex items-center gap-2">
               <BgProcessMonitor directory={() => projectDirectory() || undefined} />
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
               <Tooltip placement="bottom" value="Settings">
@@ -851,7 +846,6 @@ export function SessionHeader() {
                   </DropdownMenu.Portal>
                 </DropdownMenu>
               </Show>
-              </div>
             </div>
           </Portal>
         )}
@@ -871,6 +865,10 @@ export function SessionHeader() {
               </Tooltip>
               <AllFilesButton />
               <span id="opencode-graph-nav-mount" class="flex items-center" />
+              <DocsButton />
+              <Show when={projectDirectory()}>
+                {(dir) => <GitHubButton directory={dir()} />}
+              </Show>
             </div>
           </Portal>
         )}
