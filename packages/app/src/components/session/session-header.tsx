@@ -694,6 +694,8 @@ export function SessionHeader() {
       })
   }
 
+  const [tocOpen, setTocOpen] = createSignal(false)
+
   // GitHub sync state (lifted from GitHubButton)
   const [ghModalOpen, setGhModalOpen] = createSignal(false)
   const [ghRepoUrl, setGhRepoUrl] = createSignal("")
@@ -816,8 +818,9 @@ export function SessionHeader() {
                 <Button
                   variant="ghost"
                   class="titlebar-icon size-8 flex items-center justify-center p-0"
+                  classList={{ "bg-surface-base-active": tocOpen() }}
                   aria-label="Table of Contents"
-                  onClick={() => {}}
+                  onClick={() => setTocOpen(v => !v)}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="8" y1="6" x2="21" y2="6" />
@@ -934,6 +937,43 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
+
+      {/* Table of Contents panel */}
+      <Portal mount={document.body}>
+        <div
+          style={{
+            position: "fixed",
+            top: "40px",
+            right: tocOpen() ? "0px" : "-320px",
+            width: "320px",
+            bottom: "0",
+            "background-color": "var(--background-base)",
+            "border-left": "1px solid var(--border-weak-base)",
+            "z-index": "40",
+            transition: "right 0.25s ease",
+            display: "flex",
+            "flex-direction": "column",
+          }}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "12px 16px", "border-bottom": "1px solid var(--border-weak-base)" }}>
+            <span style={{ "font-size": "14px", "font-weight": "500", color: "var(--color-text-strong)" }}>Table of Contents</span>
+            <button
+              type="button"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-weak)", padding: "4px", "border-radius": "4px", display: "flex", "align-items": "center" }}
+              onClick={() => setTocOpen(false)}
+              aria-label="Close"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div style={{ flex: "1", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: "8px", padding: "24px" }}>
+            <span style={{ "font-size": "15px", "font-weight": "500", color: "var(--color-text-base)" }}>No headings yet</span>
+            <span style={{ "font-size": "13px", color: "var(--color-text-weak)", "text-align": "center" }}>Add headings to navigate your document</span>
+          </div>
+        </div>
+      </Portal>
     </>
   )
 }
