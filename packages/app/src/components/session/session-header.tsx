@@ -542,7 +542,6 @@ function AllFilesButton() {
           <polyline points="16 18 22 12 16 6"/>
           <polyline points="8 6 2 12 8 18"/>
         </svg>
-        <span class="text-xs">All Files</span>
       </Button>
     </Tooltip>
   )
@@ -834,7 +833,7 @@ export function SessionHeader() {
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
               <DropdownMenu placement="bottom-end" onOpenChange={(open) => { if (open) void loadGhStatus() }}>
                 <Tooltip placement="bottom" value="More">
-                  <DropdownMenu.Trigger as={IconButton} icon="dots-three" variant="ghost" size="large" aria-label="More options" />
+                  <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" size="large" aria-label="More options" />
                 </Tooltip>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content>
