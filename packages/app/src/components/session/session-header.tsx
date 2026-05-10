@@ -812,6 +812,23 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              <Tooltip placement="bottom" value="Table of Contents">
+                <Button
+                  variant="ghost"
+                  class="titlebar-icon size-8 flex items-center justify-center p-0"
+                  aria-label="Table of Contents"
+                  onClick={() => {}}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </Button>
+              </Tooltip>
               <BgProcessMonitor directory={() => projectDirectory() || undefined} />
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
               <DropdownMenu placement="bottom-end" onOpenChange={(open) => { if (open) void loadGhStatus() }}>
