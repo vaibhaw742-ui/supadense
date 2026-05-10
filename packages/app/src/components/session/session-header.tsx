@@ -828,14 +828,6 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-            </div>
-          </Portal>
-        )}
-      </Show>
-      <Show when={panelMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <div class="flex items-center gap-2 pl-3">
               <Show when={handleLogout} fallback={
                 <Tooltip placement="bottom" value="Account">
                   <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
@@ -858,6 +850,14 @@ export function SessionHeader() {
                   </DropdownMenu.Portal>
                 </DropdownMenu>
               </Show>
+            </div>
+          </Portal>
+        )}
+      </Show>
+      <Show when={panelMount()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <div class="flex items-center gap-2 pl-3">
               <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
                 <IconButton
                   icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
