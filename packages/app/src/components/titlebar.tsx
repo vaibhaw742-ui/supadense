@@ -198,7 +198,7 @@ export function Titlebar() {
 
       <div
         id="opencode-titlebar-right"
-        class="pointer-events-auto absolute inset-y-0 right-2 flex items-center gap-1"
+        class="col-span-full pointer-events-auto absolute inset-y-0 right-2 flex items-center gap-1"
       />
 
       <div
