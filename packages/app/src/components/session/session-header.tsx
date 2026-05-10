@@ -694,6 +694,84 @@ export function SessionHeader() {
       })
   }
 
+  // GitHub sync state (lifted from GitHubButton)
+  const [ghModalOpen, setGhModalOpen] = createSignal(false)
+  const [ghRepoUrl, setGhRepoUrl] = createSignal("")
+  const [ghPat, setGhPat] = createSignal("")
+  const [ghSaving, setGhSaving] = createSignal(false)
+  const [ghCommitting, setGhCommitting] = createSignal(false)
+  const [ghPushing, setGhPushing] = createSignal(false)
+  const [ghHasRemote, setGhHasRemote] = createSignal(false)
+  const [ghUncommitted, setGhUncommitted] = createSignal(0)
+  const [ghUnpushed, setGhUnpushed] = createSignal(0)
+
+  const loadGhStatus = async () => {
+    const dir = projectDirectory()
+    if (!dir) return
+    try {
+      const token = getAuthToken()
+      const res = await fetch(
+        `${kbApiBase()}/kb/git/status?directory=${encodeURIComponent(dir)}`,
+        { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } },
+      )
+      if (!res.ok) return
+      const data = await res.json() as { hasRemoteConfigured: boolean; uncommittedCount: number; unpushedCount: number }
+      setGhHasRemote(data.hasRemoteConfigured)
+      setGhUncommitted(data.uncommittedCount)
+      setGhUnpushed(data.unpushedCount)
+    } catch {}
+  }
+
+  const handleGhCommit = async () => {
+    setGhCommitting(true)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${kbApiBase()}/kb/git/commit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ directory: projectDirectory() }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) showToast({ variant: "error", title: data.error ?? "Commit failed" })
+      else { showToast({ variant: "success", title: data.message ?? "Committed" }); await loadGhStatus() }
+    } catch { showToast({ variant: "error", title: "Commit failed" }) }
+    finally { setGhCommitting(false) }
+  }
+
+  const handleGhPush = async () => {
+    if (!ghHasRemote()) { setGhModalOpen(true); return }
+    setGhPushing(true)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${kbApiBase()}/kb/git/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ directory: projectDirectory() }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) showToast({ variant: "error", title: data.error ?? "Push failed" })
+      else { showToast({ variant: "success", title: data.message ?? "Pushed" }); await loadGhStatus() }
+    } catch { showToast({ variant: "error", title: "Push failed" }) }
+    finally { setGhPushing(false) }
+  }
+
+  const handleGhSaveRemote = async () => {
+    if (!ghRepoUrl().trim() || !ghPat().trim()) return
+    setGhSaving(true)
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`${kbApiBase()}/kb/git/remote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ directory: projectDirectory(), remote_url: ghRepoUrl().trim(), pat: ghPat().trim() }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) showToast({ variant: "error", title: data.error ?? "Failed to save remote" })
+      else { showToast({ variant: "success", title: "GitHub remote saved" }); setGhModalOpen(false); setGhRepoUrl(""); setGhPat(""); await loadGhStatus() }
+    } catch { showToast({ variant: "error", title: "Failed to save remote" }) }
+    finally { setGhSaving(false) }
+  }
+
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
   const panelMount = createMemo(() => document.getElementById("opencode-titlebar-panel"))
@@ -736,18 +814,37 @@ export function SessionHeader() {
             <div class="flex items-center gap-2">
               <BgProcessMonitor directory={() => projectDirectory() || undefined} />
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
-              <DropdownMenu placement="bottom-end">
+              <DropdownMenu placement="bottom-end" onOpenChange={(open) => { if (open) void loadGhStatus() }}>
                 <Tooltip placement="bottom" value="More">
                   <DropdownMenu.Trigger as={IconButton} icon="dots-three" variant="ghost" size="large" aria-label="More options" />
                 </Tooltip>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content>
-                    <Show when={userEmail}>
-                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                        {userEmail}
-                      </div>
-                      <DropdownMenu.Separator />
+                    <DropdownMenu.Item onSelect={() => window.open("https://supadense.com/docs", "_blank")}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                      </svg>
+                      <DropdownMenu.ItemLabel>Docs</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                    <Show when={projectDirectory()}>
+                      <DropdownMenu.Item onSelect={handleGhCommit} disabled={ghCommitting()}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="3"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/>
+                        </svg>
+                        <DropdownMenu.ItemLabel>
+                          {ghCommitting() ? "Committing…" : `Commit changes${ghUncommitted() > 0 ? ` (${ghUncommitted()})` : ""}`}
+                        </DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={handleGhPush} disabled={ghPushing()}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.603-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.647.35-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                        </svg>
+                        <DropdownMenu.ItemLabel>
+                          {ghPushing() ? "Pushing…" : ghHasRemote() ? `Push to GitHub${ghUnpushed() > 0 ? ` (${ghUnpushed()})` : ""}` : "Connect GitHub repo…"}
+                        </DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
                     </Show>
+                    <DropdownMenu.Separator />
                     <DropdownMenu.Item onSelect={openSettings}>
                       <Icon name="settings-gear" size="small" />
                       <DropdownMenu.ItemLabel>Settings</DropdownMenu.ItemLabel>
@@ -758,6 +855,11 @@ export function SessionHeader() {
                     </DropdownMenu.Item>
                     <Show when={handleLogout}>
                       <DropdownMenu.Separator />
+                      <Show when={userEmail}>
+                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {userEmail}
+                        </div>
+                      </Show>
                       <DropdownMenu.Item onSelect={handleLogout}>
                         <Icon name="person" size="small" />
                         <DropdownMenu.ItemLabel>Sign out</DropdownMenu.ItemLabel>
@@ -766,6 +868,32 @@ export function SessionHeader() {
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu>
+              {/* GitHub connect modal */}
+              <Show when={ghModalOpen()}>
+                <div class="fixed inset-0 z-50 flex items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) setGhModalOpen(false) }}>
+                  <div class="rounded-xl shadow-lg bg-[var(--surface-raised-stronger-non-alpha)] border border-[var(--border-weak-base)] w-full max-w-sm mx-4">
+                    <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--border-weak-base)]">
+                      <span class="text-16-medium text-text-strong">Connect GitHub Repo</span>
+                      <button type="button" class="text-text-weak hover:text-text-strong transition-colors text-lg leading-none" onClick={() => setGhModalOpen(false)}>✕</button>
+                    </div>
+                    <div class="flex flex-col gap-4 px-6 py-4">
+                      <div class="flex flex-col gap-1.5">
+                        <label class="text-12-regular text-text-weak">Repository URL</label>
+                        <input type="url" autofocus class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak" placeholder="https://github.com/you/your-kb" value={ghRepoUrl()} onInput={(e) => setGhRepoUrl(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Escape") setGhModalOpen(false) }} />
+                      </div>
+                      <div class="flex flex-col gap-1.5">
+                        <label class="text-12-regular text-text-weak">Personal Access Token</label>
+                        <input type="password" class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-14-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak" placeholder="ghp_xxxxxxxxxxxx" value={ghPat()} onInput={(e) => setGhPat(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Enter" && ghRepoUrl().trim() && ghPat().trim()) void handleGhSaveRemote(); if (e.key === "Escape") setGhModalOpen(false) }} />
+                        <div class="text-12-regular text-text-weak">Needs <strong>repo</strong> scope · stored locally only</div>
+                      </div>
+                      <div class="flex justify-end gap-2">
+                        <Button variant="ghost" size="large" onClick={() => setGhModalOpen(false)}>Cancel</Button>
+                        <Button variant="primary" size="large" disabled={ghSaving() || !ghRepoUrl().trim() || !ghPat().trim()} onClick={handleGhSaveRemote}>{ghSaving() ? "Connecting…" : "Connect"}</Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Show>
             </div>
           </Portal>
         )}
@@ -785,10 +913,6 @@ export function SessionHeader() {
               </Tooltip>
               <AllFilesButton />
               <span id="opencode-graph-nav-mount" class="flex items-center" />
-              <DocsButton />
-              <Show when={projectDirectory()}>
-                {(dir) => <GitHubButton directory={dir()} />}
-              </Show>
             </div>
           </Portal>
         )}
