@@ -736,116 +736,36 @@ export function SessionHeader() {
             <div class="flex items-center gap-2">
               <BgProcessMonitor directory={() => projectDirectory() || undefined} />
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
-              <Tooltip placement="bottom" value="Settings">
-                <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
-              </Tooltip>
-              <Tooltip placement="bottom" value="Help">
-                <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
-              </Tooltip>
-              <Show when={projectDirectory()}>
-                <div class="hidden xl:flex items-center">
-                  <Show when={canOpen()}>
-                    <div class="flex items-center">
-                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
-                        <Button
-                          variant="ghost"
-                          class="rounded-none h-full px-0.5 border-none shadow-none disabled:!cursor-default"
-                          classList={{
-                            "bg-surface-raised-base-active": opening(),
-                          }}
-                          onClick={() => openDir(current().id)}
-                          disabled={opening()}
-                          aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
-                        >
-                          <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
-                            <Show when={opening()} fallback={<AppIcon id={current().icon} />}>
-                              <Spinner class="size-3.5" style={{ color: tint() ?? "var(--icon-base)" }} />
-                            </Show>
-                          </div>
-                        </Button>
-                        <DropdownMenu
-                          gutter={4}
-                          placement="bottom-end"
-                          open={menu.open}
-                          onOpenChange={(open) => setMenu("open", open)}
-                        >
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="chevron-down"
-                            variant="ghost"
-                            disabled={opening()}
-                            class="rounded-none h-full w-[20px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active disabled:!cursor-default"
-                            classList={{
-                              "bg-surface-raised-base-active": opening(),
-                            }}
-                            aria-label={language.t("session.header.open.menu")}
-                          />
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content class="[&_[data-slot=dropdown-menu-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]+[data-slot=dropdown-menu-radio-item]]:mt-1">
-                              <DropdownMenu.Group>
-                                <DropdownMenu.GroupLabel class="!px-1 !py-1">
-                                  {language.t("session.header.openIn")}
-                                </DropdownMenu.GroupLabel>
-                                <DropdownMenu.RadioGroup
-                                  class="mt-1"
-                                  value={current().id}
-                                  onChange={(value) => {
-                                    if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    selectApp(value as OpenApp)
-                                  }}
-                                >
-                                  <For each={options()}>
-                                    {(o) => (
-                                      <DropdownMenu.RadioItem
-                                        value={o.id}
-                                        disabled={opening()}
-                                        onSelect={() => {
-                                          setMenu("open", false)
-                                          openDir(o.id)
-                                        }}
-                                      >
-                                        <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
-                                          <AppIcon id={o.icon} />
-                                        </div>
-                                        <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                        <DropdownMenu.ItemIndicator>
-                                          <Icon name="check-small" size="small" class="text-icon-weak" />
-                                        </DropdownMenu.ItemIndicator>
-                                      </DropdownMenu.RadioItem>
-                                    )}
-                                  </For>
-                                </DropdownMenu.RadioGroup>
-                              </DropdownMenu.Group>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </Show>
-                </div>
-              </Show>
-              <Show when={handleLogout} fallback={
-                <Tooltip placement="bottom" value="Account">
-                  <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
+              <DropdownMenu placement="bottom-end">
+                <Tooltip placement="bottom" value="More">
+                  <DropdownMenu.Trigger as={IconButton} icon="dots-three" variant="ghost" size="large" aria-label="More options" />
                 </Tooltip>
-              }>
-                <DropdownMenu placement="bottom-end">
-                  <Tooltip placement="bottom" value={userEmail ?? "Account"}>
-                    <DropdownMenu.Trigger as={IconButton} icon="person" variant="ghost" size="large" aria-label="Account" />
-                  </Tooltip>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content>
-                      <Show when={userEmail}>
-                        <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                          {userEmail}
-                        </div>
-                        <DropdownMenu.Separator />
-                      </Show>
-                      <DropdownMenu.Item onSelect={handleLogout}>Sign out</DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu>
-              </Show>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content>
+                    <Show when={userEmail}>
+                      <div style={{ padding: "8px 12px 4px", "font-size": "12px", color: "var(--color-text-dimmed)", "max-width": "200px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {userEmail}
+                      </div>
+                      <DropdownMenu.Separator />
+                    </Show>
+                    <DropdownMenu.Item onSelect={openSettings}>
+                      <Icon name="settings-gear" size="small" />
+                      <DropdownMenu.ItemLabel>Settings</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => window.open("https://x.com/vaibhawkhemka6", "_blank")}>
+                      <Icon name="help" size="small" />
+                      <DropdownMenu.ItemLabel>Help</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                    <Show when={handleLogout}>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onSelect={handleLogout}>
+                        <Icon name="person" size="small" />
+                        <DropdownMenu.ItemLabel>Sign out</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                    </Show>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
             </div>
           </Portal>
         )}
