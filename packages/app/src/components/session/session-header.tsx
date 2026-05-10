@@ -828,6 +828,23 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
+            </div>
+          </Portal>
+        )}
+      </Show>
+      <Show when={panelMount()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <div class="flex items-center gap-2 pl-3">
+              <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
+                <IconButton
+                  icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
+                  variant="ghost"
+                  size="large"
+                  onClick={layout.sidebar.toggle}
+                  aria-label={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}
+                />
+              </Tooltip>
               <Show when={handleLogout} fallback={
                 <Tooltip placement="bottom" value="Account">
                   <IconButton icon="person" variant="ghost" size="large" aria-label="Account" />
@@ -850,23 +867,6 @@ export function SessionHeader() {
                   </DropdownMenu.Portal>
                 </DropdownMenu>
               </Show>
-            </div>
-          </Portal>
-        )}
-      </Show>
-      <Show when={panelMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <div class="flex items-center gap-2 pl-3">
-              <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
-                <IconButton
-                  icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
-                  variant="ghost"
-                  size="large"
-                  onClick={layout.sidebar.toggle}
-                  aria-label={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}
-                />
-              </Tooltip>
               <AllFilesButton />
               <span id="opencode-graph-nav-mount" class="flex items-center" />
             </div>
