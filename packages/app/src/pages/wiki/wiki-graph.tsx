@@ -165,7 +165,7 @@ export function WikiGraph(props: Props) {
       .selectAll<SVGGElement, SimNode>("g")
       .data(nodes)
       .join("g")
-      .style("cursor", (d) => (d.type === "category" || d.type === "subcategory") ? "pointer" : "default")
+      .style("cursor", (d) => d.type === "group" ? "default" : "pointer")
 
     // Drag
     nodeSel.call(
@@ -275,8 +275,10 @@ export function WikiGraph(props: Props) {
           props.onNavigate(d.slug, d.label)
         else if (d.type === "subcategory" && d.category_slug && d.slug)
           props.onNavigate(`${d.category_slug}--${d.slug}`, d.label)
-        else if (d.type === "resource" && d.resource_id && props.onNavigateResource)
-          props.onNavigateResource(d.resource_id, d.label)
+        else if (d.type === "resource" && props.onNavigateResource) {
+          const resourceId = d.resource_id ?? d.id.replace(/^res_/, "")
+          if (resourceId) props.onNavigateResource(resourceId, d.label)
+        }
       })
 
     // ── Tick ──────────────────────────────────────────────────────────────────
