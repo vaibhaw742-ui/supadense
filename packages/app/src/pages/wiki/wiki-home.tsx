@@ -450,6 +450,7 @@ export default function WikiHome() {
   const [data, { refetch }] = createResource(() => api.home())
 
   const go = (slug: string) => navigate(`/${params.dir}/wiki/${slug}`)
+  const goResource = (resourceId: string) => navigate(`/${params.dir}/wiki/resource/${resourceId}`)
 
   const toggleId = (id: string) =>
     setOpenIds((prev) => {
@@ -651,7 +652,7 @@ export default function WikiHome() {
               <Show when={hasCategories()} fallback={
                 <GraphEmptyState onGetStarted={() => setShowWizard(true)} />
               }>
-                <WikiGraph data={data()!.graph_data} onNavigate={go} />
+                <WikiGraph data={data()!.graph_data} onNavigate={go} onNavigateResource={goResource} />
               </Show>
             </div>
             <Show when={hasCategories()}>

@@ -9,6 +9,7 @@ import type { GraphData, GraphNode } from "./wiki-api"
 interface Props {
   data: GraphData
   onNavigate: (slug: string, label?: string) => void
+  onNavigateResource?: (resourceId: string, label: string) => void
 }
 
 // ── Node sizing ───────────────────────────────────────────────────────────────
@@ -274,6 +275,8 @@ export function WikiGraph(props: Props) {
           props.onNavigate(d.slug, d.label)
         else if (d.type === "subcategory" && d.category_slug && d.slug)
           props.onNavigate(`${d.category_slug}--${d.slug}`, d.label)
+        else if (d.type === "resource" && d.resource_id && props.onNavigateResource)
+          props.onNavigateResource(d.resource_id, d.label)
       })
 
     // ── Tick ──────────────────────────────────────────────────────────────────

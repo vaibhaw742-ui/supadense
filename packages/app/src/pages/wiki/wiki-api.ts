@@ -73,6 +73,7 @@ export function useWikiApi() {
   return {
     home: () => get<WikiHomeData>("/wiki/home"),
     page: (slug: string) => get<WikiPageData>(`/wiki/page/${slug}`),
+    resource: (id: string) => get<WikiResourceData>(`/wiki/resource/${id}`),
     concepts: () => get<WikiConcept[]>("/wiki/concepts"),
     search: (q: string) => get<WikiSearchResult>(`/wiki/search?q=${encodeURIComponent(q)}`),
     pages: () => get<WikiPageSummary[]>("/wiki/pages"),
@@ -108,6 +109,19 @@ export interface GraphNode {
   slug?: string
   category_slug?: string
   url?: string
+  resource_id?: string
+}
+
+export interface WikiResourceData {
+  id: string
+  title: string | null
+  url: string | null
+  author: string | null
+  modality: string
+  status: string
+  content: string | null
+  metadata: Record<string, unknown> | null
+  time_created: number
 }
 
 export interface GraphEdge {

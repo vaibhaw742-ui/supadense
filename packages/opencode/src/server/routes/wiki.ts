@@ -171,7 +171,7 @@ export const WikiRoutes = () => {
     )
 
     // ── Graph data ────────────────────────────────────────────────────────────
-    type GraphNode = { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string }
+    type GraphNode = { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string; resource_id?: string }
     type GraphEdge = { source: string; target: string }
     const graphNodes: GraphNode[] = []
     const graphEdges: GraphEdge[] = []
@@ -224,7 +224,7 @@ export const WikiRoutes = () => {
           } else if (resource.title) {
             label = resource.title.split(" ").slice(0, 2).join(" ")
           }
-          graphNodes.push({ id: `res_${resource.id}`, type: "resource", label, url: resource.url ?? undefined })
+          graphNodes.push({ id: `res_${resource.id}`, type: "resource", label, url: resource.url ?? undefined, resource_id: resource.id })
           seenResources.add(resource.id)
         }
 
@@ -655,6 +655,41 @@ export const WikiRoutes = () => {
 
     const result = Retrieval.searchWithContext(workspace.id, q, 10)
     return c.json(result)
+  })
+
+  // ── Single resource ──────────────────────────────────────────────────────────
+  app.get("/resource/:id", async (c) => {
+    const id = c.req.param("id")
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No workspace" }, 404)
+
+    const resource = Database.use((db) =>
+      db.select().from(LearningResourceTable)
+        .where(and(eq(LearningResourceTable.id, id), eq(LearningResourceTable.workspace_id, workspace.id)))
+        .get(),
+    )
+    if (!resource) return c.json({ error: "Not found" }, 404)
+
+    // Load raw content from file if stored on disk
+    let content: string | null = resource.raw_content ?? null
+    if (!content && resource.raw_content_path) {
+      const fullPath = path.join(workspace.kb_path, resource.raw_content_path)
+      if (existsSync(fullPath)) {
+        content = readFileSync(fullPath, "utf-8")
+      }
+    }
+
+    return c.json({
+      id: resource.id,
+      title: resource.title ?? null,
+      url: resource.url ?? null,
+      author: resource.author ?? null,
+      modality: resource.modality,
+      status: resource.status,
+      content,
+      metadata: resource.metadata ?? null,
+      time_created: resource.time_created,
+    })
   })
 
   // ── Assets ───────────────────────────────────────────────────────────────────

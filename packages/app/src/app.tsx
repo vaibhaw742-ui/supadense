@@ -52,6 +52,7 @@ const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
 const WikiPage = lazy(() => import("@/pages/wiki/wiki-page"))
+const WikiResourcePage = lazy(() => import("@/pages/wiki/wiki-resource-page"))
 const WikiRoadmapList = lazy(() => import("@/pages/wiki/wiki-roadmap"))
 const WikiRoadmapPage = lazy(() => import("@/pages/wiki/wiki-roadmap-page"))
 const FilesPage = lazy(() => import("@/pages/files"))
@@ -345,6 +346,7 @@ export function AppInterface(props: {
                 </Route>
                 <Route path="/:dir/files" component={FilesPage} />
                 <Route path="/:dir/wiki" component={WikiHome} />
+                <Route path="/:dir/wiki/resource/:id" component={WikiResourcePage} />
                 <Route path="/:dir/wiki/roadmap" component={WikiRoadmapList} />
                 <Route path="/:dir/wiki/roadmap/:slug" component={WikiRoadmapPage} />
                 <Route path="/:dir/wiki/:slug" component={WikiPage} />
