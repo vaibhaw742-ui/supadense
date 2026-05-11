@@ -11,6 +11,7 @@ export type ServerJob = {
   sessionID: string
   title: string
   status: string
+  logs: string[]
 }
 
 const [bgProcesses, setBgProcesses] = createSignal<BgProcess[]>([])

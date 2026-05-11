@@ -27,7 +27,7 @@ export function formatElapsed(startedAt: number): string {
 
 // ── Shared content component — used by both Popover and slide-in panel ────────
 
-export function BgProcessContent(_props: Record<string, never> = {}) {
+export function BgProcessContent(props: { showHeader?: boolean } = {}) {
   const [tick, setTick] = createSignal(0)
   onMount(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1_000)
@@ -43,27 +43,29 @@ export function BgProcessContent(_props: Record<string, never> = {}) {
 
   return (
     <>
-      {/* Header */}
-      <div style={{
-        display: "flex",
-        "align-items": "center",
-        "justify-content": "space-between",
-        padding: "10px 16px 8px",
-        "border-bottom": "1px solid var(--border-weaker-base)",
-        "flex-shrink": "0",
-      }}>
-        <span style={{ "font-size": "13px", "font-weight": "600", color: "var(--text-strong)" }}>
-          Background Processes
-        </span>
-        <Show when={!hasActive() && hasAny()}>
-          <button
-            style={{ "font-size": "11px", color: "var(--text-weak)", padding: "2px 6px", "border-radius": "4px", border: "none", background: "transparent", cursor: "pointer" }}
-            onClick={() => bgProcessClear()}
-          >
-            Clear done
-          </button>
-        </Show>
-      </div>
+      {/* Header — only shown in popover mode */}
+      <Show when={props.showHeader !== false}>
+        <div style={{
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          padding: "10px 16px 8px",
+          "border-bottom": "1px solid var(--border-weaker-base)",
+          "flex-shrink": "0",
+        }}>
+          <span style={{ "font-size": "13px", "font-weight": "600", color: "var(--text-strong)" }}>
+            Background Processes
+          </span>
+          <Show when={!hasActive() && hasAny()}>
+            <button
+              style={{ "font-size": "11px", color: "var(--text-weak)", padding: "2px 6px", "border-radius": "4px", border: "none", background: "transparent", cursor: "pointer" }}
+              onClick={() => bgProcessClear()}
+            >
+              Clear done
+            </button>
+          </Show>
+        </div>
+      </Show>
 
       <div style={{ flex: "1", "overflow-y": "auto" }}>
         {/* Server-side pipeline jobs */}
@@ -73,25 +75,52 @@ export function BgProcessContent(_props: Record<string, never> = {}) {
             const start = serverJobSeenAt.get(job.sessionID) ?? Date.now()
             return (
               <div style={{
-                display: "flex",
-                "align-items": "flex-start",
-                gap: "10px",
                 padding: "10px 16px",
                 "border-bottom": "1px solid var(--border-weaker-base)",
               }}>
-                <div style={{ "flex-shrink": "0", "padding-top": "1px" }}>
-                  <svg style={{ animation: "bgp-spin 1s linear infinite", color: "#f97316" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                  </svg>
-                </div>
-                <div style={{ flex: "1", "min-width": "0" }}>
-                  <div style={{ "font-size": "12px", color: "var(--text-base)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={job.title}>
-                    {job.title}
+                {/* Job title + status row */}
+                <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                  <div style={{ "flex-shrink": "0", "padding-top": "2px" }}>
+                    <svg style={{ animation: "bgp-spin 1s linear infinite", color: "#f97316" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
                   </div>
-                  <div style={{ "font-size": "11px", color: "#fb923c", "margin-top": "2px" }}>
-                    Processing · {formatEta(start)}
+                  <div style={{ flex: "1", "min-width": "0" }}>
+                    <div style={{ "font-size": "12px", color: "var(--text-base)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={job.title}>
+                      {job.title}
+                    </div>
+                    <div style={{ "font-size": "11px", color: "#fb923c", "margin-top": "2px" }}>
+                      Processing · {formatEta(start)}
+                    </div>
                   </div>
                 </div>
+                {/* Logs */}
+                <Show when={job.logs && job.logs.length > 0}>
+                  <div style={{
+                    "margin-top": "8px",
+                    "margin-left": "23px",
+                    background: "var(--background-surface, rgba(0,0,0,0.04))",
+                    "border-radius": "6px",
+                    padding: "6px 8px",
+                    "max-height": "120px",
+                    "overflow-y": "auto",
+                  }}>
+                    <For each={job.logs}>
+                      {(line) => (
+                        <div style={{
+                          "font-size": "10.5px",
+                          "font-family": "monospace",
+                          color: "var(--text-weak)",
+                          "line-height": "1.5",
+                          "word-break": "break-word",
+                          "white-space": "pre-wrap",
+                        }}>
+                          {line}
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
               </div>
             )
           }}
@@ -191,7 +220,7 @@ export function BgProcessMonitor(props: { directory: Accessor<string | undefined
         },
       })
       if (!res.ok) return
-      const data = await res.json() as { jobs: { sessionID: string; title: string; status: string }[] }
+      const data = await res.json() as { jobs: { sessionID: string; title: string; status: string; logs: string[] }[] }
       for (const j of data.jobs) {
         if (!serverJobSeenAt.has(j.sessionID)) serverJobSeenAt.set(j.sessionID, Date.now())
       }

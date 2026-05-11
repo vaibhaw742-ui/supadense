@@ -26,6 +26,7 @@ import { decode64 } from "@/utils/base64"
 import { getAuthToken, clearAuthToken } from "@/utils/server"
 import { Persist, persisted } from "@/utils/persist"
 import { BgProcessMonitor, BgProcessContent } from "@/components/bg-process-monitor"
+import { bgProcessClear, bgProcesses, serverJobs } from "@/context/bg-processes"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
 
@@ -958,18 +959,29 @@ export function SessionHeader() {
         >
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "12px 16px", "border-bottom": "1px solid var(--border-weak-base)", "flex-shrink": "0" }}>
             <span style={{ "font-size": "14px", "font-weight": "500", color: "var(--color-text-strong)" }}>Background Processes</span>
-            <button
-              type="button"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-weak)", padding: "4px", "border-radius": "4px", display: "flex", "align-items": "center" }}
-              onClick={() => setBgPanelOpen(false)}
-              aria-label="Close"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+              <Show when={bgProcesses().some(p => p.status !== "processing") && serverJobs().length === 0}>
+                <button
+                  type="button"
+                  style={{ "font-size": "11px", color: "var(--color-text-weak)", padding: "2px 6px", "border-radius": "4px", border: "none", background: "transparent", cursor: "pointer" }}
+                  onClick={() => bgProcessClear()}
+                >
+                  Clear done
+                </button>
+              </Show>
+              <button
+                type="button"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-weak)", padding: "4px", "border-radius": "4px", display: "flex", "align-items": "center" }}
+                onClick={() => setBgPanelOpen(false)}
+                aria-label="Close"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
           </div>
-          <BgProcessContent />
+          <BgProcessContent showHeader={false} />
         </div>
       </Portal>
 

@@ -24,7 +24,7 @@ import { BlockBuilder } from "../../learning/block-builder"
 import type { BlockNode } from "../../learning/block-builder"
 import { Auth } from "../../auth"
 import { SessionStatus } from "../../session/status"
-import { SessionTable } from "../../session/session.sql"
+import { SessionTable, PartTable } from "../../session/session.sql"
 import { Resource } from "../../learning/resource"
 import { Session } from "../../session"
 import { SessionPrompt } from "../../session/prompt"
@@ -973,11 +973,33 @@ export const WikiRoutes = () => {
         .all(),
     ).filter((r) => busyIds.includes(r.id as any) && r.title.startsWith("KB:"))
 
-    const jobs = rows.map((r) => ({
-      sessionID: r.id,
-      title: r.title.replace(/^KB:\s*/, ""),
-      status: busyMap.get(r.id as any)?.type ?? "busy",
-    }))
+    const jobs = rows.map((r) => {
+      // Fetch last 8 text parts from assistant messages in this session for log display
+      const recentParts = Database.use((db) =>
+        db.select({ data: PartTable.data })
+          .from(PartTable)
+          .where(eq(PartTable.session_id, r.id as any))
+          .orderBy(desc(PartTable.time_created))
+          .limit(20)
+          .all(),
+      )
+      const logs: string[] = []
+      for (const p of recentParts) {
+        const data = p.data as { type?: string; text?: string }
+        if (data?.type === "text" && data.text?.trim()) {
+          const line = data.text.trim().split("\n")[0]!.slice(0, 120)
+          if (line) logs.push(line)
+          if (logs.length >= 6) break
+        }
+      }
+
+      return {
+        sessionID: r.id,
+        title: r.title.replace(/^KB:\s*/, ""),
+        status: busyMap.get(r.id as any)?.type ?? "busy",
+        logs: logs.reverse(),
+      }
+    })
 
     return c.json({ jobs })
   })
