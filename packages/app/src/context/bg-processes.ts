@@ -7,10 +7,19 @@ export type BgProcess = {
   createdAt: number
 }
 
+export type ServerJob = {
+  sessionID: string
+  title: string
+  status: string
+}
+
 const [bgProcesses, setBgProcesses] = createSignal<BgProcess[]>([])
+const [serverJobs, setServerJobs] = createSignal<ServerJob[]>([])
+// First-seen timestamps for ETA calculation (keyed by sessionID)
+export const serverJobSeenAt = new Map<string, number>()
 let _counter = 0
 
-export { bgProcesses }
+export { bgProcesses, serverJobs, setServerJobs }
 
 export function bgProcessAdd(label: string): number {
   const id = ++_counter

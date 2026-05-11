@@ -25,7 +25,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { getAuthToken, clearAuthToken } from "@/utils/server"
 import { Persist, persisted } from "@/utils/persist"
-import { BgProcessMonitor } from "@/components/bg-process-monitor"
+import { BgProcessMonitor, BgProcessContent } from "@/components/bg-process-monitor"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
 
@@ -695,6 +695,7 @@ export function SessionHeader() {
   }
 
   const [tocOpen, setTocOpen] = createSignal(false)
+  const [bgPanelOpen, setBgPanelOpen] = createSignal(false)
 
   // GitHub sync state (lifted from GitHubButton)
   const [ghModalOpen, setGhModalOpen] = createSignal(false)
@@ -832,7 +833,7 @@ export function SessionHeader() {
                   </svg>
                 </Button>
               </Tooltip>
-              <BgProcessMonitor directory={() => projectDirectory() || undefined} />
+              <BgProcessMonitor directory={() => projectDirectory() || undefined} onOpen={() => setBgPanelOpen(v => !v)} />
               <KbNotificationBell directory={() => projectDirectory() || undefined} />
               <DropdownMenu placement="bottom-end" onOpenChange={(open) => { if (open) void loadGhStatus() }}>
                 <Tooltip placement="bottom" value="More">
@@ -937,6 +938,40 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
+
+      {/* Background Processes panel */}
+      <Portal mount={document.body}>
+        <div
+          style={{
+            position: "fixed",
+            top: "40px",
+            right: bgPanelOpen() ? "0px" : "-360px",
+            width: "360px",
+            bottom: "0",
+            "background-color": "var(--background-base)",
+            "border-left": "1px solid var(--border-weak-base)",
+            "z-index": "41",
+            transition: "right 0.25s ease",
+            display: "flex",
+            "flex-direction": "column",
+          }}
+        >
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "12px 16px", "border-bottom": "1px solid var(--border-weak-base)", "flex-shrink": "0" }}>
+            <span style={{ "font-size": "14px", "font-weight": "500", color: "var(--color-text-strong)" }}>Background Processes</span>
+            <button
+              type="button"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-weak)", padding: "4px", "border-radius": "4px", display: "flex", "align-items": "center" }}
+              onClick={() => setBgPanelOpen(false)}
+              aria-label="Close"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <BgProcessContent />
+        </div>
+      </Portal>
 
       {/* Table of Contents panel */}
       <Portal mount={document.body}>
