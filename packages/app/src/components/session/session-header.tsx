@@ -576,6 +576,7 @@ export function SessionHeader() {
   const language = useLanguage()
   const sync = useSync()
   const dialog = useDialog()
+  const navigate = useNavigate()
   const { params, view } = useSessionLayout()
 
   const userEmail = (() => {
@@ -981,7 +982,17 @@ export function SessionHeader() {
               </button>
             </div>
           </div>
-          <BgProcessContent showHeader={false} />
+          <BgProcessContent
+            showHeader={false}
+            onNavigate={(slug, resourceId) => {
+              setBgPanelOpen(false)
+              if (resourceId) {
+                navigate(`/${params.dir}/wiki/resource/${resourceId}`)
+              } else if (slug) {
+                navigate(`/${params.dir}/wiki/${slug}`)
+              }
+            }}
+          />
         </div>
       </Portal>
 

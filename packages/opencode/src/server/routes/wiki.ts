@@ -1040,6 +1040,7 @@ export const WikiRoutes = () => {
       const payload = row.payload as Record<string, unknown>
       const resourceUrl = (payload?.url as string | undefined) ?? resource?.url ?? null
       const resourceTitle = resource?.title ?? null
+
       let label = row.summary
       if (row.event_type === "memorize" && resourceUrl) {
         try {
@@ -1047,10 +1048,32 @@ export const WikiRoutes = () => {
           label = `Resource added: ${resourceTitle ?? domain}`
         } catch { /* keep summary */ }
       }
+
+      // Build nav_slug so the frontend can navigate directly to the affected page
+      let nav_slug: string | null = null
+      let nav_resource_id: string | null = null
+
+      if (row.event_type === "memorize" && row.resource_id) {
+        nav_resource_id = row.resource_id
+      } else if (row.event_type === "category_added" || row.event_type === "category_removed") {
+        nav_slug = (payload?.slug as string | undefined) ?? null
+      } else if (row.event_type === "subcategory_added" || row.event_type === "subcategory_removed") {
+        const catSlug = payload?.category_slug as string | undefined
+        const subSlug = payload?.subcategory_slug as string | undefined
+        if (catSlug && subSlug) nav_slug = `${catSlug}--${subSlug}`
+        else if (catSlug) nav_slug = catSlug
+      } else if (row.event_type === "section_added" || row.event_type === "section_removed" || row.event_type === "section_updated") {
+        // section_slug is stored as e.g. "agents--key-concepts"
+        const sectionSlug = payload?.section_slug as string | undefined
+        if (sectionSlug) nav_slug = sectionSlug
+      }
+
       return {
         id: row.id,
         event_type: row.event_type,
         label,
+        nav_slug,
+        nav_resource_id,
         time_created: row.time_created,
       }
     })

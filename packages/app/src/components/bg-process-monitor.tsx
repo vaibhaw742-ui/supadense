@@ -46,7 +46,7 @@ function eventIcon(eventType: string): string {
 
 // ── Shared content component — used by both Popover and slide-in panel ────────
 
-export function BgProcessContent(props: { showHeader?: boolean } = {}) {
+export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (slug: string | null, resourceId: string | null) => void } = {}) {
   const [tick, setTick] = createSignal(0)
   onMount(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1_000)
@@ -212,26 +212,47 @@ export function BgProcessContent(props: { showHeader?: boolean } = {}) {
               Activity
             </div>
             <For each={activityEvents()}>
-              {(event) => (
-                <div style={{
-                  display: "flex",
-                  "align-items": "flex-start",
-                  gap: "8px",
-                  padding: "5px 16px",
-                }}>
-                  <div style={{ "flex-shrink": "0", "padding-top": "3px" }}>
-                    {eventIcon(event.event_type)}
-                  </div>
-                  <div style={{ flex: "1", "min-width": "0" }}>
-                    <div style={{ "font-size": "12px", color: "var(--text-base)", "line-height": "1.4", "word-break": "break-word" }}>
-                      {event.label}
+              {(event) => {
+                const isNavigable = !!(event.nav_slug || event.nav_resource_id) && !!props.onNavigate
+                return (
+                  <div
+                    style={{
+                      display: "flex",
+                      "align-items": "flex-start",
+                      gap: "8px",
+                      padding: "5px 16px",
+                      cursor: isNavigable ? "pointer" : "default",
+                      "border-radius": "6px",
+                      transition: "background 0.1s",
+                    }}
+                    onClick={() => {
+                      if (isNavigable) props.onNavigate!(event.nav_slug, event.nav_resource_id)
+                    }}
+                    onMouseEnter={(e) => { if (isNavigable) (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.04))" }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                  >
+                    <div style={{ "flex-shrink": "0", "padding-top": "3px" }}>
+                      {eventIcon(event.event_type)}
                     </div>
-                    <div style={{ "font-size": "10px", color: "var(--text-weak)", "margin-top": "1px" }}>
-                      {formatTimeAgo(event.time_created)}
+                    <div style={{ flex: "1", "min-width": "0" }}>
+                      <div style={{
+                        "font-size": "12px",
+                        color: isNavigable ? "var(--text-base)" : "var(--text-base)",
+                        "line-height": "1.4",
+                        "word-break": "break-word",
+                        "text-decoration": isNavigable ? "underline" : "none",
+                        "text-decoration-color": "var(--border-weak-base)",
+                        "text-underline-offset": "2px",
+                      }}>
+                        {event.label}
+                      </div>
+                      <div style={{ "font-size": "10px", color: "var(--text-weak)", "margin-top": "1px" }}>
+                        {formatTimeAgo(event.time_created)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )
+              }}
             </For>
           </div>
         </Show>

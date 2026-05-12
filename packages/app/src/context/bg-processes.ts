@@ -18,6 +18,8 @@ export type ActivityEvent = {
   id: string
   event_type: string
   label: string
+  nav_slug: string | null
+  nav_resource_id: string | null
   time_created: number
 }
 
