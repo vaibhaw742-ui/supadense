@@ -208,20 +208,9 @@ body.kb-walkthrough-1 #kb-add-resource-btn {
   color: var(--text-strong, rgba(255,255,255,0.9));
 }
 
-.session-tab--active::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--text-accent, #c44a0e);
-  border-radius: 2px 2px 0 0;
-}
-
 .session-tab-icon {
   flex-shrink: 0;
-  color: var(--text-accent, #c44a0e);
+  color: var(--text-weak, rgba(255,255,255,0.45));
   display: flex;
   align-items: center;
 }
