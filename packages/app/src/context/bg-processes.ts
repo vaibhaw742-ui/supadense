@@ -26,6 +26,10 @@ export type ActivityEvent = {
 const [bgProcesses, setBgProcesses] = createSignal<BgProcess[]>([])
 const [serverJobs, setServerJobs] = createSignal<ServerJob[]>([])
 const [activityEvents, setActivityEvents] = createSignal<ActivityEvent[]>([])
+// Global set of activity event IDs that have pending (unread) notifications
+const [notifiedEventIds, setNotifiedEventIds] = createSignal<Set<string>>(new Set())
+export { notifiedEventIds, setNotifiedEventIds }
+
 // Global signal to drive inline notes-panel navigation from the bg panel
 export type NotesNavRequest =
   | { type: "page"; slug: string; label: string }

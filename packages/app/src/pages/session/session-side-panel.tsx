@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
-import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, activityEvents, type NotesNavRequest } from "@/context/bg-processes"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, activityEvents, notifiedEventIds, setNotifiedEventIds, type NotesNavRequest } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -224,30 +224,50 @@ export function SessionSidePanel(props: {
   const [notifiedNodeIds, setNotifiedNodeIds] = createSignal<Set<string>>(new Set())
   const seenEventIds = new Set<string>()
 
+  // Map node ID → event IDs so we can clear both when a node is clicked
+  const nodeToEventIds = new Map<string, Set<string>>()
+
   createEffect(() => {
     const events = activityEvents()
     const data = graphData()
     if (!events.length) return
-    setNotifiedNodeIds((prev) => {
-      const next = new Set(prev)
-      for (const event of events) {
-        if (seenEventIds.has(event.id)) continue
-        seenEventIds.add(event.id)
-        if (event.nav_resource_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const node = data?.nodes.find((n) => n.type === "resource" && (n as any).resource_id === event.nav_resource_id)
-          next.add(node ? node.id : `res_${event.nav_resource_id}`)
-        } else if (event.nav_slug) {
-          const node = data?.nodes.find((n) => n.slug === event.nav_slug)
-          if (node) next.add(node.id)
+    setNotifiedNodeIds((prevNodes) => {
+      const nextNodes = new Set(prevNodes)
+      setNotifiedEventIds((prevEvts) => {
+        const nextEvts = new Set(prevEvts)
+        for (const event of events) {
+          if (seenEventIds.has(event.id)) continue
+          seenEventIds.add(event.id)
+          nextEvts.add(event.id)
+          let nodeId: string | null = null
+          if (event.nav_resource_id) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const node = data?.nodes.find((n) => n.type === "resource" && (n as any).resource_id === event.nav_resource_id)
+            nodeId = node ? node.id : `res_${event.nav_resource_id}`
+          } else if (event.nav_slug) {
+            const node = data?.nodes.find((n) => n.slug === event.nav_slug)
+            if (node) nodeId = node.id
+          }
+          if (nodeId) {
+            nextNodes.add(nodeId)
+            if (!nodeToEventIds.has(nodeId)) nodeToEventIds.set(nodeId, new Set())
+            nodeToEventIds.get(nodeId)!.add(event.id)
+          }
         }
-      }
-      return next
+        return nextEvts
+      })
+      return nextNodes
     })
   })
 
-  const clearNotif = (nodeId: string) =>
+  const clearNotif = (nodeId: string) => {
     setNotifiedNodeIds((prev) => { const s = new Set(prev); s.delete(nodeId); return s })
+    const evtIds = nodeToEventIds.get(nodeId)
+    if (evtIds) {
+      setNotifiedEventIds((prev) => { const s = new Set(prev); evtIds.forEach((id) => s.delete(id)); return s })
+      nodeToEventIds.delete(nodeId)
+    }
+  }
 
   // Fetch resource data when graphNav is a resource type
   type ResourceSummary = { id: string; title: string | null; url: string | null; modality: string; time_created: number }
