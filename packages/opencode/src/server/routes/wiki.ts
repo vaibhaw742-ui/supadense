@@ -658,6 +658,25 @@ export const WikiRoutes = () => {
   })
 
   // ── Single resource ──────────────────────────────────────────────────────────
+  app.get("/resources", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No workspace" }, 404)
+    const rows = Database.use((db) =>
+      db.select({
+        id: LearningResourceTable.id,
+        title: LearningResourceTable.title,
+        url: LearningResourceTable.url,
+        modality: LearningResourceTable.modality,
+        time_created: LearningResourceTable.time_created,
+      })
+        .from(LearningResourceTable)
+        .where(eq(LearningResourceTable.workspace_id, workspace.id))
+        .orderBy(desc(LearningResourceTable.time_created))
+        .all(),
+    )
+    return c.json(rows)
+  })
+
   app.get("/resource/:id", async (c) => {
     const id = c.req.param("id")
     const workspace = resolveWorkspace()

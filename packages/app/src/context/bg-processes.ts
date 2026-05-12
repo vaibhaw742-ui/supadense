@@ -30,6 +30,7 @@ const [activityEvents, setActivityEvents] = createSignal<ActivityEvent[]>([])
 export type NotesNavRequest =
   | { type: "page"; slug: string; label: string }
   | { type: "resource"; resourceId: string; label: string }
+  | { type: "resources-list" }
 const [notesNavRequest, setNotesNavRequest] = createSignal<NotesNavRequest | null>(null)
 // First-seen timestamps for ETA calculation (keyed by sessionID)
 export const serverJobSeenAt = new Map<string, number>()

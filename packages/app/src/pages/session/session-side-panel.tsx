@@ -221,28 +221,29 @@ export function SessionSidePanel(props: {
   })
 
   // Fetch resource data when graphNav is a resource type
+  type ResourceSummary = { id: string; title: string | null; url: string | null; modality: string; time_created: number }
+
+  const fetchWiki = async (path: string) => {
+    const token = getAuthToken()
+    const directory = decode64(params.dir) ?? ""
+    const res = await fetch(`${wikiBase()}${path}`, {
+      headers: { "x-opencode-directory": directory, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    if (!res.ok) return null
+    return res.json()
+  }
+
+  const [resourcesList] = createResource(
+    () => graphNav()?.type === "resources-list" ? true : null,
+    async (): Promise<ResourceSummary[] | null> => {
+      try { return await fetchWiki("/wiki/resources") as ResourceSummary[] } catch { return null }
+    }
+  )
+
   const [resourceData] = createResource(
     () => graphNav()?.type === "resource" ? (graphNav() as { type: "resource"; resourceId: string }).resourceId : null,
     async (resourceId): Promise<WikiResourceData | null> => {
-      try {
-        const token = getAuthToken()
-        const directory = decode64(params.dir) ?? ""
-        const url = `${wikiBase()}/wiki/resource/${resourceId}`
-        const res = await fetch(url, {
-          headers: {
-            "x-opencode-directory": directory,
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        })
-        if (!res.ok) {
-          console.error("[resource viewer] fetch failed", url, res.status, await res.text().catch(() => ""))
-          return null
-        }
-        return res.json() as Promise<WikiResourceData>
-      } catch (e) {
-        console.error("[resource viewer] fetch error", e)
-        return null
-      }
+      try { return await fetchWiki(`/wiki/resource/${resourceId}`) as WikiResourceData } catch { return null }
     }
   )
 
@@ -423,15 +424,21 @@ export function SessionSidePanel(props: {
                 <Show when={graphNav()?.type === "resource"}>
                   <>
                     <span class="text-text-weak">›</span>
-                    <span class="text-text-link" style={{ cursor: "default" }}>Resources</span>
+                    <button class="text-text-link hover:underline" style={{ background: "none", border: "none", cursor: "pointer", padding: "0", font: "inherit" }} onClick={() => setGraphNav({ type: "resources-list" })}>Resources</button>
                     <span class="text-text-weak">›</span>
-                    <span class="text-text-base">{graphNav()!.label}</span>
+                    <span class="text-text-base">{(graphNav() as { label: string }).label}</span>
+                  </>
+                </Show>
+                <Show when={graphNav()?.type === "resources-list"}>
+                  <>
+                    <span class="text-text-weak">›</span>
+                    <span class="text-text-base">Resources</span>
                   </>
                 </Show>
                 <Show when={graphNav()?.type === "page"}>
                   <>
                     <span class="text-text-weak">›</span>
-                    <span class="text-text-base">{graphNav()!.label}</span>
+                    <span class="text-text-base">{(graphNav() as { label: string }).label}</span>
                   </>
                 </Show>
               </div>
@@ -681,17 +688,38 @@ export function SessionSidePanel(props: {
                   </Show>
                 }
               >
-                <Show
-                  when={graphNav()?.type === "resource"}
-                  fallback={
-                    <BlockPageView
-                      slug={(graphNav() as { type: "page"; slug: string; label: string })?.slug ?? ""}
-                      label={graphNav()!.label}
-                      onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label })}
-                    />
-                  }
-                >
-                  {/* Inline resource viewer */}
+                {/* Resources list */}
+                <Show when={graphNav()?.type === "resources-list"}>
+                  <div class="size-full overflow-y-auto px-4 py-3">
+                    <Show when={resourcesList.loading}>
+                      <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>Loading…</div>
+                    </Show>
+                    <Show when={!resourcesList.loading && resourcesList()}>
+                      <For each={resourcesList()!}>
+                        {(r) => (
+                          <div
+                            onClick={() => setGraphNav({ type: "resource", resourceId: r.id, label: r.title || r.url || r.id })}
+                            style={{ cursor: "pointer", padding: "10px 8px", "border-bottom": "1px solid var(--border-weaker-base)", display: "flex", "flex-direction": "column", gap: "2px" }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.04))" }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                          >
+                            <span style={{ "font-size": "13px", "font-weight": "500", color: "var(--text-strong)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                              {r.title || r.url || "Untitled"}
+                            </span>
+                            <span style={{ "font-size": "11px", color: "var(--text-weak)", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                              {r.url || r.modality}
+                            </span>
+                          </div>
+                        )}
+                      </For>
+                      <Show when={resourcesList()!.length === 0}>
+                        <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>No resources yet.</div>
+                      </Show>
+                    </Show>
+                  </div>
+                </Show>
+                {/* Inline resource viewer */}
+                <Show when={graphNav()?.type === "resource"}>
                   <div class="size-full overflow-y-auto px-6 py-4" style={{ "font-size": "14px", "line-height": "1.7" }}>
                     <Show when={resourceData.loading}>
                       <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>Loading…</div>
@@ -733,6 +761,14 @@ export function SessionSidePanel(props: {
                       })()}
                     </Show>
                   </div>
+                </Show>
+                {/* Category page editor */}
+                <Show when={graphNav()?.type === "page"}>
+                  <BlockPageView
+                    slug={(graphNav() as { type: "page"; slug: string; label: string }).slug}
+                    label={(graphNav() as { label: string }).label}
+                    onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label })}
+                  />
                 </Show>
               </Show>
             </div>
