@@ -226,12 +226,19 @@ export function SessionSidePanel(props: {
     async (resourceId): Promise<WikiResourceData | null> => {
       try {
         const token = getAuthToken()
-        const res = await fetch(`${wikiBase()}/wiki/resource/${resourceId}`, {
+        const url = `${wikiBase()}/wiki/resource/${resourceId}`
+        const res = await fetch(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
-        if (!res.ok) return null
+        if (!res.ok) {
+          console.error("[resource viewer] fetch failed", url, res.status, await res.text().catch(() => ""))
+          return null
+        }
         return res.json() as Promise<WikiResourceData>
-      } catch { return null }
+      } catch (e) {
+        console.error("[resource viewer] fetch error", e)
+        return null
+      }
     }
   )
 
@@ -682,37 +689,44 @@ export function SessionSidePanel(props: {
                 >
                   {/* Inline resource viewer */}
                   <div class="size-full overflow-y-auto px-6 py-4" style={{ "font-size": "14px", "line-height": "1.7" }}>
-                    <Show when={resourceData()} fallback={
+                    <Show when={resourceData.loading}>
                       <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>Loading…</div>
-                    }>
-                      {(d) => (
-                        <>
-                          <div style={{ "margin-bottom": "1rem" }}>
-                            <h1 style={{ "font-size": "18px", "font-weight": "600", "margin-bottom": "0.25rem", color: "var(--text-strong)" }}>
-                              {d().title || d().url}
-                            </h1>
-                            <div class="flex items-center gap-3 text-12-regular text-text-weak" style={{ "flex-wrap": "wrap" }}>
-                              <Show when={d().url}>
-                                <a href={d().url!} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)", "text-decoration": "none" }}>
-                                  {d().url} ↗
-                                </a>
-                              </Show>
-                              <Show when={d().modality}>
-                                <span>{d().modality}</span>
-                              </Show>
-                              <Show when={d().author}>
-                                <span>{d().author}</span>
-                              </Show>
+                    </Show>
+                    <Show when={!resourceData.loading && !resourceData()}>
+                      <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>Could not load resource.</div>
+                    </Show>
+                    <Show when={!resourceData.loading && resourceData()}>
+                      {(() => {
+                        const d = resourceData()!
+                        return (
+                          <>
+                            <div style={{ "margin-bottom": "1rem" }}>
+                              <h1 style={{ "font-size": "18px", "font-weight": "600", "margin-bottom": "0.25rem", color: "var(--text-strong)" }}>
+                                {d.title || d.url}
+                              </h1>
+                              <div class="flex items-center gap-3 text-12-regular text-text-weak" style={{ "flex-wrap": "wrap" }}>
+                                <Show when={d.url}>
+                                  <a href={d.url!} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)", "text-decoration": "none" }}>
+                                    {d.url} ↗
+                                  </a>
+                                </Show>
+                                <Show when={d.modality}>
+                                  <span>{d.modality}</span>
+                                </Show>
+                                <Show when={d.author}>
+                                  <span>{d.author}</span>
+                                </Show>
+                              </div>
                             </div>
-                          </div>
-                          <Show when={d().content}>
-                            <div class="wk-prose" innerHTML={renderMarkdown(d().content!)} />
-                          </Show>
-                          <Show when={!d().content}>
-                            <div class="text-text-weak text-13-regular" style={{ "font-style": "italic" }}>No content available for this resource.</div>
-                          </Show>
-                        </>
-                      )}
+                            <Show when={d.content}>
+                              <div class="wk-prose" innerHTML={renderMarkdown(d.content!)} />
+                            </Show>
+                            <Show when={!d.content}>
+                              <div class="text-text-weak text-13-regular" style={{ "font-style": "italic" }}>No content available for this resource.</div>
+                            </Show>
+                          </>
+                        )
+                      })()}
                     </Show>
                   </div>
                 </Show>
