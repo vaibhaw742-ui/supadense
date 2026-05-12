@@ -1004,6 +1004,60 @@ export const WikiRoutes = () => {
     return c.json({ jobs })
   })
 
+  // ── Activity feed ─────────────────────────────────────────────────────────────
+  app.get("/activity", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ events: [] })
+
+    const rows = Database.use((db) =>
+      db.select({
+        id: LearningKbEventTable.id,
+        event_type: LearningKbEventTable.event_type,
+        summary: LearningKbEventTable.summary,
+        payload: LearningKbEventTable.payload,
+        resource_id: LearningKbEventTable.resource_id,
+        time_created: LearningKbEventTable.time_created,
+      })
+        .from(LearningKbEventTable)
+        .where(eq(LearningKbEventTable.workspace_id, workspace.id))
+        .orderBy(desc(LearningKbEventTable.time_created))
+        .limit(30)
+        .all(),
+    )
+
+    // Enrich with resource URL for "memorize" type events
+    const resourceIds = rows.map((r) => r.resource_id).filter(Boolean) as string[]
+    const resources = resourceIds.length === 0 ? [] : Database.use((db) =>
+      db.select({ id: LearningResourceTable.id, url: LearningResourceTable.url, title: LearningResourceTable.title })
+        .from(LearningResourceTable)
+        .where(inArray(LearningResourceTable.id, resourceIds))
+        .all(),
+    )
+    const resourceMap = new Map(resources.map((r) => [r.id, r]))
+
+    const events = rows.map((row) => {
+      const resource = row.resource_id ? resourceMap.get(row.resource_id) : undefined
+      const payload = row.payload as Record<string, unknown>
+      const resourceUrl = (payload?.url as string | undefined) ?? resource?.url ?? null
+      const resourceTitle = resource?.title ?? null
+      let label = row.summary
+      if (row.event_type === "memorize" && resourceUrl) {
+        try {
+          const domain = new URL(resourceUrl).hostname.replace(/^www\./, "")
+          label = `Resource added: ${resourceTitle ?? domain}`
+        } catch { /* keep summary */ }
+      }
+      return {
+        id: row.id,
+        event_type: row.event_type,
+        label,
+        time_created: row.time_created,
+      }
+    })
+
+    return c.json({ events })
+  })
+
   // ── Block CRUD ────────────────────────────────────────────────────────────────
 
   app.post("/page/:slug/blocks", async (c) => {

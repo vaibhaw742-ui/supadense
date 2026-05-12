@@ -14,13 +14,21 @@ export type ServerJob = {
   logs: string[]
 }
 
+export type ActivityEvent = {
+  id: string
+  event_type: string
+  label: string
+  time_created: number
+}
+
 const [bgProcesses, setBgProcesses] = createSignal<BgProcess[]>([])
 const [serverJobs, setServerJobs] = createSignal<ServerJob[]>([])
+const [activityEvents, setActivityEvents] = createSignal<ActivityEvent[]>([])
 // First-seen timestamps for ETA calculation (keyed by sessionID)
 export const serverJobSeenAt = new Map<string, number>()
 let _counter = 0
 
-export { bgProcesses, serverJobs, setServerJobs }
+export { bgProcesses, serverJobs, setServerJobs, activityEvents, setActivityEvents }
 
 export function bgProcessAdd(label: string): number {
   const id = ++_counter

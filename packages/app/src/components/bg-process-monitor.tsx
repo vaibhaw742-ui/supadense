@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Popover } from "@opencode-ai/ui/popover"
-import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt } from "@/context/bg-processes"
+import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt, activityEvents, setActivityEvents, type ActivityEvent } from "@/context/bg-processes"
 import { useServer } from "@/context/server"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
@@ -22,7 +22,26 @@ export function formatEta(startedAt: number): string {
 export function formatElapsed(startedAt: number): string {
   const secs = Math.round((Date.now() - startedAt) / 1000)
   if (secs < 60) return `${secs}s ago`
-  return `${Math.floor(secs / 60)}m ${secs % 60}s ago`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  return `${hrs}h ago`
+}
+
+function formatTimeAgo(ts: number): string {
+  return formatElapsed(ts)
+}
+
+function eventIcon(eventType: string): string {
+  if (eventType === "memorize") return "⊕"
+  if (eventType === "resource_removed") return "⊖"
+  if (eventType.includes("category_added") || eventType.includes("subcategory_added")) return "◈"
+  if (eventType.includes("category_removed") || eventType.includes("subcategory_removed")) return "◉"
+  if (eventType.includes("section_added")) return "▤"
+  if (eventType.includes("section_removed") || eventType.includes("section_updated")) return "▣"
+  if (eventType.includes("concept")) return "◆"
+  if (eventType === "wiki_update" || eventType === "wiki_build") return "◎"
+  return "·"
 }
 
 // ── Shared content component — used by both Popover and slide-in panel ────────
@@ -178,8 +197,42 @@ export function BgProcessContent(props: { showHeader?: boolean } = {}) {
 
         {/* Empty state */}
         <Show when={!hasAny()}>
-          <div style={{ padding: "32px 16px", "text-align": "center", "font-size": "13px", color: "var(--text-weak)" }}>
-            No background processes
+          <div style={{ padding: "20px 16px 8px", "text-align": "center", "font-size": "12px", color: "var(--text-weak)" }}>
+            No active processes
+          </div>
+        </Show>
+
+        {/* Activity feed */}
+        <Show when={activityEvents().length > 0}>
+          <div style={{
+            "border-top": hasAny() ? "1px solid var(--border-weaker-base)" : "none",
+            "padding-top": "4px",
+          }}>
+            <div style={{ padding: "8px 16px 4px", "font-size": "11px", "font-weight": "600", color: "var(--text-weak)", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>
+              Activity
+            </div>
+            <For each={activityEvents()}>
+              {(event) => (
+                <div style={{
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "8px",
+                  padding: "5px 16px",
+                }}>
+                  <div style={{ "flex-shrink": "0", "padding-top": "3px" }}>
+                    {eventIcon(event.event_type)}
+                  </div>
+                  <div style={{ flex: "1", "min-width": "0" }}>
+                    <div style={{ "font-size": "12px", color: "var(--text-base)", "line-height": "1.4", "word-break": "break-word" }}>
+                      {event.label}
+                    </div>
+                    <div style={{ "font-size": "10px", color: "var(--text-weak)", "margin-top": "1px" }}>
+                      {formatTimeAgo(event.time_created)}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </For>
           </div>
         </Show>
       </div>
@@ -212,25 +265,32 @@ export function BgProcessMonitor(props: { directory: Accessor<string | undefined
     const dir = props.directory()
     if (!dir) return
     const token = getAuthToken()
+    const headers = {
+      "x-opencode-directory": dir,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
     try {
-      const res = await fetch(`${baseUrl()}/wiki/jobs`, {
-        headers: {
-          "x-opencode-directory": dir,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      })
-      if (!res.ok) return
-      const data = await res.json() as { jobs: { sessionID: string; title: string; status: string; logs: string[] }[] }
-      for (const j of data.jobs) {
-        if (!serverJobSeenAt.has(j.sessionID)) serverJobSeenAt.set(j.sessionID, Date.now())
+      const res = await fetch(`${baseUrl()}/wiki/jobs`, { headers })
+      if (res.ok) {
+        const data = await res.json() as { jobs: { sessionID: string; title: string; status: string; logs: string[] }[] }
+        for (const j of data.jobs) {
+          if (!serverJobSeenAt.has(j.sessionID)) serverJobSeenAt.set(j.sessionID, Date.now())
+        }
+        setServerJobs(data.jobs)
       }
-      setServerJobs(data.jobs)
+    } catch { /* ignore */ }
+    try {
+      const res = await fetch(`${baseUrl()}/wiki/activity`, { headers })
+      if (res.ok) {
+        const data = await res.json() as { events: ActivityEvent[] }
+        setActivityEvents(data.events)
+      }
     } catch { /* ignore */ }
   }
 
   onMount(() => {
     pollJobs()
-    const interval = setInterval(pollJobs, 4_000)
+    const interval = setInterval(pollJobs, 5_000)
     const stop = globalSDK.event.listen((e) => {
       if (e.details.type === "session.idle") pollJobs()
 
