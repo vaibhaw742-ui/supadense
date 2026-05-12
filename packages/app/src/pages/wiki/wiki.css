@@ -2015,6 +2015,15 @@ a.wk-resource-title:hover {
   padding-top: 6px;
 }
 
+.block-editor.block-heading-4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+  padding-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .block-editor.block-concept {
   background: var(--surface-base, rgba(0,0,0,0.02));
   border-radius: 4px;
@@ -2066,6 +2075,19 @@ a.wk-resource-title:hover {
   position: absolute;
   left: 4px;
   color: #9ca3af;
+}
+
+.block-editor.block-numbered {
+  padding-left: 22px;
+  position: relative;
+  counter-increment: block-number;
+}
+.block-editor.block-numbered::before {
+  content: counter(block-number) ".";
+  position: absolute;
+  left: 2px;
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .block-editor.block-todo {

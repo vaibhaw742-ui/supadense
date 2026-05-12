@@ -243,10 +243,12 @@ export function BlockItem(props: Props) {
     const type = props.block.block_type
     if (type === "heading_2") return "block-heading-2"
     if (type === "heading_3") return "block-heading-3"
+    if (type === "heading_4") return "block-heading-4"
     if (type === "concept")   return "block-concept"
     if (type === "quote")     return "block-quote"
     if (type === "code")      return "block-code"
     if (type === "bullet")    return "block-bullet"
+    if (type === "numbered")  return "block-numbered"
     if (type === "todo")      return "block-todo"
     if (type === "divider")   return "block-divider"
     return "block-content"

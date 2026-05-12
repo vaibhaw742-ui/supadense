@@ -2,7 +2,7 @@
  * block-page-view.tsx — Notion-style block-based page viewer/editor.
  * Cover header (emoji + title) + formatting toolbar + editable blocks.
  */
-import { For, Show, createEffect, createResource, createSignal } from "solid-js"
+import { For, Show, createEffect, createResource, createSignal, type JSX } from "solid-js"
 import { useWikiApi, type PageBlock } from "./wiki-api"
 import { BlockList } from "./block-list"
 import { BacklinksPanel } from "./backlinks-panel"
@@ -13,39 +13,62 @@ interface Props {
   onNavigate: (slug: string, label: string) => void
 }
 
-// ── Toolbar button ─────────────────────────────────────────────────────────────
+// ── Toolbar primitives ─────────────────────────────────────────────────────────
 
-function ToolbarBtn(p: { label: string; title: string; active?: boolean; onClick: () => void }) {
+function ToolbarBtn(p: { children: JSX.Element; title: string; active?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       title={p.title}
+      disabled={p.disabled}
       onClick={p.onClick}
       style={{
         background: p.active ? "var(--surface-raised-base, rgba(0,0,0,0.06))" : "none",
         border: "none",
-        cursor: "pointer",
-        padding: "3px 6px",
+        cursor: p.disabled ? "default" : "pointer",
+        padding: "4px 5px",
         "border-radius": "4px",
-        "font-size": "12px",
-        "font-weight": p.active ? "600" : "500",
-        color: p.active ? "var(--text-strong)" : "var(--text-weak)",
+        color: p.disabled ? "var(--text-weakest, #d4d4d0)" : p.active ? "var(--text-strong)" : "var(--text-weak)",
         "line-height": "1",
-        "min-width": "24px",
         display: "flex",
         "align-items": "center",
         "justify-content": "center",
         transition: "background 0.1s, color 0.1s",
+        opacity: p.disabled ? "0.4" : "1",
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.06))"; (e.currentTarget as HTMLElement).style.color = "var(--text-base)" }}
-      onMouseLeave={(e) => { if (!p.active) { (e.currentTarget as HTMLElement).style.background = "none"; (e.currentTarget as HTMLElement).style.color = "var(--text-weak)" } }}
+      onMouseEnter={(e) => { if (!p.disabled) { (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.06))"; (e.currentTarget as HTMLElement).style.color = "var(--text-base)" } }}
+      onMouseLeave={(e) => { if (!p.disabled && !p.active) { (e.currentTarget as HTMLElement).style.background = "none"; (e.currentTarget as HTMLElement).style.color = "var(--text-weak)" } }}
     >
-      {p.label}
+      {p.children}
     </button>
   )
 }
 
 function ToolbarDivider() {
-  return <div style={{ width: "1px", height: "16px", background: "var(--border-base, #e5e5e5)", margin: "0 4px", "flex-shrink": "0" }} />
+  return <div style={{ width: "1px", height: "16px", background: "var(--border-base, #e5e5e5)", margin: "0 3px", "flex-shrink": "0" }} />
+}
+
+// ── Toolbar icons (18×18 SVGs) ────────────────────────────────────────────────
+
+const IC = {
+  h1: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><text x="1" y="13" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">H</text><text x="10" y="14" font-size="7" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">1</text></svg>,
+  h2: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><text x="1" y="13" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">H</text><text x="10" y="14" font-size="7" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">2</text></svg>,
+  h3: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><text x="1" y="13" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">H</text><text x="10" y="14" font-size="7" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">3</text></svg>,
+  bullet: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="3.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="13" r="1" fill="currentColor" stroke="none"/><line x1="6.5" y1="5" x2="15" y2="5"/><line x1="6.5" y1="9" x2="15" y2="9"/><line x1="6.5" y1="13" x2="15" y2="13"/></svg>,
+  numbered: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><text x="1.5" y="6.5" font-size="5.5" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">1</text><text x="1.5" y="10.5" font-size="5.5" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">2</text><text x="1.5" y="14.5" font-size="5.5" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">3</text><line x1="6.5" y1="5" x2="15" y2="5"/><line x1="6.5" y1="9" x2="15" y2="9"/><line x1="6.5" y1="13" x2="15" y2="13"/></svg>,
+  todo: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.5" width="5" height="5" rx="1"/><rect x="2" y="10" width="5" height="5" rx="1"/><line x1="9" y1="6" x2="16" y2="6"/><line x1="9" y1="12.5" x2="16" y2="12.5"/><polyline points="3,6.2 4,7.2 6,5"/></svg>,
+  quote: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3" y1="5" x2="3" y2="13"/><line x1="6" y1="5" x2="15" y2="5"/><line x1="6" y1="9" x2="15" y2="9"/><line x1="6" y1="13" x2="12" y2="13"/></svg>,
+  code: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,6 2,9 5,12"/><polyline points="13,6 16,9 13,12"/><line x1="10" y1="4" x2="8" y2="14"/></svg>,
+  image: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="12" rx="1.5"/><circle cx="6.5" cy="7" r="1.5"/><polyline points="2,13 6,9 9,12 12,8.5 16,13"/></svg>,
+  file: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5C3 4.67 3.67 4 4.5 4H7.5L9 5.5H13.5C14.33 5.5 15 6.17 15 7v7.5C15 15.33 14.33 16 13.5 16h-9C3.67 16 3 15.33 3 14.5V5.5z"/></svg>,
+  video: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="11" height="10" rx="1.5"/><polyline points="13,7 16,5 16,13 13,11"/></svg>,
+  figma: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="2.5"/><rect x="4" y="2" width="5" height="5" rx="1"/><rect x="4" y="7" width="5" height="5" rx="1"/><rect x="4" y="12" width="5" height="5" rx="1"/></svg>,
+  globe: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"/><ellipse cx="9" cy="9" rx="2.8" ry="6.5"/><line x1="2.5" y1="7" x2="15.5" y2="7"/><line x1="2.5" y1="11" x2="15.5" y2="11"/></svg>,
+  table: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/><line x1="2.5" y1="7" x2="15.5" y2="7"/><line x1="2.5" y1="11" x2="15.5" y2="11"/><line x1="7" y1="2.5" x2="7" y2="15.5"/><line x1="11" y1="2.5" x2="11" y2="15.5"/></svg>,
+  divider: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="9" x2="16" y2="9"/></svg>,
+  wavy: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 7 C4 5, 6 9, 8 7 S12 5, 14 7 S16 9, 16 7"/><path d="M2 11 C4 9, 6 13, 8 11 S12 9, 14 11 S16 13, 16 11"/></svg>,
+  columns: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="3" width="6" height="12" rx="1.2"/><rect x="10" y="3" width="6" height="12" rx="1.2"/></svg>,
+  sparkle: <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2 L10.2 7.8 L16 9 L10.2 10.2 L9 16 L7.8 10.2 L2 9 L7.8 7.8 Z"/><line x1="14" y1="3" x2="14.5" y2="4.5"/><line x1="14.5" y1="4.5" x2="16" y2="5"/><line x1="16" y1="5" x2="14.5" y2="5.5"/><line x1="14.5" y1="5.5" x2="14" y2="7"/></svg>,
+  clear: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><text x="2" y="13" font-size="10" font-weight="500" font-family="system-ui,sans-serif" fill="currentColor">T</text><text x="9" y="14" font-size="7" font-family="system-ui,sans-serif" fill="currentColor">x</text><line x1="1" y1="15" x2="17" y2="15" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>,
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -258,18 +281,33 @@ export function BlockPageView(props: Props) {
         margin: "0 14px",
       }}>
         {/* Formatting toolbar */}
-        <div class="flex items-center gap-0.5 px-3 py-1.5" style={{ "flex-wrap": "wrap", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}>
-          <ToolbarBtn label="H1" title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")} />
-          <ToolbarBtn label="H2" title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")} />
+        <div class="flex items-center px-2 py-1" style={{ "flex-wrap": "nowrap", "gap": "1px", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "overflow-x": "auto" }}>
+          {/* Headings */}
+          <ToolbarBtn title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")}>{IC.h1}</ToolbarBtn>
+          <ToolbarBtn title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")}>{IC.h2}</ToolbarBtn>
+          <ToolbarBtn title="Heading 3" active={focusedBlockType() === "heading_4"} onClick={() => applyFormat(focusedBlockType() === "heading_4" ? "paragraph" : "heading_4")}>{IC.h3}</ToolbarBtn>
           <ToolbarDivider />
-          <ToolbarBtn label="•" title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")} />
-          <ToolbarBtn label="☐" title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")} />
-          <ToolbarBtn label="❝" title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")} />
+          {/* Lists */}
+          <ToolbarBtn title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")}>{IC.bullet}</ToolbarBtn>
+          <ToolbarBtn title="Numbered list" active={focusedBlockType() === "numbered"} onClick={() => applyFormat(focusedBlockType() === "numbered" ? "paragraph" : "numbered")}>{IC.numbered}</ToolbarBtn>
+          <ToolbarBtn title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")}>{IC.todo}</ToolbarBtn>
+          <ToolbarBtn title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")}>{IC.quote}</ToolbarBtn>
           <ToolbarDivider />
-          <ToolbarBtn label="</>" title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")} />
-          <ToolbarBtn label="—" title="Divider" onClick={() => applyFormat("divider")} />
+          {/* Content blocks */}
+          <ToolbarBtn title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")}>{IC.code}</ToolbarBtn>
+          <ToolbarBtn title="Image" disabled onClick={() => {}}>{IC.image}</ToolbarBtn>
+          <ToolbarBtn title="File" disabled onClick={() => {}}>{IC.file}</ToolbarBtn>
+          <ToolbarBtn title="Video" disabled onClick={() => {}}>{IC.video}</ToolbarBtn>
+          <ToolbarBtn title="Figma" disabled onClick={() => {}}>{IC.figma}</ToolbarBtn>
+          <ToolbarBtn title="Link / Web bookmark" disabled onClick={() => {}}>{IC.globe}</ToolbarBtn>
+          <ToolbarBtn title="Table" disabled onClick={() => {}}>{IC.table}</ToolbarBtn>
+          <ToolbarBtn title="Divider" onClick={() => applyFormat("divider")}>{IC.divider}</ToolbarBtn>
           <ToolbarDivider />
-          <ToolbarBtn label="Tx" title="Plain text" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")} />
+          {/* Layout / AI */}
+          <ToolbarBtn title="AI summary" disabled onClick={() => {}}>{IC.wavy}</ToolbarBtn>
+          <ToolbarBtn title="Columns" disabled onClick={() => {}}>{IC.columns}</ToolbarBtn>
+          <ToolbarBtn title="AI assist" disabled onClick={() => {}}>{IC.sparkle}</ToolbarBtn>
+          <ToolbarBtn title="Clear formatting" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")}>{IC.clear}</ToolbarBtn>
         </div>
 
         {/* Underline-style sub-page tabs */}
