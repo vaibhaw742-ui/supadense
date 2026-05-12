@@ -494,6 +494,16 @@ export function SessionSidePanel(props: {
                 </Show>
                 <Show when={graphNav()?.type === "page"}>
                   <>
+                    <Show when={(graphNav() as { type: "page"; slug: string; label: string; parent?: { slug: string; label: string } }).parent}>
+                      {(parent) => (
+                        <>
+                          <span class="text-text-weak">›</span>
+                          <button class="text-text-link hover:underline" style={{ background: "none", border: "none", cursor: "pointer", padding: "0", font: "inherit" }} onClick={() => setGraphNav({ type: "page", slug: parent().slug, label: parent().label })}>
+                            {parent().label}
+                          </button>
+                        </>
+                      )}
+                    </Show>
                     <span class="text-text-weak">›</span>
                     <span class="text-text-base">{(graphNav() as { label: string }).label}</span>
                   </>
@@ -832,7 +842,24 @@ export function SessionSidePanel(props: {
                   <BlockPageView
                     slug={(graphNav() as { type: "page"; slug: string; label: string }).slug}
                     label={(graphNav() as { label: string }).label}
-                    onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label })}
+                    onNavigate={(slug, label) => {
+                      const cur = graphNav() as { type: "page"; slug: string; label: string; parent?: { slug: string; label: string } } | null
+                      let parent: { slug: string; label: string } | undefined
+                      if (slug.includes("--")) {
+                        const parentSlug = slug.split("--")[0]
+                        if (cur?.type === "page") {
+                          if (cur.slug === parentSlug) {
+                            parent = { slug: cur.slug, label: cur.label }
+                          } else if (cur.parent) {
+                            parent = cur.parent
+                          } else {
+                            const node = graphData()?.nodes.find((n) => n.slug === parentSlug)
+                            if (node) parent = { slug: parentSlug, label: node.label }
+                          }
+                        }
+                      }
+                      setGraphNav({ type: "page", slug, label, parent })
+                    }}
                   />
                 </Show>
               </Show>

@@ -48,7 +48,7 @@ export function dismissAllNotifications() {
 
 // Global signal to drive inline notes-panel navigation from the bg panel
 export type NotesNavRequest =
-  | { type: "page"; slug: string; label: string }
+  | { type: "page"; slug: string; label: string; parent?: { slug: string; label: string } }
   | { type: "resource"; resourceId: string; label: string }
   | { type: "resources-list" }
 const [notesNavRequest, setNotesNavRequest] = createSignal<NotesNavRequest | null>(null)

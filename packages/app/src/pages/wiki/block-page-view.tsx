@@ -1,7 +1,6 @@
 /**
- * block-page-view.tsx — Unified block-based page viewer/editor.
- * Replaces the read-only markdown renderer in session-side-panel.tsx.
- * Shows AI-generated and user-created blocks together in one editable outliner.
+ * block-page-view.tsx — Notion-style block-based page viewer/editor.
+ * Cover header (emoji + title) + formatting toolbar + editable blocks.
  */
 import { For, Show, createEffect, createResource, createSignal } from "solid-js"
 import { useWikiApi, type PageBlock } from "./wiki-api"
@@ -14,6 +13,43 @@ interface Props {
   onNavigate: (slug: string, label: string) => void
 }
 
+// ── Toolbar button ─────────────────────────────────────────────────────────────
+
+function ToolbarBtn(p: { label: string; title: string; active?: boolean; onClick: () => void }) {
+  return (
+    <button
+      title={p.title}
+      onClick={p.onClick}
+      style={{
+        background: p.active ? "var(--surface-raised-base, rgba(0,0,0,0.06))" : "none",
+        border: "none",
+        cursor: "pointer",
+        padding: "3px 6px",
+        "border-radius": "4px",
+        "font-size": "12px",
+        "font-weight": p.active ? "600" : "500",
+        color: p.active ? "var(--text-strong)" : "var(--text-weak)",
+        "line-height": "1",
+        "min-width": "24px",
+        display: "flex",
+        "align-items": "center",
+        "justify-content": "center",
+        transition: "background 0.1s, color 0.1s",
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.06))"; (e.currentTarget as HTMLElement).style.color = "var(--text-base)" }}
+      onMouseLeave={(e) => { if (!p.active) { (e.currentTarget as HTMLElement).style.background = "none"; (e.currentTarget as HTMLElement).style.color = "var(--text-weak)" } }}
+    >
+      {p.label}
+    </button>
+  )
+}
+
+function ToolbarDivider() {
+  return <div style={{ width: "1px", height: "16px", background: "var(--border-base, #e5e5e5)", margin: "0 4px", "flex-shrink": "0" }} />
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export function BlockPageView(props: Props) {
   const wikiApi = useWikiApi()
 
@@ -22,17 +58,15 @@ export function BlockPageView(props: Props) {
     (slug) => wikiApi.page(slug),
   )
 
-  // Local block tree — owned here, mutated optimistically
   const [blocks, setBlocks] = createSignal<PageBlock[]>([])
   const [focusedId, setFocusedId] = createSignal<string | null>(null)
 
-  // Sync blocks from API whenever page loads
   createEffect(() => {
     const data = pageData()
     if (data?.blocks) setBlocks(data.blocks)
   })
 
-  // ── Flat ordered list helpers ─────────────────────────────────────────────
+  // ── Flat ordered list helpers ──────────────────────────────────────────────
 
   function flattenBlocks(tree: PageBlock[]): PageBlock[] {
     const result: PageBlock[] = []
@@ -83,7 +117,26 @@ export function BlockPageView(props: Props) {
       }))
   }
 
-  // ── Callbacks passed to BlockList ─────────────────────────────────────────
+  // ── Toolbar: apply format to focused block ─────────────────────────────────
+
+  function applyFormat(blockType: string) {
+    const id = focusedId()
+    if (!id) return
+    const flat = flattenBlocks(blocks())
+    const block = flat.find((b) => b.id === id)
+    if (!block) return
+    const newSource = block.source === "ai" ? "user_edited" : (block.source as "user" | "user_edited")
+    setBlocks((prev) => updateBlockInTree(prev, id, block.content, newSource, blockType))
+    wikiApi.updateBlock(id, block.content, blockType).catch((e) => console.error("updateBlock failed", e))
+  }
+
+  const focusedBlockType = () => {
+    const id = focusedId()
+    if (!id) return "paragraph"
+    return flattenBlocks(blocks()).find((b) => b.id === id)?.block_type ?? "paragraph"
+  }
+
+  // ── Block CRUD ─────────────────────────────────────────────────────────────
 
   async function handleCreate(afterBlockId: string | null, parentId: string | null, depth: number) {
     const siblings = parentId
@@ -93,7 +146,6 @@ export function BlockPageView(props: Props) {
       ? siblings.findIndex((b) => b.id === afterBlockId)
       : siblings.length - 1
     const newOrderIndex = afterSiblingIdx + 1
-
     try {
       const { block } = await wikiApi.createBlock(props.slug, {
         content: "",
@@ -121,14 +173,13 @@ export function BlockPageView(props: Props) {
   }
 
   async function handleDelete(id: string, focusPrevId: string | null) {
-    // Optimistic
     setBlocks((prev) => deleteBlockInTree(prev, id))
     if (focusPrevId) setFocusedId(focusPrevId)
     try {
       await wikiApi.deleteBlock(id)
     } catch (e) {
       console.error("deleteBlock failed", e)
-      refetch() // revert on error
+      refetch()
     }
   }
 
@@ -141,7 +192,7 @@ export function BlockPageView(props: Props) {
     const newOrderIndex = prevSibling.children.length
     try {
       await wikiApi.moveBlock(id, { new_parent_id: prevSibling.id, new_order_index: newOrderIndex })
-      refetch() // tree restructure — reload from server
+      refetch()
     } catch (e) {
       console.error("moveBlock (indent) failed", e)
     }
@@ -154,7 +205,6 @@ export function BlockPageView(props: Props) {
     const parent = flat.find((b) => b.id === block.placement_id)
     if (!parent) return
     const grandparentId = (parent as PageBlock & { placement_id?: string }).placement_id ?? null
-    // Place after parent in grandparent's children
     const grandparentChildren = grandparentId
       ? (flat.find((b) => b.id === grandparentId)?.children ?? [])
       : blocks()
@@ -168,69 +218,128 @@ export function BlockPageView(props: Props) {
     }
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const pageIcon = () => pageData()?.category?.icon ?? "📄"
+
   return (
     <div class="h-full flex flex-col overflow-hidden">
-      {/* Breadcrumb + title */}
-      <Show when={pageData()}>
-        {(d) => (
-          <div class="shrink-0 px-4 pt-3 pb-1">
-            <Show when={(d().category_tabs?.length ?? 0) > 1}>
-              <div class="flex gap-1.5 mb-2 flex-wrap">
-                <For each={d().category_tabs}>
-                  {(tab) => (
-                    <button
-                      class="px-2.5 py-0.5 rounded text-11-regular border border-border-weaker-base hover:bg-surface-base-hover"
-                      classList={{ "bg-surface-base font-medium border-border-base": tab.nav_slug === props.slug }}
-                      onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
-                    >
-                      {tab.title}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </Show>
-            <div class="text-12-regular text-text-weak">
+
+      {/* ── Cover: emoji + title ──────────────────────────────────────────── */}
+      <div
+        class="shrink-0"
+        style={{
+          background: "var(--surface-base, #f5f5f4)",
+          padding: "28px 28px 24px",
+          "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)",
+        }}
+      >
+        <div style={{ "font-size": "38px", "line-height": "1", "margin-bottom": "10px", "user-select": "none" }}>
+          {pageIcon()}
+        </div>
+        <h1 style={{
+          margin: "0",
+          "font-size": "22px",
+          "font-weight": "700",
+          "letter-spacing": "-0.02em",
+          color: "var(--text-strong)",
+          "line-height": "1.2",
+        }}>
+          {props.label}
+        </h1>
+        {/* Source count */}
+        <Show when={pageData()}>
+          {(d) => (
+            <div style={{ "margin-top": "6px", "font-size": "11px", color: "var(--text-weakest, #a8a29e)" }}>
               {d().page.resource_count} source{d().page.resource_count !== 1 ? "s" : ""}
             </div>
-          </div>
-        )}
+          )}
+        </Show>
+      </div>
+
+      {/* ── Sub-page tabs ─────────────────────────────────────────────────── */}
+      <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
+        <div
+          class="shrink-0 flex gap-1 px-4 py-2 flex-wrap"
+          style={{ "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}
+        >
+          <For each={pageData()!.category_tabs}>
+            {(tab) => (
+              <button
+                class="px-2.5 py-0.5 rounded text-11-regular border border-border-weaker-base hover:bg-surface-base-hover"
+                classList={{ "bg-surface-base font-medium border-border-base": tab.nav_slug === props.slug }}
+                onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
+              >
+                {tab.title}
+              </button>
+            )}
+          </For>
+        </div>
       </Show>
 
-      {/* Block editor */}
-      <div class="flex-1 min-h-0 overflow-y-auto px-4 py-2">
+      {/* ── Formatting toolbar ────────────────────────────────────────────── */}
+      <div
+        class="shrink-0 flex items-center gap-0.5 px-3 py-1.5"
+        style={{ "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "flex-wrap": "wrap" }}
+      >
+        <ToolbarBtn label="H1" title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")} />
+        <ToolbarBtn label="H2" title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")} />
+        <ToolbarDivider />
+        <ToolbarBtn label="•" title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")} />
+        <ToolbarBtn label="☐" title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")} />
+        <ToolbarBtn label="❝" title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")} />
+        <ToolbarDivider />
+        <ToolbarBtn label="</>" title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")} />
+        <ToolbarBtn label="—" title="Divider" onClick={() => applyFormat("divider")} />
+        <ToolbarDivider />
+        <ToolbarBtn label="Tx" title="Plain text" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")} />
+      </div>
+
+      {/* ── Block editor ──────────────────────────────────────────────────── */}
+      <div class="flex-1 min-h-0 overflow-y-auto px-6 py-3">
         <Show when={pageData.loading}>
           <div class="text-12-regular text-text-weak py-4">Loading…</div>
         </Show>
         <Show when={!pageData.loading}>
-          <BlockList
-            blocks={blocks()}
-            focusedId={focusedId()}
-            onFocus={setFocusedId}
-            onNavigate={props.onNavigate}
-            onCreate={handleCreate}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-            onIndent={handleIndent}
-            onUnindent={handleUnindent}
-          />
-          {/* Add block at end */}
-          <div
-            class="mt-1 py-1 px-2 text-12-regular text-text-weakest hover:text-text-weak cursor-text select-none"
-            onClick={() => {
-              const lastTopLevel = blocks()
-              handleCreate(
-                lastTopLevel.length > 0 ? lastTopLevel[lastTopLevel.length - 1].id : null,
-                null,
-                0,
-              )
-            }}
+          <Show
+            when={blocks().length > 0}
+            fallback={
+              <div
+                style={{ "font-size": "14px", color: "var(--text-weakest, #a8a29e)", "padding": "4px 22px", "cursor": "text" }}
+                onClick={() => handleCreate(null, null, 0)}
+              >
+                Start typing…
+              </div>
+            }
           >
-            + Add a note…
-          </div>
+            <BlockList
+              blocks={blocks()}
+              focusedId={focusedId()}
+              onFocus={setFocusedId}
+              onNavigate={props.onNavigate}
+              onCreate={handleCreate}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onIndent={handleIndent}
+              onUnindent={handleUnindent}
+            />
+          </Show>
+          {/* Add block at end when there are already blocks */}
+          <Show when={blocks().length > 0}>
+            <div
+              class="mt-1 py-1 px-2 text-12-regular text-text-weakest hover:text-text-weak cursor-text select-none"
+              onClick={() => {
+                const last = blocks()
+                handleCreate(last.length > 0 ? last[last.length - 1].id : null, null, 0)
+              }}
+            >
+              + Add a note…
+            </div>
+          </Show>
         </Show>
       </div>
 
-      {/* Backlinks */}
+      {/* ── Backlinks ─────────────────────────────────────────────────────── */}
       <Show when={!pageData.loading}>
         <BacklinksPanel slug={props.slug} onNavigate={props.onNavigate} />
       </Show>
