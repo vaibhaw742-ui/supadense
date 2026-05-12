@@ -529,7 +529,7 @@ function AllFilesButton() {
         variant="ghost"
         class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center"
         classList={{
-          "text-text-strong bg-surface-base-active": active(),
+          "text-text-strong": active(),
           "text-text-weak": !active(),
         }}
         onClick={() => {
