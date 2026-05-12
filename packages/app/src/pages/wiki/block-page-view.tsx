@@ -280,36 +280,6 @@ export function BlockPageView(props: Props) {
         background: "var(--background-base)",
         margin: "0 14px",
       }}>
-        {/* Formatting toolbar */}
-        <div class="flex items-center px-2 py-1" style={{ "flex-wrap": "nowrap", "justify-content": "space-between", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "overflow-x": "auto" }}>
-          {/* Headings */}
-          <ToolbarBtn title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")}>{IC.h1}</ToolbarBtn>
-          <ToolbarBtn title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")}>{IC.h2}</ToolbarBtn>
-          <ToolbarBtn title="Heading 3" active={focusedBlockType() === "heading_4"} onClick={() => applyFormat(focusedBlockType() === "heading_4" ? "paragraph" : "heading_4")}>{IC.h3}</ToolbarBtn>
-          <ToolbarDivider />
-          {/* Lists */}
-          <ToolbarBtn title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")}>{IC.bullet}</ToolbarBtn>
-          <ToolbarBtn title="Numbered list" active={focusedBlockType() === "numbered"} onClick={() => applyFormat(focusedBlockType() === "numbered" ? "paragraph" : "numbered")}>{IC.numbered}</ToolbarBtn>
-          <ToolbarBtn title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")}>{IC.todo}</ToolbarBtn>
-          <ToolbarBtn title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")}>{IC.quote}</ToolbarBtn>
-          <ToolbarDivider />
-          {/* Content blocks */}
-          <ToolbarBtn title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")}>{IC.code}</ToolbarBtn>
-          <ToolbarBtn title="Image" disabled onClick={() => {}}>{IC.image}</ToolbarBtn>
-          <ToolbarBtn title="File" disabled onClick={() => {}}>{IC.file}</ToolbarBtn>
-          <ToolbarBtn title="Video" disabled onClick={() => {}}>{IC.video}</ToolbarBtn>
-          <ToolbarBtn title="Figma" disabled onClick={() => {}}>{IC.figma}</ToolbarBtn>
-          <ToolbarBtn title="Link / Web bookmark" disabled onClick={() => {}}>{IC.globe}</ToolbarBtn>
-          <ToolbarBtn title="Table" disabled onClick={() => {}}>{IC.table}</ToolbarBtn>
-          <ToolbarBtn title="Divider" onClick={() => applyFormat("divider")}>{IC.divider}</ToolbarBtn>
-          <ToolbarDivider />
-          {/* Layout / AI */}
-          <ToolbarBtn title="AI summary" disabled onClick={() => {}}>{IC.wavy}</ToolbarBtn>
-          <ToolbarBtn title="Columns" disabled onClick={() => {}}>{IC.columns}</ToolbarBtn>
-          <ToolbarBtn title="AI assist" disabled onClick={() => {}}>{IC.sparkle}</ToolbarBtn>
-          <ToolbarBtn title="Clear formatting" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")}>{IC.clear}</ToolbarBtn>
-        </div>
-
         {/* Underline-style sub-page tabs */}
         <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
           <div style={{ display: "flex", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}>
@@ -340,6 +310,32 @@ export function BlockPageView(props: Props) {
             </For>
           </div>
         </Show>
+
+        {/* Formatting toolbar */}
+        <div class="flex items-center px-2 py-1" style={{ "flex-wrap": "nowrap", "justify-content": "space-between", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "overflow-x": "auto" }}>
+          <ToolbarBtn title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")}>{IC.h1}</ToolbarBtn>
+          <ToolbarBtn title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")}>{IC.h2}</ToolbarBtn>
+          <ToolbarBtn title="Heading 3" active={focusedBlockType() === "heading_4"} onClick={() => applyFormat(focusedBlockType() === "heading_4" ? "paragraph" : "heading_4")}>{IC.h3}</ToolbarBtn>
+          <ToolbarDivider />
+          <ToolbarBtn title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")}>{IC.bullet}</ToolbarBtn>
+          <ToolbarBtn title="Numbered list" active={focusedBlockType() === "numbered"} onClick={() => applyFormat(focusedBlockType() === "numbered" ? "paragraph" : "numbered")}>{IC.numbered}</ToolbarBtn>
+          <ToolbarBtn title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")}>{IC.todo}</ToolbarBtn>
+          <ToolbarBtn title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")}>{IC.quote}</ToolbarBtn>
+          <ToolbarDivider />
+          <ToolbarBtn title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")}>{IC.code}</ToolbarBtn>
+          <ToolbarBtn title="Image" disabled onClick={() => {}}>{IC.image}</ToolbarBtn>
+          <ToolbarBtn title="File" disabled onClick={() => {}}>{IC.file}</ToolbarBtn>
+          <ToolbarBtn title="Video" disabled onClick={() => {}}>{IC.video}</ToolbarBtn>
+          <ToolbarBtn title="Figma" disabled onClick={() => {}}>{IC.figma}</ToolbarBtn>
+          <ToolbarBtn title="Link / Web bookmark" disabled onClick={() => {}}>{IC.globe}</ToolbarBtn>
+          <ToolbarBtn title="Table" disabled onClick={() => {}}>{IC.table}</ToolbarBtn>
+          <ToolbarBtn title="Divider" onClick={() => applyFormat("divider")}>{IC.divider}</ToolbarBtn>
+          <ToolbarDivider />
+          <ToolbarBtn title="AI summary" disabled onClick={() => {}}>{IC.wavy}</ToolbarBtn>
+          <ToolbarBtn title="Columns" disabled onClick={() => {}}>{IC.columns}</ToolbarBtn>
+          <ToolbarBtn title="AI assist" disabled onClick={() => {}}>{IC.sparkle}</ToolbarBtn>
+          <ToolbarBtn title="Clear formatting" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")}>{IC.clear}</ToolbarBtn>
+        </div>
       </div>
 
       {/* ── Block editor ─────────────────────────────────────────────────── */}
