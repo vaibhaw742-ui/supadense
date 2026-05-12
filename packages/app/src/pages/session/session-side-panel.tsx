@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
-import { bgProcessAdd, bgProcessUpdate, bgProcesses } from "@/context/bg-processes"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -208,6 +208,15 @@ export function SessionSidePanel(props: {
   const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
+
+  // Consume global notes-nav requests (from bg panel notifications)
+  createEffect(() => {
+    const req = notesNavRequest()
+    if (req) {
+      setNotesNavRequest(null)
+      setGraphNav(req)
+    }
+  })
 
   const [graphNavMount, setGraphNavMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {

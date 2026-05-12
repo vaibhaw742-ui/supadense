@@ -26,7 +26,7 @@ import { decode64 } from "@/utils/base64"
 import { getAuthToken, clearAuthToken } from "@/utils/server"
 import { Persist, persisted } from "@/utils/persist"
 import { BgProcessMonitor, BgProcessContent } from "@/components/bg-process-monitor"
-import { bgProcessClear, bgProcesses, serverJobs } from "@/context/bg-processes"
+import { bgProcessClear, bgProcesses, serverJobs, setNotesNavRequest } from "@/context/bg-processes"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
 
@@ -984,12 +984,12 @@ export function SessionHeader() {
           </div>
           <BgProcessContent
             showHeader={false}
-            onNavigate={(slug, resourceId) => {
+            onNavigate={(slug, resourceId, label) => {
               setBgPanelOpen(false)
               if (resourceId) {
                 navigate(`/${params.dir}/wiki/resource/${resourceId}`)
               } else if (slug) {
-                navigate(`/${params.dir}/wiki/${slug}`)
+                setNotesNavRequest({ slug, label: label ?? slug })
               }
             }}
           />

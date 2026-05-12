@@ -46,7 +46,7 @@ function eventIcon(eventType: string): string {
 
 // ── Shared content component — used by both Popover and slide-in panel ────────
 
-export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (slug: string | null, resourceId: string | null) => void } = {}) {
+export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (slug: string | null, resourceId: string | null, label?: string) => void } = {}) {
   const [tick, setTick] = createSignal(0)
   onMount(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1_000)
@@ -226,7 +226,7 @@ export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (sl
                       transition: "background 0.1s",
                     }}
                     onClick={() => {
-                      if (isNavigable) props.onNavigate!(event.nav_slug, event.nav_resource_id)
+                      if (isNavigable) props.onNavigate!(event.nav_slug, event.nav_resource_id, event.label)
                     }}
                     onMouseEnter={(e) => { if (isNavigable) (e.currentTarget as HTMLElement).style.background = "var(--surface-raised-base, rgba(0,0,0,0.04))" }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
