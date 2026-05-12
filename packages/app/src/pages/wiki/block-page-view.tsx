@@ -223,31 +223,23 @@ export function BlockPageView(props: Props) {
   const pageIcon = () => pageData()?.category?.icon ?? "📄"
 
   return (
-    <div class="h-full flex flex-col overflow-hidden">
+    // Root scrolls — the whole page (cover + toolbar + content) scrolls together
+    <div style={{ height: "100%", "overflow-y": "auto" }}>
 
-      {/* ── Cover: emoji + title ──────────────────────────────────────────── */}
-      <div
-        class="shrink-0"
-        style={{
-          background: "var(--surface-base, #f5f5f4)",
-          padding: "28px 28px 24px",
-          "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)",
-        }}
-      >
+      {/* ── Cover: emoji + title ─────────────────────────────────────────── */}
+      <div style={{
+        background: "var(--surface-base, #f5f5f4)",
+        padding: "28px 28px 24px",
+        "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)",
+        margin: "10px 14px 0",
+        "border-radius": "8px 8px 0 0",
+      }}>
         <div style={{ "font-size": "38px", "line-height": "1", "margin-bottom": "10px", "user-select": "none" }}>
           {pageIcon()}
         </div>
-        <h1 style={{
-          margin: "0",
-          "font-size": "22px",
-          "font-weight": "700",
-          "letter-spacing": "-0.02em",
-          color: "var(--text-strong)",
-          "line-height": "1.2",
-        }}>
+        <h1 style={{ margin: "0", "font-size": "22px", "font-weight": "700", "letter-spacing": "-0.02em", color: "var(--text-strong)", "line-height": "1.2" }}>
           {props.label}
         </h1>
-        {/* Source count */}
         <Show when={pageData()}>
           {(d) => (
             <div style={{ "margin-top": "6px", "font-size": "11px", color: "var(--text-weakest, #a8a29e)" }}>
@@ -257,46 +249,47 @@ export function BlockPageView(props: Props) {
         </Show>
       </div>
 
-      {/* ── Sub-page tabs ─────────────────────────────────────────────────── */}
-      <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
-        <div
-          class="shrink-0 flex gap-1 px-4 py-2 flex-wrap"
-          style={{ "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}
-        >
-          <For each={pageData()!.category_tabs}>
-            {(tab) => (
-              <button
-                class="px-2.5 py-0.5 rounded text-11-regular border border-border-weaker-base hover:bg-surface-base-hover"
-                classList={{ "bg-surface-base font-medium border-border-base": tab.nav_slug === props.slug }}
-                onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
-              >
-                {tab.title}
-              </button>
-            )}
-          </For>
+      {/* ── Sticky toolbar (tabs + format buttons) — sticks after cover scrolls away */}
+      <div style={{
+        position: "sticky",
+        top: "0",
+        "z-index": "10",
+        background: "var(--background-base)",
+        margin: "0 14px",
+        "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)",
+      }}>
+        <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
+          <div class="flex gap-1 px-4 pt-2 pb-1 flex-wrap">
+            <For each={pageData()!.category_tabs}>
+              {(tab) => (
+                <button
+                  class="px-2.5 py-0.5 rounded text-11-regular border border-border-weaker-base hover:bg-surface-base-hover"
+                  classList={{ "bg-surface-base font-medium border-border-base": tab.nav_slug === props.slug }}
+                  onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
+                >
+                  {tab.title}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+        <div class="flex items-center gap-0.5 px-3 py-1.5" style={{ "flex-wrap": "wrap" }}>
+          <ToolbarBtn label="H1" title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")} />
+          <ToolbarBtn label="H2" title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")} />
+          <ToolbarDivider />
+          <ToolbarBtn label="•" title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")} />
+          <ToolbarBtn label="☐" title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")} />
+          <ToolbarBtn label="❝" title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")} />
+          <ToolbarDivider />
+          <ToolbarBtn label="</>" title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")} />
+          <ToolbarBtn label="—" title="Divider" onClick={() => applyFormat("divider")} />
+          <ToolbarDivider />
+          <ToolbarBtn label="Tx" title="Plain text" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")} />
         </div>
-      </Show>
-
-      {/* ── Formatting toolbar ────────────────────────────────────────────── */}
-      <div
-        class="shrink-0 flex items-center gap-0.5 px-3 py-1.5"
-        style={{ "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "flex-wrap": "wrap" }}
-      >
-        <ToolbarBtn label="H1" title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")} />
-        <ToolbarBtn label="H2" title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")} />
-        <ToolbarDivider />
-        <ToolbarBtn label="•" title="Bullet list" active={focusedBlockType() === "bullet"} onClick={() => applyFormat(focusedBlockType() === "bullet" ? "paragraph" : "bullet")} />
-        <ToolbarBtn label="☐" title="To-do" active={focusedBlockType() === "todo"} onClick={() => applyFormat(focusedBlockType() === "todo" ? "paragraph" : "todo")} />
-        <ToolbarBtn label="❝" title="Quote" active={focusedBlockType() === "quote"} onClick={() => applyFormat(focusedBlockType() === "quote" ? "paragraph" : "quote")} />
-        <ToolbarDivider />
-        <ToolbarBtn label="</>" title="Code" active={focusedBlockType() === "code"} onClick={() => applyFormat(focusedBlockType() === "code" ? "paragraph" : "code")} />
-        <ToolbarBtn label="—" title="Divider" onClick={() => applyFormat("divider")} />
-        <ToolbarDivider />
-        <ToolbarBtn label="Tx" title="Plain text" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")} />
       </div>
 
-      {/* ── Block editor ──────────────────────────────────────────────────── */}
-      <div class="flex-1 min-h-0 overflow-y-auto px-6 py-3">
+      {/* ── Block editor ─────────────────────────────────────────────────── */}
+      <div style={{ padding: "12px 28px", margin: "0 14px" }}>
         <Show when={pageData.loading}>
           <div class="text-12-regular text-text-weak py-4">Loading…</div>
         </Show>
@@ -305,7 +298,7 @@ export function BlockPageView(props: Props) {
             when={blocks().length > 0}
             fallback={
               <div
-                style={{ "font-size": "14px", color: "var(--text-weakest, #a8a29e)", "padding": "4px 22px", "cursor": "text" }}
+                style={{ "font-size": "14px", color: "var(--text-weakest, #a8a29e)", padding: "4px 4px", cursor: "text" }}
                 onClick={() => handleCreate(null, null, 0)}
               >
                 Start typing…
@@ -324,7 +317,6 @@ export function BlockPageView(props: Props) {
               onUnindent={handleUnindent}
             />
           </Show>
-          {/* Add block at end when there are already blocks */}
           <Show when={blocks().length > 0}>
             <div
               class="mt-1 py-1 px-2 text-12-regular text-text-weakest hover:text-text-weak cursor-text select-none"
@@ -339,10 +331,14 @@ export function BlockPageView(props: Props) {
         </Show>
       </div>
 
-      {/* ── Backlinks ─────────────────────────────────────────────────────── */}
+      {/* ── Backlinks ────────────────────────────────────────────────────── */}
       <Show when={!pageData.loading}>
-        <BacklinksPanel slug={props.slug} onNavigate={props.onNavigate} />
+        <div style={{ margin: "0 14px" }}>
+          <BacklinksPanel slug={props.slug} onNavigate={props.onNavigate} />
+        </div>
       </Show>
+
+      <div style={{ height: "64px" }} />
     </div>
   )
 }
