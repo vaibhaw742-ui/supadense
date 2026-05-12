@@ -44,7 +44,7 @@ function ToolbarBtn(p: { children: JSX.Element; title: string; active?: boolean;
 }
 
 function ToolbarDivider() {
-  return <div style={{ width: "1px", height: "16px", background: "var(--border-base, #e5e5e5)", margin: "0 3px", "flex-shrink": "0" }} />
+  return <div style={{ width: "1px", height: "16px", background: "var(--border-base, #e5e5e5)", "flex-shrink": "0" }} />
 }
 
 // ── Toolbar icons (18×18 SVGs) ────────────────────────────────────────────────
@@ -281,7 +281,7 @@ export function BlockPageView(props: Props) {
         margin: "0 14px",
       }}>
         {/* Formatting toolbar */}
-        <div class="flex items-center px-2 py-1" style={{ "flex-wrap": "nowrap", "gap": "1px", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "overflow-x": "auto" }}>
+        <div class="flex items-center px-2 py-1" style={{ "flex-wrap": "nowrap", "justify-content": "space-between", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)", "overflow-x": "auto" }}>
           {/* Headings */}
           <ToolbarBtn title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")}>{IC.h1}</ToolbarBtn>
           <ToolbarBtn title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")}>{IC.h2}</ToolbarBtn>
