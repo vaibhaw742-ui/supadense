@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Popover } from "@opencode-ai/ui/popover"
-import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt, activityEvents, setActivityEvents, notifiedEventIds, type ActivityEvent } from "@/context/bg-processes"
+import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt, activityEvents, setActivityEvents, notifiedEventIds, setNotifiedEventIds, type ActivityEvent } from "@/context/bg-processes"
 import { useServer } from "@/context/server"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
@@ -208,8 +208,26 @@ export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (sl
             "border-top": hasAny() ? "1px solid var(--border-weaker-base)" : "none",
             "padding-top": "4px",
           }}>
-            <div style={{ padding: "8px 16px 4px", "font-size": "11px", "font-weight": "600", color: "var(--text-weak)", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>
-              Activity
+            <div style={{ padding: "8px 16px 4px", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+              <span style={{ "font-size": "11px", "font-weight": "600", color: "var(--text-weak)", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>Activity</span>
+              <Show when={notifiedEventIds().size > 0}>
+                <button
+                  onClick={() => setNotifiedEventIds(new Set())}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    "font-size": "11px",
+                    color: "var(--text-weak)",
+                    padding: "0",
+                    "line-height": "1",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-base)" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-weak)" }}
+                >
+                  Clear all
+                </button>
+              </Show>
             </div>
             <For each={activityEvents()}>
               {(event) => {
@@ -381,6 +399,20 @@ export function BgProcessMonitor(props: { directory: Accessor<string | undefined
             height: "6px",
             "border-radius": "50%",
             background: hasActive() ? "#3b82f6" : hasError() ? "#ef4444" : "#22c55e",
+          }}
+        />
+      </Show>
+      <Show when={!hasAny() && notifiedEventIds().size > 0}>
+        <span
+          style={{
+            position: "absolute",
+            top: "6px",
+            right: "6px",
+            width: "6px",
+            height: "6px",
+            "border-radius": "50%",
+            background: "#22c55e",
+            "box-shadow": "0 0 0 1.5px rgba(34,197,94,0.25)",
           }}
         />
       </Show>

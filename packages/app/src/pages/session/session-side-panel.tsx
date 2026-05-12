@@ -269,6 +269,14 @@ export function SessionSidePanel(props: {
     }
   }
 
+  // When all event notifications are cleared (e.g. "Clear all" button), clear graph dots too
+  createEffect(() => {
+    if (notifiedEventIds().size === 0) {
+      setNotifiedNodeIds(new Set<string>())
+      nodeToEventIds.clear()
+    }
+  })
+
   // Fetch resource data when graphNav is a resource type
   type ResourceSummary = { id: string; title: string | null; url: string | null; modality: string; time_created: number }
 
