@@ -30,6 +30,22 @@ const [activityEvents, setActivityEvents] = createSignal<ActivityEvent[]>([])
 const [notifiedEventIds, setNotifiedEventIds] = createSignal<Set<string>>(new Set())
 export { notifiedEventIds, setNotifiedEventIds }
 
+// Persisted dismissed event IDs — loaded once on startup, written on "Clear all"
+const DISMISSED_KEY = "supadense_dismissed_event_ids"
+function loadDismissed(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]") as string[]) } catch { return new Set() }
+}
+function saveDismissed(ids: Set<string>) {
+  try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids])) } catch {}
+}
+export const dismissedEventIds: Set<string> = loadDismissed()
+
+export function dismissAllNotifications() {
+  notifiedEventIds().forEach((id) => dismissedEventIds.add(id))
+  saveDismissed(dismissedEventIds)
+  setNotifiedEventIds(new Set<string>())
+}
+
 // Global signal to drive inline notes-panel navigation from the bg panel
 export type NotesNavRequest =
   | { type: "page"; slug: string; label: string }

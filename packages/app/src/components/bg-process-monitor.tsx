@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Popover } from "@opencode-ai/ui/popover"
-import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt, activityEvents, setActivityEvents, notifiedEventIds, setNotifiedEventIds, type ActivityEvent } from "@/context/bg-processes"
+import { bgProcesses, bgProcessAdd, bgProcessUpdate, bgProcessClear, serverJobs, setServerJobs, serverJobSeenAt, activityEvents, setActivityEvents, notifiedEventIds, dismissAllNotifications, type ActivityEvent } from "@/context/bg-processes"
 import { useServer } from "@/context/server"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
@@ -212,7 +212,7 @@ export function BgProcessContent(props: { showHeader?: boolean; onNavigate?: (sl
               <span style={{ "font-size": "11px", "font-weight": "600", color: "var(--text-weak)", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>Activity</span>
               <Show when={notifiedEventIds().size > 0}>
                 <button
-                  onClick={() => setNotifiedEventIds(new Set())}
+                  onClick={() => dismissAllNotifications()}
                   style={{
                     background: "none",
                     border: "none",

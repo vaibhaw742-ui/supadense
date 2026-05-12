@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
-import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, activityEvents, notifiedEventIds, setNotifiedEventIds, type NotesNavRequest } from "@/context/bg-processes"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, activityEvents, notifiedEventIds, setNotifiedEventIds, dismissedEventIds, dismissAllNotifications, type NotesNavRequest } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -236,7 +236,7 @@ export function SessionSidePanel(props: {
       setNotifiedEventIds((prevEvts) => {
         const nextEvts = new Set(prevEvts)
         for (const event of events) {
-          if (seenEventIds.has(event.id)) continue
+          if (seenEventIds.has(event.id) || dismissedEventIds.has(event.id)) continue
           seenEventIds.add(event.id)
           nextEvts.add(event.id)
           let nodeId: string | null = null
@@ -271,7 +271,7 @@ export function SessionSidePanel(props: {
 
   // When all event notifications are cleared (e.g. "Clear all" button), clear graph dots too
   createEffect(() => {
-    if (notifiedEventIds().size === 0) {
+    if (notifiedEventIds().size === 0 && notifiedNodeIds().size > 0) {
       setNotifiedNodeIds(new Set<string>())
       nodeToEventIds.clear()
     }
