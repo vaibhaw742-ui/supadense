@@ -2,7 +2,7 @@
  * wiki-graph.tsx — Obsidian-style force-directed knowledge graph
  * Renders categories, subcategories, resources, and groups as an interactive SVG.
  */
-import { onMount, onCleanup } from "solid-js"
+import { onMount, onCleanup, createEffect } from "solid-js"
 import * as d3 from "d3"
 import type { GraphData, GraphNode } from "./wiki-api"
 
@@ -10,6 +10,7 @@ interface Props {
   data: GraphData
   onNavigate: (slug: string, label?: string) => void
   onNavigateResource?: (resourceId: string, label: string) => void
+  notifiedNodeIds?: () => Set<string>
 }
 
 // ── Node sizing ───────────────────────────────────────────────────────────────
@@ -65,6 +66,30 @@ function truncate(s: string, n: number): string {
 export function WikiGraph(props: Props) {
   let container!: HTMLDivElement
   let fitFn: (() => void) | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let nodeSelRef: d3.Selection<SVGGElement, any, SVGGElement, unknown> | null = null
+
+  const updateDots = () => {
+    if (!nodeSelRef) return
+    nodeSelRef.selectAll(".notif-dot").remove()
+    const ids = props.notifiedNodeIds?.() ?? new Set<string>()
+    if (ids.size === 0) return
+    nodeSelRef.filter((d: GraphNode) => ids.has(d.id))
+      .append("circle")
+      .attr("class", "notif-dot")
+      .attr("r", 3.5)
+      .attr("cx", (d: GraphNode) => nodeRadius(d.type) - 1)
+      .attr("cy", (d: GraphNode) => -(nodeRadius(d.type) - 1))
+      .attr("fill", "#22c55e")
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 1.5)
+      .attr("pointer-events", "none")
+  }
+
+  createEffect(() => {
+    props.notifiedNodeIds?.() // track reactively
+    updateDots()
+  })
 
   onMount(() => {
     const { nodes: rawNodes, edges: rawEdges } = props.data
@@ -280,6 +305,10 @@ export function WikiGraph(props: Props) {
           if (resourceId) props.onNavigateResource(resourceId, d.label)
         }
       })
+
+    nodeSelRef = nodeSel
+    // Draw initial notification dots after setup
+    updateDots()
 
     // ── Tick ──────────────────────────────────────────────────────────────────
     sim.on("tick", () => {

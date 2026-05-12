@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
-import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, type NotesNavRequest } from "@/context/bg-processes"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, activityEvents, type NotesNavRequest } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -219,6 +219,35 @@ export function SessionSidePanel(props: {
       setGraphNav(req)
     }
   })
+
+  // Notification dots: track which graph node IDs have new activity
+  const [notifiedNodeIds, setNotifiedNodeIds] = createSignal<Set<string>>(new Set())
+  const seenEventIds = new Set<string>()
+
+  createEffect(() => {
+    const events = activityEvents()
+    const data = graphData()
+    if (!events.length) return
+    setNotifiedNodeIds((prev) => {
+      const next = new Set(prev)
+      for (const event of events) {
+        if (seenEventIds.has(event.id)) continue
+        seenEventIds.add(event.id)
+        if (event.nav_resource_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const node = data?.nodes.find((n) => n.type === "resource" && (n as any).resource_id === event.nav_resource_id)
+          next.add(node ? node.id : `res_${event.nav_resource_id}`)
+        } else if (event.nav_slug) {
+          const node = data?.nodes.find((n) => n.slug === event.nav_slug)
+          if (node) next.add(node.id)
+        }
+      }
+      return next
+    })
+  })
+
+  const clearNotif = (nodeId: string) =>
+    setNotifiedNodeIds((prev) => { const s = new Set(prev); s.delete(nodeId); return s })
 
   // Fetch resource data when graphNav is a resource type
   type ResourceSummary = { id: string; title: string | null; url: string | null; modality: string; time_created: number }
@@ -676,8 +705,16 @@ export function SessionSidePanel(props: {
                         <Suspense>
                           <WikiGraph
                             data={data()}
-                            onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label: label ?? slug })}
-                            onNavigateResource={(resourceId, label) => setGraphNav({ type: "resource", resourceId, label })}
+                            notifiedNodeIds={notifiedNodeIds}
+                            onNavigate={(slug, label) => {
+                              const node = graphData()?.nodes.find((n) => n.slug === slug)
+                              if (node) clearNotif(node.id)
+                              setGraphNav({ type: "page", slug, label: label ?? slug })
+                            }}
+                            onNavigateResource={(resourceId, label) => {
+                              clearNotif(`res_${resourceId}`)
+                              setGraphNav({ type: "resource", resourceId, label })
+                            }}
                           />
                         </Suspense>
                       )}
