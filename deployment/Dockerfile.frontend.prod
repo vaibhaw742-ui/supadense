@@ -53,7 +53,7 @@ COPY packages/web/ packages/web/
 # Remove SSR-only routes — not needed for static docs serving
 RUN rm -f packages/web/src/pages/\[...slug\].md.ts packages/web/src/pages/s/\[id\].astro
 
-RUN SST_STAGE=production cd packages/web && bun astro build --config astro.config.docker.mjs
+RUN NODE_OPTIONS=--max-old-space-size=3072 SST_STAGE=production cd packages/web && bun astro build --config astro.config.docker.mjs
 
 # ── Serve both with nginx ─────────────────────────────────────────────────────
 FROM nginx:alpine
