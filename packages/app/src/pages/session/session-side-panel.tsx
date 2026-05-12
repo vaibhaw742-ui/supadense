@@ -226,9 +226,13 @@ export function SessionSidePanel(props: {
     async (resourceId): Promise<WikiResourceData | null> => {
       try {
         const token = getAuthToken()
+        const directory = decode64(params.dir) ?? ""
         const url = `${wikiBase()}/wiki/resource/${resourceId}`
         const res = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: {
+            "x-opencode-directory": directory,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         })
         if (!res.ok) {
           console.error("[resource viewer] fetch failed", url, res.status, await res.text().catch(() => ""))
