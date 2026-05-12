@@ -249,31 +249,16 @@ export function BlockPageView(props: Props) {
         </Show>
       </div>
 
-      {/* ── Sticky toolbar (tabs + format buttons) — sticks after cover scrolls away */}
+      {/* ── Sticky header: format toolbar + underline tabs — sticks after cover scrolls away */}
       <div style={{
         position: "sticky",
         top: "0",
         "z-index": "10",
         background: "var(--background-base)",
         margin: "0 14px",
-        "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)",
       }}>
-        <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
-          <div class="flex gap-1 px-4 pt-2 pb-1 flex-wrap">
-            <For each={pageData()!.category_tabs}>
-              {(tab) => (
-                <button
-                  class="px-2.5 py-0.5 rounded text-11-regular border border-border-weaker-base hover:bg-surface-base-hover"
-                  classList={{ "bg-surface-base font-medium border-border-base": tab.nav_slug === props.slug }}
-                  onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
-                >
-                  {tab.title}
-                </button>
-              )}
-            </For>
-          </div>
-        </Show>
-        <div class="flex items-center gap-0.5 px-3 py-1.5" style={{ "flex-wrap": "wrap" }}>
+        {/* Formatting toolbar */}
+        <div class="flex items-center gap-0.5 px-3 py-1.5" style={{ "flex-wrap": "wrap", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}>
           <ToolbarBtn label="H1" title="Heading 1" active={focusedBlockType() === "heading_2"} onClick={() => applyFormat(focusedBlockType() === "heading_2" ? "paragraph" : "heading_2")} />
           <ToolbarBtn label="H2" title="Heading 2" active={focusedBlockType() === "heading_3"} onClick={() => applyFormat(focusedBlockType() === "heading_3" ? "paragraph" : "heading_3")} />
           <ToolbarDivider />
@@ -286,6 +271,37 @@ export function BlockPageView(props: Props) {
           <ToolbarDivider />
           <ToolbarBtn label="Tx" title="Plain text" active={focusedBlockType() === "paragraph"} onClick={() => applyFormat("paragraph")} />
         </div>
+
+        {/* Underline-style sub-page tabs */}
+        <Show when={pageData() && (pageData()!.category_tabs?.length ?? 0) > 1}>
+          <div style={{ display: "flex", "border-bottom": "1px solid var(--border-weaker-base, #e7e5e4)" }}>
+            <For each={pageData()!.category_tabs}>
+              {(tab) => {
+                const isActive = () => tab.nav_slug === props.slug
+                return (
+                  <button
+                    onClick={() => props.onNavigate(tab.nav_slug, tab.title)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "8px 16px",
+                      "font-size": "13px",
+                      "font-weight": isActive() ? "600" : "400",
+                      color: isActive() ? "var(--text-strong)" : "var(--text-weak)",
+                      "border-bottom": isActive() ? "2px solid var(--text-strong)" : "2px solid transparent",
+                      "margin-bottom": "-1px",
+                      transition: "color 0.15s",
+                      "white-space": "nowrap",
+                    }}
+                  >
+                    {tab.title}
+                  </button>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
       </div>
 
       {/* ── Block editor ─────────────────────────────────────────────────── */}
