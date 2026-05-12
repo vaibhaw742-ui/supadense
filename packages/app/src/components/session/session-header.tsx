@@ -987,9 +987,9 @@ export function SessionHeader() {
             onNavigate={(slug, resourceId, label) => {
               setBgPanelOpen(false)
               if (resourceId) {
-                navigate(`/${params.dir}/wiki/resource/${resourceId}`)
+                setNotesNavRequest({ type: "resource", resourceId, label: label ?? resourceId })
               } else if (slug) {
-                setNotesNavRequest({ slug, label: label ?? slug })
+                setNotesNavRequest({ type: "page", slug, label: label ?? slug })
               }
             }}
           />

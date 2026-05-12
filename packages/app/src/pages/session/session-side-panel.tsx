@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, Suspense, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
-import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest } from "@/context/bg-processes"
+import { bgProcessAdd, bgProcessUpdate, bgProcesses, notesNavRequest, setNotesNavRequest, type NotesNavRequest } from "@/context/bg-processes"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -34,6 +34,8 @@ import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 import { OnboardingWizard } from "@/pages/wiki/wiki-home"
 import { BlockPageView } from "@/pages/wiki/block-page-view"
+import { renderMarkdown } from "@/pages/wiki/markdown"
+import type { WikiResourceData } from "@/pages/wiki/wiki-api"
 import "@/pages/wiki/wiki.css"
 type GraphData = { nodes: { id: string; type: "category" | "subcategory" | "resource" | "group"; label: string; color?: string; slug?: string; category_slug?: string; url?: string }[]; edges: { source: string; target: string }[] }
 
@@ -205,7 +207,7 @@ export function SessionSidePanel(props: {
     onCleanup(() => window.removeEventListener("kb:add-resource-clicked", onAddResource))
   })
 
-  const [graphNav, setGraphNav] = createSignal<{ slug: string; label: string } | null>(null)
+  const [graphNav, setGraphNav] = createSignal<NotesNavRequest | null>(null)
 
   createEffect(() => { if (!graphMode()) setGraphNav(null) })
 
@@ -217,6 +219,21 @@ export function SessionSidePanel(props: {
       setGraphNav(req)
     }
   })
+
+  // Fetch resource data when graphNav is a resource type
+  const [resourceData] = createResource(
+    () => graphNav()?.type === "resource" ? (graphNav() as { type: "resource"; resourceId: string }).resourceId : null,
+    async (resourceId): Promise<WikiResourceData | null> => {
+      try {
+        const token = getAuthToken()
+        const res = await fetch(`${wikiBase()}/wiki/resource/${resourceId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) return null
+        return res.json() as Promise<WikiResourceData>
+      } catch { return null }
+    }
+  )
 
   const [graphNavMount, setGraphNavMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {
@@ -392,7 +409,15 @@ export function SessionSidePanel(props: {
                 <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
                   Home
                 </button>
-                <Show when={graphNav()}>
+                <Show when={graphNav()?.type === "resource"}>
+                  <>
+                    <span class="text-text-weak">›</span>
+                    <span class="text-text-link" style={{ cursor: "default" }}>Resources</span>
+                    <span class="text-text-weak">›</span>
+                    <span class="text-text-base">{graphNav()!.label}</span>
+                  </>
+                </Show>
+                <Show when={graphNav()?.type === "page"}>
                   <>
                     <span class="text-text-weak">›</span>
                     <span class="text-text-base">{graphNav()!.label}</span>
@@ -633,7 +658,8 @@ export function SessionSidePanel(props: {
                         <Suspense>
                           <WikiGraph
                             data={data()}
-                            onNavigate={(slug, label) => setGraphNav({ slug, label: label ?? slug })}
+                            onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label: label ?? slug })}
+                            onNavigateResource={(resourceId, label) => setGraphNav({ type: "resource", resourceId, label })}
                           />
                         </Suspense>
                       )}
@@ -644,12 +670,52 @@ export function SessionSidePanel(props: {
                   </Show>
                 }
               >
-                {/* Block-based page editor */}
-                <BlockPageView
-                  slug={graphNav()!.slug}
-                  label={graphNav()!.label}
-                  onNavigate={(slug, label) => setGraphNav({ slug, label })}
-                />
+                <Show
+                  when={graphNav()?.type === "resource"}
+                  fallback={
+                    <BlockPageView
+                      slug={(graphNav() as { type: "page"; slug: string; label: string })?.slug ?? ""}
+                      label={graphNav()!.label}
+                      onNavigate={(slug, label) => setGraphNav({ type: "page", slug, label })}
+                    />
+                  }
+                >
+                  {/* Inline resource viewer */}
+                  <div class="size-full overflow-y-auto px-6 py-4" style={{ "font-size": "14px", "line-height": "1.7" }}>
+                    <Show when={resourceData()} fallback={
+                      <div class="text-text-weak text-12-regular" style={{ "padding-top": "2rem", "text-align": "center" }}>Loading…</div>
+                    }>
+                      {(d) => (
+                        <>
+                          <div style={{ "margin-bottom": "1rem" }}>
+                            <h1 style={{ "font-size": "18px", "font-weight": "600", "margin-bottom": "0.25rem", color: "var(--text-strong)" }}>
+                              {d().title || d().url}
+                            </h1>
+                            <div class="flex items-center gap-3 text-12-regular text-text-weak" style={{ "flex-wrap": "wrap" }}>
+                              <Show when={d().url}>
+                                <a href={d().url!} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)", "text-decoration": "none" }}>
+                                  {d().url} ↗
+                                </a>
+                              </Show>
+                              <Show when={d().modality}>
+                                <span>{d().modality}</span>
+                              </Show>
+                              <Show when={d().author}>
+                                <span>{d().author}</span>
+                              </Show>
+                            </div>
+                          </div>
+                          <Show when={d().content}>
+                            <div class="wk-prose" innerHTML={renderMarkdown(d().content!)} />
+                          </Show>
+                          <Show when={!d().content}>
+                            <div class="text-text-weak text-13-regular" style={{ "font-style": "italic" }}>No content available for this resource.</div>
+                          </Show>
+                        </>
+                      )}
+                    </Show>
+                  </div>
+                </Show>
               </Show>
             </div>
           </div>

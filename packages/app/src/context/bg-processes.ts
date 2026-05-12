@@ -27,7 +27,10 @@ const [bgProcesses, setBgProcesses] = createSignal<BgProcess[]>([])
 const [serverJobs, setServerJobs] = createSignal<ServerJob[]>([])
 const [activityEvents, setActivityEvents] = createSignal<ActivityEvent[]>([])
 // Global signal to drive inline notes-panel navigation from the bg panel
-const [notesNavRequest, setNotesNavRequest] = createSignal<{ slug: string; label: string } | null>(null)
+export type NotesNavRequest =
+  | { type: "page"; slug: string; label: string }
+  | { type: "resource"; resourceId: string; label: string }
+const [notesNavRequest, setNotesNavRequest] = createSignal<NotesNavRequest | null>(null)
 // First-seen timestamps for ETA calculation (keyed by sessionID)
 export const serverJobSeenAt = new Map<string, number>()
 let _counter = 0
