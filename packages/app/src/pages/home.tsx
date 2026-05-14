@@ -207,6 +207,15 @@ export default function Home() {
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
           <KbNotificationBell directory={() => undefined} />
+          <Tooltip placement="bottom" value="Experiential Learning">
+            <IconButton
+              icon="new-session"
+              variant="ghost"
+              size="large"
+              onClick={() => navigate("/projects")}
+              aria-label="Experiential Learning Projects"
+            />
+          </Tooltip>
           <Tooltip placement="bottom" value="Settings">
             <IconButton
               icon="settings-gear"

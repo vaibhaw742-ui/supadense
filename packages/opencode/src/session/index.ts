@@ -81,6 +81,8 @@ export namespace Session {
         compacting: row.time_compacting ?? undefined,
         archived: row.time_archived ?? undefined,
       },
+      elProjectId: row.el_project_id ?? undefined,
+      sessionType: (row.session_type as "workspace" | "project" | null) ?? undefined,
     }
   }
 
@@ -101,6 +103,8 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      el_project_id: info.elProjectId ?? null,
+      session_type: info.sessionType ?? "workspace",
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -156,6 +160,8 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      elProjectId: z.string().optional(),
+      sessionType: z.enum(["workspace", "project"]).optional(),
     })
     .meta({
       ref: "Session",
@@ -375,6 +381,8 @@ export namespace Session {
         permission?: Permission.Ruleset
       }) {
         const ctx = yield* InstanceState.context
+        // Auto-detect EL project sessions from provisioned directory path
+        const elMatch = input.directory.match(/\/el-projects\/([^/]+)$/)
         const result: Info = {
           id: SessionID.descending(input.id),
           slug: Slug.create(),
@@ -389,6 +397,7 @@ export namespace Session {
             created: Date.now(),
             updated: Date.now(),
           },
+          ...(elMatch ? { elProjectId: elMatch[1], sessionType: "project" as const } : {}),
         }
         log.info("created", result)
 

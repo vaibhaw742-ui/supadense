@@ -24,6 +24,7 @@ import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { KBRoutes } from "./routes/kb"
 import { KBGitRoutes } from "./routes/kb-git"
+import { ELRoutes } from "./routes/el"
 import { initProjectors } from "./projectors"
 import { ModelsDev } from "../provider/models"
 import { Provider } from "../provider/provider"
@@ -331,6 +332,7 @@ export namespace Server {
       })
       .route("/kb", KBRoutes())
       .route("/kb/git", KBGitRoutes())
+      .route("/el", ELRoutes())
       // Intercept GET /provider and GET /provider/auth ONLY when no directory is
       // specified — that is, global-context calls from bootstrapGlobal or the
       // connect-provider dialog that don't have a KB open yet.

@@ -11,6 +11,11 @@ import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
 import { Resource, MediaAsset } from "../../learning/resource"
+import { Database } from "../../storage/db"
+import { eq } from "../../storage/db"
+import { LearningKbWorkspaceTable } from "../../learning/schema.sql"
+import { ElProjectResourceTable } from "../../experiential/schema.sql"
+import { ulid } from "ulid"
 
 const MAX_CONTENT_CHARS = 40_000
 
@@ -479,6 +484,31 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
       Resource.update(resource.id, { raw_content_path: `raw/${filename}` })
     }
     Resource.setStatus(resource.id, "processing", "awaiting_analysis")
+
+    // If this is a virtual EL workspace (project_id starts with "el-"), link the
+    // resource to the EL project so it appears in the project's resource list.
+    try {
+      const wsRow = Database.use((db) =>
+        db.select({ project_id: LearningKbWorkspaceTable.project_id })
+          .from(LearningKbWorkspaceTable)
+          .where(eq(LearningKbWorkspaceTable.id, workspace_id))
+          .get(),
+      )
+      if (wsRow?.project_id?.startsWith("el-")) {
+        const projectId = wsRow.project_id.slice(3)
+        const now = Date.now()
+        Database.use((db) =>
+          db.insert(ElProjectResourceTable).values({
+            id: ulid(),
+            project_id: projectId,
+            resource_id: resource.id,
+            role: "supplementary",
+            time_created: now,
+            time_updated: now,
+          }).onConflictDoNothing().run(),
+        )
+      }
+    } catch { /* non-fatal: join row is best-effort */ }
 
     Workspace.logEvent(workspace_id, {
       event_type: "memorize",

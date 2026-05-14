@@ -48,6 +48,9 @@ import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const AdminRoute = lazy(() => import("@/pages/admin"))
+const ProjectsPanel = lazy(() => import("@/pages/projects/projects-panel"))
+const ProjectView = lazy(() => import("@/pages/projects/project-view"))
+const ProjectGraph = lazy(() => import("@/pages/projects/project-graph"))
 const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
@@ -143,15 +146,16 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const location = useLocation()
   const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
   const isFiles = () => /\/files(?:\/|$)/.test(location.pathname)
-  const isHome = () => location.pathname === "/"
-  const isStandalone = () => isWiki() || isFiles() || isHome()
+  const isHome = () => location.pathname === "/" || location.pathname === "/workspaces"
+  const isProjects = () => /\/projects(?:\/|$)/.test(location.pathname)
+  const isStandalone = () => isWiki() || isFiles() || isHome() || isProjects()
 
   return (
     <Show
       when={!isStandalone()}
       fallback={
         <Show
-          when={isHome()}
+          when={isHome() || isProjects()}
           fallback={
             <Suspense fallback={<Loading />}>{props.children}</Suspense>
           }
@@ -340,6 +344,9 @@ export function AppInterface(props: {
               >
                 <Route path="/" component={HomeRoute} />
                 <Route path="/workspaces" component={HomeRoute} />
+                <Route path="/projects" component={ProjectsPanel} />
+                <Route path="/projects/:id" component={ProjectView} />
+                <Route path="/projects/:id/graph" component={ProjectGraph} />
                 <Route path="/admin" component={AdminRoute} />
                 <Route path="/:dir" component={DirectoryLayout}>
                   <Route path="/" component={SessionIndexRoute} />
