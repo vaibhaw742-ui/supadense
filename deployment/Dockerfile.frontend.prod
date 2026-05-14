@@ -79,6 +79,12 @@ RUN printf 'server {\n\
         try_files /index.html =404;\n\
     }\n\
 \n\
+    # Sign-in page\n\
+    location = /signin {\n\
+        root /usr/share/nginx/html/lander;\n\
+        try_files /signin.html =404;\n\
+    }\n\
+\n\
     # Lander assets (SVGs, etc)\n\
     location /lander/ {\n\
         root /usr/share/nginx/html;\n\
