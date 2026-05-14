@@ -65,14 +65,24 @@ COPY --from=builder /app/packages/app/dist /usr/share/nginx/html
 # must be served from /docs, so we copy dist/ into html/docs/
 COPY --from=builder /app/packages/web/dist /usr/share/nginx/html/docs
 
+# Static marketing lander — no build step, served directly at /
+COPY packages/web/lander /usr/share/nginx/html/lander
+
 RUN printf 'server {\n\
     listen 3000;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
 \n\
-    # Root: redirect to marketing lander\n\
+    # Root: serve static marketing lander\n\
     location = / {\n\
-        return 302 /docs;\n\
+        root /usr/share/nginx/html/lander;\n\
+        try_files /index.html =404;\n\
+    }\n\
+\n\
+    # Lander assets (SVGs, etc)\n\
+    location /lander/ {\n\
+        root /usr/share/nginx/html;\n\
+        try_files $uri =404;\n\
     }\n\
 \n\
     # Docs: serve index.html directly to avoid trailing-slash redirect\n\

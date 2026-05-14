@@ -1,0 +1,24 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <title>Supadense mark</title>
+  
+  
+  <rect x="2" y="2" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="10" y="2" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="18" y="2" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="26" y="2" width="4" height="6" fill="#f4ede0"></rect>
+
+  <rect x="2" y="10" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="10" y="10" width="6" height="6" fill="#e4a64a"></rect>
+  <rect x="18" y="10" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="26" y="10" width="4" height="6" fill="#f4ede0"></rect>
+
+  <rect x="2" y="18" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="10" y="18" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="18" y="18" width="6" height="6" fill="#f4ede0"></rect>
+  <rect x="26" y="18" width="4" height="6" fill="#f4ede0"></rect>
+
+  <rect x="2" y="26" width="6" height="4" fill="#f4ede0"></rect>
+  <rect x="10" y="26" width="6" height="4" fill="#f4ede0"></rect>
+  <rect x="18" y="26" width="6" height="4" fill="#f4ede0"></rect>
+  <rect x="26" y="26" width="4" height="4" fill="#f4ede0"></rect>
+</svg>

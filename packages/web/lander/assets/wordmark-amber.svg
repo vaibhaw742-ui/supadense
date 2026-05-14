@@ -1,0 +1,22 @@
+<svg width="220" height="32" viewBox="0 0 220 32" xmlns="http://www.w3.org/2000/svg" font-family="Geist, sans-serif">
+  <title>Supadense wordmark — amber accent</title>
+  <g>
+    <rect x="0" y="0" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="8" y="0" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="16" y="0" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="24" y="0" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="0" y="8" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="8" y="8" width="6" height="6" fill="#131010"></rect>
+    <rect x="16" y="8" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="24" y="8" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="0" y="16" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="8" y="16" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="16" y="16" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="24" y="16" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="0" y="24" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="8" y="24" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="16" y="24" width="6" height="6" fill="#e4a64a"></rect>
+    <rect x="24" y="24" width="6" height="6" fill="#e4a64a"></rect>
+  </g>
+  <text x="44" y="22" font-size="22" font-weight="500" fill="#e4a64a" letter-spacing="-0.6">supadense</text>
+</svg>
