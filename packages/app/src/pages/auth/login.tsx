@@ -71,7 +71,7 @@ export default function LoginPage(props: Props) {
         return
       }
       setAuthToken(data.token)
-      window.history.pushState({}, "", "/")
+      window.history.pushState({}, "", "/workspaces")
       props.onLogin()
     } catch {
       setError("Could not connect to server")

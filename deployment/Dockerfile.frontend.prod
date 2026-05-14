@@ -85,8 +85,8 @@ RUN printf 'server {\n\
         try_files /signin.html =404;\n\
     }\n\
 \n\
-    # Platform entry point after login — serves SPA, SPA router handles from there\n\
-    location = /home {\n\
+    # Workspaces — stable SPA entry point after login\n\
+    location = /workspaces {\n\
         root /usr/share/nginx/html;\n\
         try_files /index.html =404;\n\
     }\n\
