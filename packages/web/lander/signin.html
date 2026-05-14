@@ -356,6 +356,16 @@ body[data-state="sent"] .waitlist-state { display: none; }
               <label for="wl-email">personal email</label>
               <input type="email" id="wl-email" name="email" required placeholder="you@personal.com" autocomplete="email" />
             </div>
+            <div class="field">
+              <label for="wl-exp">years of experience</label>
+              <select id="wl-exp" name="years_of_experience" required style="padding:14px 16px;background:var(--sd-ground-100);border:1px solid var(--sd-ground-300);color:var(--sd-ink-100);font-size:15px;border-radius:var(--sd-radius-sm);outline:none;font-family:var(--sd-font-sans);appearance:none;-webkit-appearance:none;cursor:pointer;">
+                <option value="" disabled selected style="color:var(--sd-ink-400);">select experience</option>
+                <option value="<2">&lt; 2 years</option>
+                <option value="2-5">2 – 5 years</option>
+                <option value="5-10">5 – 10 years</option>
+                <option value="10+">10+ years</option>
+              </select>
+            </div>
             <div id="wl-error" style="display:none;font-size:12px;color:#d97757;padding:10px 14px;background:rgba(217,119,87,0.08);border:1px solid rgba(217,119,87,0.25);border-radius:4px;margin-bottom:4px;"></div>
             <button type="submit" id="wl-btn">Join waitlist →</button>
           </form>
@@ -523,6 +533,7 @@ body[data-state="sent"] .waitlist-state { display: none; }
     const btn = document.getElementById('wl-btn')
     const errEl = document.getElementById('wl-error')
     const email = document.getElementById('wl-email').value
+    const exp = document.getElementById('wl-exp').value
 
     btn.disabled = true
     btn.textContent = 'Submitting…'
@@ -532,7 +543,7 @@ body[data-state="sent"] .waitlist-state { display: none; }
       const res = await fetch('/api/supa-auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, years_of_experience: exp })
       })
       const data = await res.json()
       if (!res.ok) {

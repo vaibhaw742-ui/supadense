@@ -200,10 +200,17 @@ section.shell { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
 .cta-band h2 { font-size: 56px; line-height: 0.98; letter-spacing: -0.03em; font-weight: 500; margin: 0 0 16px; position: relative; }
 .cta-band h2 em { font-family: var(--sd-font-serif); font-style: italic; color: var(--sd-amber-300); font-weight: 400; }
 .cta-band p { color: var(--sd-ink-200); font-size: 17px; margin: 0 0 36px; max-width: 58ch; line-height: 1.5; position: relative; }
-.waitlist-form { display: flex; gap: 10px; max-width: 520px; position: relative; }
-.waitlist-form input { flex: 1; padding: 14px 16px; background: var(--sd-ground-000); border: 1px solid var(--sd-ground-300); color: var(--sd-ink-100); font-size: 14px; border-radius: var(--sd-radius-sm); outline: none; }
+.waitlist-form { display: flex; flex-direction: column; gap: 12px; max-width: 420px; position: relative; }
+.waitlist-form input,
+.waitlist-form select { width: 100%; padding: 14px 16px; background: var(--sd-ground-000); border: 1px solid var(--sd-ground-300); color: var(--sd-ink-100); font-size: 14px; border-radius: var(--sd-radius-sm); outline: none; font-family: var(--sd-font-sans); appearance: none; -webkit-appearance: none; cursor: pointer; }
+.waitlist-form select option { background: var(--sd-ground-100); }
 .waitlist-form input::placeholder { color: var(--sd-ink-400); }
-.waitlist-form input:focus { border-color: var(--sd-amber-300); }
+.waitlist-form input:focus, .waitlist-form select:focus { border-color: var(--sd-amber-300); }
+.waitlist-form .wl-error { font-size: 12px; color: #d97757; padding: 10px 14px; background: rgba(217,119,87,0.08); border: 1px solid rgba(217,119,87,0.25); border-radius: 4px; }
+.waitlist-success { max-width: 420px; position: relative; }
+.waitlist-success .icon { width: 48px; height: 48px; border: 1px solid var(--sd-amber-400); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--sd-amber-300); margin-bottom: 20px; background: rgba(228,166,74,0.06); }
+.waitlist-success h3 { font-size: 26px; font-weight: 500; letter-spacing: -0.02em; margin: 0 0 10px; }
+.waitlist-success p { color: var(--sd-ink-300); font-size: 15px; line-height: 1.5; margin: 0; }
 .cta-band .stamp { margin-top: 28px; font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--sd-ink-400); display: flex; gap: 20px; flex-wrap: wrap; position: relative; }
 .cta-band .stamp span { color: var(--sd-ink-200); }
 
@@ -523,14 +530,31 @@ footer .links a:hover { color: var(--sd-amber-300); }
         <div class="sd-eyebrow">waitlist · open</div>
         <h2 style="margin-top:16px;">Build your engineering brain<br>with <em>us.</em></h2>
         <p>Join engineers who are compounding their knowledge, not just consuming it. Private alpha — limited seats.</p>
-        <form class="waitlist-form" onsubmit="event.preventDefault();this.querySelector('button').textContent='✓ on the list';this.querySelector('button').disabled=true;">
-          <input type="email" required placeholder="you@where-you-build.com" />
-          <button type="submit" class="sd-btn sd-btn--primary sd-btn--lg">join →</button>
-        </form>
-        <div class="stamp">
-          <span>0 sales emails ever.</span>
-          <span>1 update / month, max.</span>
-          <span>Unsubscribe with one click.</span>
+        <div id="wl-form-wrap">
+          <form class="waitlist-form" id="lander-wl-form">
+            <input type="email" id="lander-wl-email" required placeholder="you@where-you-build.com" autocomplete="email" />
+            <select id="lander-wl-exp" required>
+              <option value="" disabled selected>years of experience</option>
+              <option value="<2">&lt; 2 years</option>
+              <option value="2-5">2 – 5 years</option>
+              <option value="5-10">5 – 10 years</option>
+              <option value="10+">10+ years</option>
+            </select>
+            <div id="lander-wl-error" class="wl-error" style="display:none;"></div>
+            <button type="submit" id="lander-wl-btn" class="sd-btn sd-btn--primary sd-btn--lg">join →</button>
+          </form>
+          <div class="stamp">
+            <span>0 sales emails ever.</span>
+            <span>1 update / month, max.</span>
+            <span>Unsubscribe with one click.</span>
+          </div>
+        </div>
+        <div id="wl-success-wrap" class="waitlist-success" style="display:none;">
+          <div class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h3>You're on the list.</h3>
+          <p>We'll send your invite the moment a seat opens. Until then, keep building.</p>
         </div>
       </div>
     </section>
@@ -562,6 +586,41 @@ footer .links a:hover { color: var(--sd-amber-300); }
       pill.classList.add("act");
     });
   });
+
+  document.getElementById('lander-wl-form').addEventListener('submit', async function(e) {
+    e.preventDefault()
+    const btn = document.getElementById('lander-wl-btn')
+    const errEl = document.getElementById('lander-wl-error')
+    const email = document.getElementById('lander-wl-email').value
+    const exp = document.getElementById('lander-wl-exp').value
+
+    btn.disabled = true
+    btn.textContent = 'Submitting…'
+    errEl.style.display = 'none'
+
+    try {
+      const res = await fetch('/api/supa-auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, years_of_experience: exp })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Something went wrong. Try again.'
+        errEl.style.display = 'block'
+        btn.disabled = false
+        btn.textContent = 'join →'
+        return
+      }
+      document.getElementById('wl-form-wrap').style.display = 'none'
+      document.getElementById('wl-success-wrap').style.display = 'block'
+    } catch {
+      errEl.textContent = 'Could not connect. Try again.'
+      errEl.style.display = 'block'
+      btn.disabled = false
+      btn.textContent = 'join →'
+    }
+  })
 </script>
 </body>
 </html>
