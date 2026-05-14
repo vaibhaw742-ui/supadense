@@ -67,7 +67,7 @@ export default function Home() {
   })()
 
   const handleLogout = getAuthToken()
-    ? () => { clearAuthToken(); location.reload() }
+    ? () => { clearAuthToken(); location.href = '/signin' }
     : undefined
 
   // KB creation state
