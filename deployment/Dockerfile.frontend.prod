@@ -85,6 +85,12 @@ RUN printf 'server {\n\
         try_files /signin.html =404;\n\
     }\n\
 \n\
+    # Platform entry point after login — serves SPA, SPA router handles from there\n\
+    location = /home {\n\
+        root /usr/share/nginx/html;\n\
+        try_files /index.html =404;\n\
+    }\n\
+\n\
     # Lander assets (SVGs, etc)\n\
     location /lander/ {\n\
         root /usr/share/nginx/html;\n\

@@ -323,7 +323,7 @@ body[data-state="sent"] .waitlist-state { display: none; }
           <h1>Sign in to<br>your <em>second memory.</em></h1>
           <p class="sub">Your library, your graph, your queue — right where you left them.</p>
 
-          <form class="auth-form" onsubmit="event.preventDefault(); window.location.href='/app';">
+          <form class="auth-form" id="signin-form">
             <div class="field">
               <label for="signin-email">email</label>
               <input type="email" id="signin-email" name="email" required placeholder="you@personal.com" autocomplete="email" />
@@ -335,7 +335,8 @@ body[data-state="sent"] .waitlist-state { display: none; }
               </label>
               <input type="password" id="signin-pw" name="password" required placeholder="••••••••••" autocomplete="current-password" />
             </div>
-            <button type="submit">Sign in →</button>
+            <div id="signin-error" style="display:none;font-size:12px;color:#d97757;padding:10px 14px;background:rgba(217,119,87,0.08);border:1px solid rgba(217,119,87,0.25);border-radius:4px;margin-bottom:4px;"></div>
+            <button type="submit" id="signin-btn">Sign in →</button>
           </form>
 
           <div class="footnote">
@@ -350,12 +351,13 @@ body[data-state="sent"] .waitlist-state { display: none; }
           <h1>Join the<br><em>waitlist.</em></h1>
           <p class="sub">Drop your email — we'll send an invite the moment a seat opens.</p>
 
-          <form class="auth-form" onsubmit="event.preventDefault(); document.body.setAttribute('data-state','sent'); document.querySelector('.recipient .email').textContent = this.email.value || 'you@personal.com';">
+          <form class="auth-form" id="waitlist-form">
             <div class="field">
               <label for="wl-email">personal email</label>
               <input type="email" id="wl-email" name="email" required placeholder="you@personal.com" autocomplete="email" />
             </div>
-            <button type="submit">Join waitlist →</button>
+            <div id="wl-error" style="display:none;font-size:12px;color:#d97757;padding:10px 14px;background:rgba(217,119,87,0.08);border:1px solid rgba(217,119,87,0.25);border-radius:4px;margin-bottom:4px;"></div>
+            <button type="submit" id="wl-btn">Join waitlist →</button>
           </form>
 
           <div class="footnote">
@@ -477,5 +479,77 @@ body[data-state="sent"] .waitlist-state { display: none; }
     </div>
   </div>
 
+<script>
+  document.getElementById('signin-form').addEventListener('submit', async function(e) {
+    e.preventDefault()
+    const btn = document.getElementById('signin-btn')
+    const errEl = document.getElementById('signin-error')
+    const email = document.getElementById('signin-email').value
+    const password = document.getElementById('signin-pw').value
+
+    btn.disabled = true
+    btn.textContent = 'Signing in…'
+    errEl.style.display = 'none'
+
+    try {
+      const res = await fetch('/api/supa-auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      const data = await res.json()
+      if (res.status === 403 && data.error === 'waitlist') {
+        document.body.setAttribute('data-state', 'waitlist')
+        return
+      }
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Sign in failed. Check your credentials.'
+        errEl.style.display = 'block'
+        return
+      }
+      localStorage.setItem('supadense.auth.token', data.token)
+      window.location.href = '/home'
+    } catch {
+      errEl.textContent = 'Could not connect to server. Try again.'
+      errEl.style.display = 'block'
+    } finally {
+      btn.disabled = false
+      btn.textContent = 'Sign in →'
+    }
+  })
+
+  document.getElementById('waitlist-form').addEventListener('submit', async function(e) {
+    e.preventDefault()
+    const btn = document.getElementById('wl-btn')
+    const errEl = document.getElementById('wl-error')
+    const email = document.getElementById('wl-email').value
+
+    btn.disabled = true
+    btn.textContent = 'Submitting…'
+    errEl.style.display = 'none'
+
+    try {
+      const res = await fetch('/api/supa-auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Registration failed.'
+        errEl.style.display = 'block'
+        return
+      }
+      document.querySelector('.recipient .email').textContent = email
+      document.body.setAttribute('data-state', 'sent')
+    } catch {
+      errEl.textContent = 'Could not connect to server. Try again.'
+      errEl.style.display = 'block'
+    } finally {
+      btn.disabled = false
+      btn.textContent = 'Join waitlist →'
+    }
+  })
+</script>
 </body>
 </html>
