@@ -105,10 +105,11 @@ section.shell { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
 .hero .lede-lead em { font-family: var(--sd-font-serif); font-style: italic; color: var(--sd-amber-200); font-weight: 400; }
 .hero .lede-body { font-size: 17px; line-height: 1.5; color: var(--sd-ink-300); margin: 0; }
 .hero .lede-body em { font-family: var(--sd-font-serif); font-style: italic; color: var(--sd-amber-200); }
-.hero .lede-bullets { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 8px; }
-.hero .lede-bullets li { position: relative; padding-left: 22px; font-size: 16px; line-height: 1.45; color: var(--sd-ink-200); }
-.hero .lede-bullets li strong { color: var(--sd-ink-100); font-weight: 500; }
-.hero .lede-bullets li::before { content: ""; position: absolute; left: 0; top: 9px; width: 8px; height: 1px; background: var(--sd-amber-300); }
+.hero .lede-features { display: flex; gap: 1px; margin-top: 4px; }
+.hero .lede-feat { flex: 1; padding: 14px 16px; border-top: 2px solid var(--sd-amber-300); background: rgba(228,166,74,0.04); }
+.hero .feat-verb { display: block; font-size: 14px; font-weight: 600; color: var(--sd-amber-300); letter-spacing: -0.01em; margin-bottom: 4px; }
+.hero .feat-desc { display: block; font-size: 12px; color: var(--sd-ink-400); line-height: 1.4; font-family: var(--sd-font-mono); }
+@media (max-width: 600px) { .hero .lede-features { flex-direction: column; gap: 1px; } }
 .hero .cta-row { margin-top: 36px; display: flex; gap: 12px; align-items: center; }
 .hero .meta-strip { display: flex; gap: 28px; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--sd-ground-300); flex-wrap: wrap; }
 .meta-strip .item { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
@@ -280,11 +281,20 @@ footer .links a:hover { color: var(--sd-amber-300); }
       <div class="lede-stack">
         <p class="lede-lead">AI writes the code.<br>Who builds the <em>engineering mindset</em> behind it?</p>
         <p class="lede-body">Supadense is the proactive intelligence layer that <em>makes you learn.</em></p>
-        <ul class="lede-bullets">
-          <li><strong>Surfaces</strong> your learning goals.</li>
-          <li><strong>Closes</strong> the gaps you don't see.</li>
-          <li><strong>Compounds</strong> what you know.</li>
-        </ul>
+        <div class="lede-features">
+          <div class="lede-feat">
+            <span class="feat-verb">Surfaces</span>
+            <span class="feat-desc">your learning goals.</span>
+          </div>
+          <div class="lede-feat">
+            <span class="feat-verb">Closes</span>
+            <span class="feat-desc">the gaps you don't see.</span>
+          </div>
+          <div class="lede-feat">
+            <span class="feat-verb">Compounds</span>
+            <span class="feat-desc">what you know.</span>
+          </div>
+        </div>
       </div>
       <div class="cta-row">
         <a class="sd-btn sd-btn--primary sd-btn--lg" href="#waitlist">join the waitlist →</a>
