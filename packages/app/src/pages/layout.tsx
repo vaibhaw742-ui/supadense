@@ -88,6 +88,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SupadenseChatPanel, SupadenseMark } from "@/components/supadense-chat-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -128,6 +129,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  const [chatOpen, setChatOpen] = createSignal(false)
   const initialDirectory = decode64(params.dir)
   const route = createMemo(() => {
     const slug = params.dir
@@ -2179,7 +2181,50 @@ export default function Layout(props: ParentProps) {
             </div>
 
             <div class="flex-1 min-h-0 flex flex-col">
-              <div class="shrink-0 py-2">
+              {/* Supadense primary nav */}
+              <div class="shrink-0 pt-2 pb-1">
+                <div
+                  style={{
+                    "font-family": "'Geist Mono', monospace",
+                    "font-size": "9px",
+                    "letter-spacing": "0.12em",
+                    "text-transform": "uppercase",
+                    color: "var(--color-text-weak)",
+                    padding: "0 12px 6px",
+                    opacity: "0.6",
+                  }}
+                >
+                  Navigate
+                </div>
+                {(
+                  [
+                    { label: "Today", icon: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 5v5l3 3", path: "/" },
+                    { label: "Gaps", icon: "M9 18 3 12l6-6M15 6l6 6-6 6", path: "/gaps" },
+                    { label: "Graph Notes", icon: "M5 12a7 7 0 1 0 14 0A7 7 0 0 0 5 12zm7-4v4l3 2M3 3l18 18", path: "/graph" },
+                    { label: "Captured", icon: "M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10", path: "/captured" },
+                  ] as { label: string; icon: string; path: string }[]
+                ).map((item) => (
+                  <button
+                    type="button"
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                    onClick={() => navigateWithSidebarReset(item.path)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d={item.icon} />
+                    </svg>
+                    {item.label}
+                  </button>
+                ))}
+                <div
+                  style={{
+                    margin: "6px 12px",
+                    height: "1px",
+                    background: "var(--color-border-base)",
+                    opacity: "0.5",
+                  }}
+                />
+              </div>
+              <div class="shrink-0 py-1">
                 <button
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
@@ -2392,6 +2437,54 @@ export default function Layout(props: ParentProps) {
         {import.meta.env.DEV && <DebugBar />}
       </div>
       <Toast.Region />
+
+      {/* Supadense Ask FAB */}
+      <button
+        type="button"
+        title="Ask supadense"
+        aria-label="Ask supadense"
+        onClick={() => setChatOpen((v) => !v)}
+        style={{
+          position: "fixed",
+          bottom: "28px",
+          right: chatOpen() ? "396px" : "28px",
+          width: "56px",
+          height: "56px",
+          "border-radius": "50%",
+          background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
+          border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
+          "box-shadow": chatOpen()
+            ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
+            : "0 4px 20px rgba(0,0,0,0.4)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          cursor: "pointer",
+          "z-index": "100",
+          transition: "right 200ms ease, border-color 160ms, box-shadow 160ms, background 160ms",
+          padding: "0",
+        }}
+      >
+        <SupadenseMark size={26} />
+      </button>
+
+      {/* Supadense Chat Panel */}
+      <div
+        style={{
+          position: "fixed",
+          top: "0",
+          right: chatOpen() ? "0" : "-380px",
+          width: "380px",
+          height: "100%",
+          "z-index": "99",
+          transition: "right 200ms ease",
+          "padding-top": "40px",
+        }}
+      >
+        <Show when={chatOpen()}>
+          <SupadenseChatPanel onClose={() => setChatOpen(false)} />
+        </Show>
+      </div>
     </div>
   )
 }

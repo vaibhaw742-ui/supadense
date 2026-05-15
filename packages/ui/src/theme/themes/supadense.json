@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Supadense",
+  "id": "supadense",
+  "light": {
+    "palette": {
+      "neutral": "#f4ede0",
+      "ink": "#1a1614",
+      "primary": "#e4a64a",
+      "accent": "#c8852a",
+      "success": "#22c55e",
+      "warning": "#f59e0b",
+      "error": "#ef4444",
+      "info": "#67e8f9",
+      "diffAdd": "#22c55e",
+      "diffDelete": "#ef4444"
+    },
+    "overrides": {
+      "syntax-comment": "#9a8070",
+      "syntax-keyword": "#c8852a",
+      "syntax-string": "#22c55e",
+      "syntax-primitive": "#67e8f9",
+      "syntax-property": "#e4a64a",
+      "syntax-constant": "#c8852a"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#131010",
+      "ink": "#f4ede0",
+      "primary": "#e4a64a",
+      "accent": "#ffe7b8",
+      "success": "#4ade80",
+      "warning": "#fbbf24",
+      "error": "#f87171",
+      "info": "#67e8f9",
+      "diffAdd": "#4ade80",
+      "diffDelete": "#f87171"
+    },
+    "overrides": {
+      "syntax-comment": "#6b5e57",
+      "syntax-keyword": "#ffe7b8",
+      "syntax-string": "#4ade80",
+      "syntax-primitive": "#67e8f9",
+      "syntax-property": "#e4a64a",
+      "syntax-constant": "#fbbf24"
+    }
+  }
+}
