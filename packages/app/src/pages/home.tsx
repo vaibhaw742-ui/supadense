@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -50,6 +50,17 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const dialog = useDialog()
+
+  // Auto-redirect to first workspace session once data loads
+  createEffect(() => {
+    if (!sync.ready) return
+    const first = sync.data.project[0]
+    if (!first) return
+    untrack(() => {
+      server.projects.touch(first.worktree)
+      navigate(`/${base64Encode(first.worktree)}/session`, { replace: true })
+    })
+  })
 
   function openSettings() {
     void import("@/components/dialog-settings").then((x) => {
