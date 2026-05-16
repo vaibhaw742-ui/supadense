@@ -20,6 +20,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
@@ -575,9 +576,30 @@ export function SessionHeader() {
   const platform = usePlatform()
   const language = useLanguage()
   const sync = useSync()
+  const globalSync = useGlobalSync()
   const dialog = useDialog()
   const navigate = useNavigate()
   const { params, view } = useSessionLayout()
+  const [wsDropdownOpen, setWsDropdownOpen] = createSignal(false)
+
+  function workspaceName(worktree: string): string {
+    try {
+      const stored = localStorage.getItem(`ws-name:${worktree}`)
+      if (stored) return stored
+    } catch {}
+    return worktree.replace(/^\/workspaces\/[^/]+\//, "").split("/").pop() ?? worktree.split("/").pop() ?? worktree
+  }
+
+  function workspaceColor(worktree: string): string {
+    try {
+      const stored = localStorage.getItem(`ws-color:${worktree}`)
+      if (stored) return stored
+    } catch {}
+    const swatches = ["#6b1a1a","#9d174d","#7e22ce","#c2410c","#15803d","#1d4ed8","#0e7490","#92400e"]
+    let hash = 0
+    for (let i = 0; i < worktree.length; i++) hash = (hash * 31 + worktree.charCodeAt(i)) | 0
+    return swatches[Math.abs(hash) % swatches.length]
+  }
 
   const userEmail = (() => {
     const token = getAuthToken()
@@ -817,6 +839,46 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              {/* Workspace dropdown — left of TOC */}
+              <div class="relative">
+                <button
+                  type="button"
+                  class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center rounded-md border border-border-base hover:border-border-stronger bg-background-input transition-colors"
+                  onClick={() => setWsDropdownOpen(v => !v)}
+                >
+                  <span class="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: workspaceColor(decode64(params.dir) ?? "") }} />
+                  <span class="text-12-medium text-text-strong max-w-28 truncate">
+                    {workspaceName(decode64(params.dir) ?? "")}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak flex-shrink-0" style={{ transform: wsDropdownOpen() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <Show when={wsDropdownOpen()}>
+                  <div class="absolute top-full right-0 mt-1 z-50 rounded-lg border border-border-base shadow-lg overflow-hidden min-w-44" style={{ background: "var(--surface-raised-stronger-non-alpha)" }}>
+                    <For each={globalSync.data.project} fallback={
+                      <div class="px-3 py-2 text-12-regular text-text-weak">No workspaces</div>
+                    }>
+                      {(project) => (
+                        <button
+                          type="button"
+                          class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-base hover:bg-background-hover transition-colors text-left"
+                          classList={{ "bg-background-hover font-medium text-text-strong": (decode64(params.dir) ?? "") === project.worktree }}
+                          onClick={() => {
+                            setWsDropdownOpen(false)
+                            server.projects.touch(project.worktree)
+                            navigate(`/${base64Encode(project.worktree)}/session`)
+                          }}
+                        >
+                          <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: workspaceColor(project.worktree) }} />
+                          <span class="truncate">{workspaceName(project.worktree)}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+
               <Tooltip placement="bottom" value="Table of Contents">
                 <Button
                   variant="ghost"
