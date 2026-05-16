@@ -32,7 +32,6 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
-import { OnboardingWizard } from "@/pages/wiki/wiki-home"
 import { BlockPageView } from "@/pages/wiki/block-page-view"
 import { renderMarkdown } from "@/pages/wiki/markdown"
 import type { WikiResourceData } from "@/pages/wiki/wiki-api"
@@ -162,50 +161,10 @@ export function SessionSidePanel(props: {
     },
   )
 
-  const [showOnboardWizard, setShowOnboardWizard] = createSignal(false)
-  const hasNoCategories = createMemo(() => {
-    if (graphData.loading) return false
-    const data = graphData()
-    if (!data) return true
-    return data.nodes.filter((n) => n.type === "category").length === 0
-  })
-  const showAddSourceTip = createMemo(() => {
-    if (graphData.loading) return false
-    const data = graphData()
-    if (!data) return false
-    const cats = data.nodes.filter((n) => n.type === "category").length
-    const resources = data.nodes.filter((n) => n.type === "resource").length
-    return cats >= 1 && resources === 0
-  })
-
   const RESOURCE_MILESTONE = 100
   const resourceCount = createMemo(() => graphData()?.nodes.filter((n) => n.type === "resource").length ?? 0)
   const resourcePct = createMemo(() => Math.min(100, Math.round((resourceCount() / RESOURCE_MILESTONE) * 100)))
   const resourceMilestoneReached = createMemo(() => resourceCount() >= RESOURCE_MILESTONE)
-
-  // ── Resource walkthrough (step 1 = point to button, step 2 = URL hint) ──────
-  const [walkthroughStep, setWalkthroughStep] = createSignal<0 | 1 | 2>(0)
-  const [walkthroughDismissed, setWalkthroughDismissed] = createSignal(false)
-
-  createEffect(() => {
-    if (walkthroughDismissed()) { setWalkthroughStep(0); return }
-    if (showAddSourceTip() && !showOnboardWizard()) setWalkthroughStep(1)
-    else if (!showAddSourceTip()) { setWalkthroughStep(0); setWalkthroughDismissed(false) }
-  })
-
-  createEffect(() => {
-    if (walkthroughStep() === 1) document.body.classList.add("kb-walkthrough-1")
-    else document.body.classList.remove("kb-walkthrough-1")
-    onCleanup(() => document.body.classList.remove("kb-walkthrough-1"))
-  })
-
-  onMount(() => {
-    const onAddResource = () => {
-      if (walkthroughStep() === 1) setWalkthroughStep(2)
-    }
-    window.addEventListener("kb:add-resource-clicked", onAddResource)
-    onCleanup(() => window.removeEventListener("kb:add-resource-clicked", onAddResource))
-  })
 
   const [graphNav, setGraphNav] = createSignal<NotesNavRequest | null>(null)
 
@@ -571,195 +530,33 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
 
-            {/* Full-screen Get Started overlay when KB has no categories */}
-            <Show when={hasNoCategories() && !showOnboardWizard()}>
-              <Portal mount={document.body}>
-                <div
-                  data-prevent-autofocus
-                  style={{
-                    position: "fixed", inset: "0", display: "flex",
-                    "align-items": "center", "justify-content": "center",
-                    "z-index": "9999", "pointer-events": "none",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "var(--surface-raised-stronger-non-alpha)",
-                      "border-radius": "var(--radius-xl)",
-                      "box-shadow": "var(--shadow-lg-border-base)",
-                      display: "flex",
-                      "flex-direction": "column",
-                      "align-items": "flex-start",
-                      "pointer-events": "auto",
-                      width: "320px",
-                    }}
-                  >
-                    {/* Header — matches dialog-header */}
-                    <div style={{
-                      display: "flex", padding: "16px 20px",
-                      "justify-content": "space-between", "align-items": "center",
-                      "align-self": "stretch", "border-bottom": "1px solid var(--border-base)",
-                    }}>
-                      <span style={{
-                        color: "var(--text-strong)",
-                        "font-size": "var(--font-size-large)",
-                        "font-weight": "var(--font-weight-medium)",
-                        "letter-spacing": "var(--letter-spacing-tight)",
-                        "line-height": "var(--line-height-x-large)",
-                      }}>
-                        New Knowledge Base
-                      </span>
-                    </div>
-                    {/* Body — matches dialog-body padding */}
-                    <div style={{ display: "flex", "flex-direction": "column", gap: "16px", padding: "16px 20px 20px" }}>
-                      <div style={{
-                        color: "var(--text-base)",
-                        "font-size": "14px",
-                        "line-height": "var(--line-height-large)",
-                      }}>
-                        Organise what you learn into categories and resources.
-                      </div>
-                      <div style={{ display: "flex", "justify-content": "flex-end" }}>
-                        <button
-                          onClick={() => setShowOnboardWizard(true)}
-                          style={{
-                            padding: "8px 20px",
-                            "border-radius": "var(--radius-md, 8px)",
-                            background: "var(--button-primary-base)",
-                            color: "#fff",
-                            border: "none",
-                            "font-size": "14px",
-                            "font-weight": "var(--font-weight-medium)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Get Started
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Portal>
-            </Show>
-
-            {/* Onboarding wizard overlay */}
-            <Show when={showOnboardWizard()}>
-              <OnboardingWizard onComplete={() => {
-                setShowOnboardWizard(false)
-                refetchGraphData()
-                setTimeout(refetchGraphData, 600)
-              }} />
-            </Show>
-
-            {/* Resource walkthrough tooltip */}
-            <Show when={walkthroughStep() > 0}>
-              <Portal mount={document.body}>
-                <div
-                  data-prevent-autofocus
-                  style={{
-                    position: "fixed", "z-index": "9998", "pointer-events": "none",
-                    inset: "0", display: "flex", "align-items": "flex-end",
-                    "justify-content": "flex-start", padding: "0 0 130px 72px",
-                  }}
-                >
-                  <div
-                    style={{
-                      "pointer-events": "auto",
-                      background: "var(--surface-raised-stronger-non-alpha)",
-                      "border-radius": "var(--radius-xl)",
-                      "box-shadow": "var(--shadow-lg-border-base)",
-                      width: "280px",
-                      display: "flex",
-                      "flex-direction": "column",
-                    }}
-                  >
-                    {/* Header */}
-                    <div style={{
-                      display: "flex", "align-items": "center", "justify-content": "space-between",
-                      padding: "12px 16px", "border-bottom": "1px solid var(--border-base)",
-                    }}>
-                      <span style={{
-                        "font-size": "13px", "font-weight": "var(--font-weight-medium)",
-                        color: "var(--text-strong)",
-                      }}>
-                        {walkthroughStep() === 1 ? "Add your first resource" : "Paste a link"}
-                      </span>
-                      <button
-                        onClick={() => setWalkthroughDismissed(true)}
-                        style={{
-                          background: "none", border: "none", cursor: "pointer",
-                          color: "var(--text-weak)", "font-size": "13px",
-                          padding: "2px 4px", "border-radius": "4px", "line-height": "1",
-                        }}
-                      >✕</button>
-                    </div>
-                    {/* Body */}
-                    <div style={{ padding: "12px 16px 16px", display: "flex", "flex-direction": "column", gap: "10px" }}>
-                      <Show when={walkthroughStep() === 1}>
-                        <p style={{ margin: "0", "font-size": "13px", color: "var(--text-base)", "line-height": "1.5" }}>
-                          Click <strong style={{ color: "var(--text-strong)" }}>+ Add resources</strong> in the chat toolbar below to start adding URLs to your knowledge base.
-                        </p>
-                        <div style={{
-                          display: "flex", "align-items": "center", gap: "8px",
-                          padding: "8px 10px", background: "var(--surface-base)",
-                          "border-radius": "var(--radius-md)", border: "1px solid var(--border-base)",
-                        }}>
-                          <span style={{ color: "#f59e0b", "font-size": "16px", "line-height": "1" }}>＋</span>
-                          <span style={{ "font-size": "12px", color: "var(--text-weak)" }}>Add resources</span>
-                          <span style={{ "margin-left": "auto", "font-size": "11px", color: "var(--text-weak)", opacity: "0.6" }}>↓ below</span>
-                        </div>
-                      </Show>
-                      <Show when={walkthroughStep() === 2}>
-                        <p style={{ margin: "0", "font-size": "13px", color: "var(--text-base)", "line-height": "1.5" }}>
-                          Paste any URL after <code style={{ "font-size": "12px", "background": "var(--surface-base)", padding: "1px 5px", "border-radius": "4px", color: "var(--text-strong)" }}>/memorize</code>, then press <strong style={{ color: "var(--text-strong)" }}>Enter</strong>.
-                        </p>
-                        <div style={{
-                          padding: "8px 10px", background: "var(--surface-base)",
-                          "border-radius": "var(--radius-md)", border: "1px solid var(--border-base)",
-                          "font-size": "12px", color: "var(--text-weak)", "font-family": "monospace",
-                          "word-break": "break-all",
-                        }}>
-                          /memorize https://docs.example.com/guide
-                        </div>
-                      </Show>
-                    </div>
-                  </div>
-                </div>
-              </Portal>
-            </Show>
-
             {/* Graph or wiki page */}
             <div class="flex-1 min-h-0 overflow-hidden">
               <Show
                 when={graphNav()}
                 fallback={
-                  <Show when={hasNoCategories()} fallback={
-                    <Show when={graphData()} fallback={
-                      <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
-                        Loading…
-                      </div>
-                    }>
-                      {(data) => (
-                        <Suspense>
-                          <WikiGraph
-                            data={data()}
-                            notifiedNodeIds={notifiedNodeIds}
-                            onNavigate={(slug, label) => {
-                              const node = graphData()?.nodes.find((n) => n.slug === slug)
-                              if (node) clearNotif(node.id)
-                              setGraphNav({ type: "page", slug, label: label ?? slug })
-                            }}
-                            onNavigateResource={(resourceId, label) => {
-                              clearNotif(`res_${resourceId}`)
-                              setGraphNav({ type: "resource", resourceId, label })
-                            }}
-                          />
-                        </Suspense>
-                      )}
-                    </Show>
+                  <Show when={graphData()} fallback={
+                    <div class="h-full flex items-center justify-center text-12-regular text-text-weak">
+                      Loading…
+                    </div>
                   }>
-                    {/* Empty state — no categories yet */}
-                    <div class="h-full" />
+                    {(data) => (
+                      <Suspense>
+                        <WikiGraph
+                          data={data()}
+                          notifiedNodeIds={notifiedNodeIds}
+                          onNavigate={(slug, label) => {
+                            const node = graphData()?.nodes.find((n) => n.slug === slug)
+                            if (node) clearNotif(node.id)
+                            setGraphNav({ type: "page", slug, label: label ?? slug })
+                          }}
+                          onNavigateResource={(resourceId, label) => {
+                            clearNotif(`res_${resourceId}`)
+                            setGraphNav({ type: "resource", resourceId, label })
+                          }}
+                        />
+                      </Suspense>
+                    )}
                   </Show>
                 }
               >
