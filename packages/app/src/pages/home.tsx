@@ -234,11 +234,77 @@ export default function Home() {
   return (
     <div class="size-full flex flex-col bg-background-base overflow-hidden">
       {/* Top header bar */}
-      <div class="flex items-center justify-between px-5 py-3 border-b border-border-base flex-shrink-0">
-        <div class="text-15-medium text-text-strong">Supadense</div>
+      <div class="flex items-center justify-between px-4 py-2 border-b border-border-base flex-shrink-0">
+        {/* Left: title */}
+        <div class="text-14-medium text-text-strong">Home</div>
+
+        {/* Right: workspace dropdown + TOC icon + other actions */}
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
           <KbNotificationBell directory={() => undefined} />
+
+          {/* Workspace dropdown — left of TOC icon */}
+          <div class="relative">
+            <button
+              type="button"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border-base hover:border-border-stronger bg-background-input transition-colors text-left"
+              onClick={() => setWsDropdownOpen((v) => !v)}
+            >
+              <Show when={activeWorktree()}>
+                <span class="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: activeWorktree() ? workspaceColor(activeWorktree()!) : "#888" }} />
+              </Show>
+              <span class="text-13-medium text-text-strong max-w-36 truncate">
+                {activeWorktree() ? workspaceName(activeWorktree()!) : "Select workspace"}
+              </span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak flex-shrink-0" style={{ transform: wsDropdownOpen() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
+            <Show when={wsDropdownOpen()}>
+              <div class="absolute top-full right-0 mt-1 z-50 rounded-lg border border-border-base shadow-lg overflow-hidden min-w-48" style={{ background: "var(--surface-raised-stronger-non-alpha)" }}>
+                <For each={sync.data.project} fallback={
+                  <div class="px-3 py-2 text-12-regular text-text-weak">No workspaces</div>
+                }>
+                  {(project) => (
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-base hover:bg-background-hover transition-colors text-left"
+                      classList={{ "bg-background-hover font-medium text-text-strong": activeWorktree() === project.worktree }}
+                      onClick={() => { setSelectedWorktree(project.worktree); setWsDropdownOpen(false) }}
+                    >
+                      <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: workspaceColor(project.worktree) }} />
+                      <span class="truncate">{workspaceName(project.worktree)}</span>
+                    </button>
+                  )}
+                </For>
+                <div class="border-t border-border-base">
+                  <button
+                    type="button"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-weak hover:text-text-base hover:bg-background-hover transition-colors text-left"
+                    onClick={() => { setWsDropdownOpen(false); openKbDialog() }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    New workspace
+                  </button>
+                </div>
+              </div>
+            </Show>
+          </div>
+
+          {/* TOC icon */}
+          <Tooltip placement="bottom" value="Table of contents">
+            <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md text-text-weak hover:text-text-base hover:bg-background-hover transition-colors" aria-label="Table of contents">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+          </Tooltip>
+
           <Tooltip placement="bottom" value="Settings">
             <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
           </Tooltip>
@@ -275,63 +341,9 @@ export default function Home() {
 
         {/* ── Left sidebar: workspace TOC ── */}
         <div class="flex flex-col w-64 flex-shrink-0 border-r border-border-base overflow-hidden">
-          {/* Workspace dropdown */}
-          <div class="px-3 pt-4 pb-2">
-            <div class="text-11-medium text-text-weak uppercase tracking-wider px-1 mb-2">Workspaces</div>
-            <div class="relative">
-              <button
-                type="button"
-                class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border-base bg-background-input hover:border-border-stronger transition-colors text-left"
-                onClick={() => setWsDropdownOpen((v) => !v)}
-              >
-                <span class="text-13-medium text-text-strong truncate flex items-center gap-2">
-                  <Show when={activeWorktree()}>
-                    <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: activeWorktree() ? workspaceColor(activeWorktree()!) : "#888" }} />
-                  </Show>
-                  {activeWorktree() ? workspaceName(activeWorktree()!) : "Select workspace"}
-                </span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak flex-shrink-0" style={{ transform: wsDropdownOpen() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-
-              <Show when={wsDropdownOpen()}>
-                <div class="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border-base shadow-lg overflow-hidden" style={{ background: "var(--surface-raised-stronger-non-alpha)" }}>
-                  <For each={sync.data.project} fallback={
-                    <div class="px-3 py-2 text-12-regular text-text-weak">No workspaces</div>
-                  }>
-                    {(project) => (
-                      <button
-                        type="button"
-                        class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-base hover:bg-background-hover transition-colors text-left"
-                        classList={{ "bg-background-hover text-text-strong": activeWorktree() === project.worktree }}
-                        onClick={() => { setSelectedWorktree(project.worktree); setWsDropdownOpen(false) }}
-                      >
-                        <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: workspaceColor(project.worktree) }} />
-                        <span class="truncate">{workspaceName(project.worktree)}</span>
-                      </button>
-                    )}
-                  </For>
-                  <div class="border-t border-border-base">
-                    <button
-                      type="button"
-                      class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-weak hover:text-text-base hover:bg-background-hover transition-colors text-left"
-                      onClick={() => { setWsDropdownOpen(false); openKbDialog() }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                      </svg>
-                      New workspace
-                    </button>
-                  </div>
-                </div>
-              </Show>
-            </div>
-          </div>
-
           {/* TOC list of all workspaces */}
-          <div class="flex-1 overflow-y-auto px-2 pb-4">
-            <div class="text-11-medium text-text-weak uppercase tracking-wider px-2 mb-1 mt-3">All workspaces</div>
+          <div class="flex-1 overflow-y-auto px-2 pb-4 pt-3">
+            <div class="text-11-medium text-text-weak uppercase tracking-wider px-2 mb-1">All workspaces</div>
             <For each={sync.data.project} fallback={
               <div class="px-2 py-3 text-12-regular text-text-weak">No workspaces yet</div>
             }>
