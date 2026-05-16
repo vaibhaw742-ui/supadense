@@ -8,7 +8,7 @@ import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
-import { getAuthToken, clearAuthToken } from "@/utils/server"
+import { getAuthToken, clearAuthToken, getBackendUrl } from "@/utils/server"
 import { BgProcessMonitor } from "@/components/bg-process-monitor"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 
@@ -196,43 +196,54 @@ export default function Home() {
     return worktree.replace(/^\/workspaces\/[^/]+\//, "").split("/").pop() ?? worktree.split("/").pop() ?? worktree
   }
 
+  // Chat state
+  const [chatInput, setChatInput] = createSignal("")
+  const [chatMessages, setChatMessages] = createSignal<{ role: "user" | "assistant"; text: string }[]>([])
+  const [chatLoading, setChatLoading] = createSignal(false)
+  const [selectedWorktree, setSelectedWorktree] = createSignal<string | null>(null)
+  const [wsDropdownOpen, setWsDropdownOpen] = createSignal(false)
+
+  const activeWorktree = () => selectedWorktree() ?? sync.data.project[0]?.worktree ?? null
+
+  async function sendChat() {
+    const text = chatInput().trim()
+    if (!text || chatLoading()) return
+    setChatInput("")
+    setChatMessages((prev) => [...prev, { role: "user", text }])
+    setChatLoading(true)
+    try {
+      const base = getBackendUrl()
+      const token = getAuthToken()
+      const wt = activeWorktree()
+      const res = await fetch(`${base}/session/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ text, worktree: wt }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { reply?: string }
+        if (data.reply) setChatMessages((prev) => [...prev, { role: "assistant", text: data.reply! }])
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
   return (
-    <div class="size-full flex flex-col bg-background-base overflow-y-auto">
-      {/* Header */}
-      <div class="flex items-center justify-between px-8 pt-4 pb-4">
-        <div>
-          <div class="text-14-regular text-text-weak">Knowledge base</div>
-          <div class="text-28-medium text-text-strong mt-0.5 leading-tight">All Workspaces</div>
-        </div>
+    <div class="size-full flex flex-col bg-background-base overflow-hidden">
+      {/* Top header bar */}
+      <div class="flex items-center justify-between px-5 py-3 border-b border-border-base flex-shrink-0">
+        <div class="text-15-medium text-text-strong">Supadense</div>
         <div class="flex items-center gap-1">
           <BgProcessMonitor directory={() => undefined} />
           <KbNotificationBell directory={() => undefined} />
-          <Tooltip placement="bottom" value="Experiential Learning">
-            <IconButton
-              icon="new-session"
-              variant="ghost"
-              size="large"
-              onClick={() => navigate("/projects")}
-              aria-label="Experiential Learning Projects"
-            />
-          </Tooltip>
           <Tooltip placement="bottom" value="Settings">
-            <IconButton
-              icon="settings-gear"
-              variant="ghost"
-              size="large"
-              onClick={openSettings}
-              aria-label="Settings"
-            />
+            <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
           </Tooltip>
           <Tooltip placement="bottom" value="Help">
-            <IconButton
-              icon="help"
-              variant="ghost"
-              size="large"
-              onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")}
-              aria-label="Help"
-            />
+            <IconButton icon="help" variant="ghost" size="large" onClick={() => window.open("https://x.com/vaibhawkhemka6", "_blank")} aria-label="Help" />
           </Tooltip>
           <Show when={handleLogout} fallback={
             <Tooltip placement="bottom" value="Account">
@@ -259,178 +270,315 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Workspace grid */}
-      <div class="px-8 pb-6">
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {/* Create new */}
-          <button
-            type="button"
-            class="aspect-square rounded-xl border-2 border-dashed border-border-base flex flex-col items-center justify-center gap-2 text-text-weak hover:text-text-base hover:border-border-stronger transition-colors"
-            onClick={openKbDialog}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            <span class="text-12-regular">Create Workspace</span>
-          </button>
+      {/* Main body: left TOC + center + right chat */}
+      <div class="flex flex-1 min-h-0 overflow-hidden">
 
-          <For each={sync.data.project}>
-            {(project) => {
-              const [hovered, setHovered] = createSignal(false)
-              const name = () => workspaceName(project.worktree)
-              const color = () => workspaceColor(project.worktree)
-              const isColorOpen = () => colorWorktree() === project.worktree
+        {/* ── Left sidebar: workspace TOC ── */}
+        <div class="flex flex-col w-64 flex-shrink-0 border-r border-border-base overflow-hidden">
+          {/* Workspace dropdown */}
+          <div class="px-3 pt-4 pb-2">
+            <div class="text-11-medium text-text-weak uppercase tracking-wider px-1 mb-2">Workspaces</div>
+            <div class="relative">
+              <button
+                type="button"
+                class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border-base bg-background-input hover:border-border-stronger transition-colors text-left"
+                onClick={() => setWsDropdownOpen((v) => !v)}
+              >
+                <span class="text-13-medium text-text-strong truncate flex items-center gap-2">
+                  <Show when={activeWorktree()}>
+                    <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: activeWorktree() ? workspaceColor(activeWorktree()!) : "#888" }} />
+                  </Show>
+                  {activeWorktree() ? workspaceName(activeWorktree()!) : "Select workspace"}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak flex-shrink-0" style={{ transform: wsDropdownOpen() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
 
-              return (
-                <div
-                  class="aspect-square rounded-xl flex flex-col relative overflow-visible cursor-pointer active:scale-[0.98] transition-all shadow-sm"
-                  style={{ background: color() }}
-                  onMouseEnter={() => setHovered(true)}
-                  onMouseLeave={() => setHovered(false)}
-                  onClick={() => openProject(project.worktree)}
-                >
-                  {/* Hover action bar */}
-                  <Show when={hovered() || isColorOpen()}>
-                    <div
-                      class="absolute top-0 left-0 right-0 flex items-center justify-between px-2 pt-2 z-10"
-                      onClick={(e) => e.stopPropagation()}
+              <Show when={wsDropdownOpen()}>
+                <div class="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border-base shadow-lg overflow-hidden" style={{ background: "var(--surface-raised-stronger-non-alpha)" }}>
+                  <For each={sync.data.project} fallback={
+                    <div class="px-3 py-2 text-12-regular text-text-weak">No workspaces</div>
+                  }>
+                    {(project) => (
+                      <button
+                        type="button"
+                        class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-base hover:bg-background-hover transition-colors text-left"
+                        classList={{ "bg-background-hover text-text-strong": activeWorktree() === project.worktree }}
+                        onClick={() => { setSelectedWorktree(project.worktree); setWsDropdownOpen(false) }}
+                      >
+                        <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: workspaceColor(project.worktree) }} />
+                        <span class="truncate">{workspaceName(project.worktree)}</span>
+                      </button>
+                    )}
+                  </For>
+                  <div class="border-t border-border-base">
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-3 py-2 text-13-regular text-text-weak hover:text-text-base hover:bg-background-hover transition-colors text-left"
+                      onClick={() => { setWsDropdownOpen(false); openKbDialog() }}
                     >
-                      {/* Color picker trigger */}
-                      <div class="relative" data-color-picker>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      New workspace
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </div>
+
+          {/* TOC list of all workspaces */}
+          <div class="flex-1 overflow-y-auto px-2 pb-4">
+            <div class="text-11-medium text-text-weak uppercase tracking-wider px-2 mb-1 mt-3">All workspaces</div>
+            <For each={sync.data.project} fallback={
+              <div class="px-2 py-3 text-12-regular text-text-weak">No workspaces yet</div>
+            }>
+              {(project) => {
+                const [hovered, setHovered] = createSignal(false)
+                const name = () => workspaceName(project.worktree)
+                const color = () => workspaceColor(project.worktree)
+                const isActive = () => activeWorktree() === project.worktree
+                return (
+                  <div
+                    class="group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors"
+                    classList={{
+                      "bg-background-hover": isActive(),
+                      "hover:bg-background-hover": !isActive(),
+                    }}
+                    onMouseEnter={() => setHovered(true)}
+                    onMouseLeave={() => setHovered(false)}
+                    onClick={() => setSelectedWorktree(project.worktree)}
+                  >
+                    <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color() }} />
+                    <span class="text-13-regular text-text-base truncate flex-1">{name()}</span>
+                    {/* hover actions */}
+                    <Show when={hovered()}>
+                      <div class="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          class="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
-                          style={{ background: "rgba(0,0,0,0.25)" }}
-                          title="Change color"
-                          onClick={(e) => openColorPicker(project.worktree, e)}
+                          class="w-5 h-5 rounded flex items-center justify-center text-text-weak hover:text-text-base hover:bg-background-hover transition-colors"
+                          title="Open"
+                          onClick={() => openProject(project.worktree)}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <circle cx="12" cy="10" r="3"/>
-                            <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                           </svg>
                         </button>
+                        <button
+                          type="button"
+                          class="w-5 h-5 rounded flex items-center justify-center text-text-weak hover:text-red-500 hover:bg-background-hover transition-colors"
+                          title="Remove"
+                          onClick={(e) => openRemoveConfirm(project.worktree, e)}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </div>
 
-                        {/* Color picker dropdown */}
-                        <Show when={isColorOpen()}>
-                          <div
-                            class="absolute top-9 left-0 z-50 rounded-xl shadow-xl border w-72 overflow-hidden"
-                            style={{ background: "var(--surface-raised-stronger-non-alpha)", "border-color": "var(--border-weak-base)" }}
-                            data-color-picker
-                          >
-                            {/* Tabs */}
-                            <div class="flex border-b" style={{ "border-color": "var(--border-weak-base)" }}>
-                              {(["color", "image", "templates"] as const).map((t) => (
-                                <button
-                                  type="button"
-                                  class="flex-1 py-2 text-12-medium transition-colors capitalize"
-                                  classList={{
-                                    "text-text-strong border-b-2 border-current": colorTab() === t,
-                                    "text-text-weak hover:text-text-base": colorTab() !== t,
-                                  }}
-                                  onClick={() => setColorTab(t)}
-                                >
-                                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                                </button>
-                              ))}
-                            </div>
+        {/* ── Center: main content ── */}
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border-base flex-shrink-0">
+            <div>
+              <div class="text-12-regular text-text-weak">Knowledge base</div>
+              <div class="text-20-medium text-text-strong leading-tight">
+                {activeWorktree() ? workspaceName(activeWorktree()!) : "All Workspaces"}
+              </div>
+            </div>
+            <Button variant="ghost" size="small" onClick={openKbDialog}>
+              + New
+            </Button>
+          </div>
 
-                            <Show when={colorTab() === "color"}>
-                              <div class="p-3 max-h-64 overflow-y-auto">
-                                <div class="grid grid-cols-7 gap-1.5">
-                                  <For each={COLOR_SWATCHES}>
-                                    {(swatch) => (
-                                      <button
-                                        type="button"
-                                        class="w-7 h-7 rounded-md transition-transform hover:scale-110 active:scale-95 ring-offset-1"
-                                        classList={{ "ring-2 ring-white": color() === swatch }}
-                                        style={{ background: swatch }}
-                                        onClick={() => applyColor(project.worktree, swatch)}
-                                      />
-                                    )}
-                                  </For>
+          <div class="flex-1 overflow-y-auto px-6 py-5">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <For each={sync.data.project}>
+                {(project) => {
+                  const [hovered, setHovered] = createSignal(false)
+                  const name = () => workspaceName(project.worktree)
+                  const color = () => workspaceColor(project.worktree)
+                  const isColorOpen = () => colorWorktree() === project.worktree
+
+                  return (
+                    <div
+                      class="aspect-square rounded-xl flex flex-col relative overflow-visible cursor-pointer active:scale-[0.98] transition-all shadow-sm"
+                      style={{ background: color() }}
+                      onMouseEnter={() => setHovered(true)}
+                      onMouseLeave={() => setHovered(false)}
+                      onClick={() => openProject(project.worktree)}
+                    >
+                      <Show when={hovered() || isColorOpen()}>
+                        <div class="absolute top-0 left-0 right-0 flex items-center justify-between px-2 pt-2 z-10" onClick={(e) => e.stopPropagation()}>
+                          <div class="relative" data-color-picker>
+                            <button
+                              type="button"
+                              class="w-7 h-7 rounded-md flex items-center justify-center"
+                              style={{ background: "rgba(0,0,0,0.25)" }}
+                              title="Change color"
+                              onClick={(e) => openColorPicker(project.worktree, e)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/>
+                                <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>
+                              </svg>
+                            </button>
+                            <Show when={isColorOpen()}>
+                              <div class="absolute top-9 left-0 z-50 rounded-xl shadow-xl border w-72 overflow-hidden" style={{ background: "var(--surface-raised-stronger-non-alpha)", "border-color": "var(--border-weak-base)" }} data-color-picker>
+                                <div class="flex border-b" style={{ "border-color": "var(--border-weak-base)" }}>
+                                  {(["color", "image", "templates"] as const).map((t) => (
+                                    <button type="button" class="flex-1 py-2 text-12-medium transition-colors capitalize" classList={{ "text-text-strong border-b-2 border-current": colorTab() === t, "text-text-weak hover:text-text-base": colorTab() !== t }} onClick={() => setColorTab(t)}>
+                                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                                    </button>
+                                  ))}
                                 </div>
-                              </div>
-                            </Show>
-
-                            <Show when={colorTab() === "image"}>
-                              <div class="p-4 flex flex-col items-center gap-2">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-text-weak">
-                                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                                  <path d="M21 15l-5-5L5 21"/>
-                                </svg>
-                                <span class="text-12-regular text-text-weak">Image upload coming soon</span>
-                              </div>
-                            </Show>
-
-                            <Show when={colorTab() === "templates"}>
-                              <div class="p-4 flex flex-col items-center gap-2">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-text-weak">
-                                  <rect x="3" y="3" width="7" height="7"/>
-                                  <rect x="14" y="3" width="7" height="7"/>
-                                  <rect x="3" y="14" width="7" height="7"/>
-                                  <rect x="14" y="14" width="7" height="7"/>
-                                </svg>
-                                <span class="text-12-regular text-text-weak">Templates coming soon</span>
+                                <Show when={colorTab() === "color"}>
+                                  <div class="p-3 max-h-64 overflow-y-auto">
+                                    <div class="grid grid-cols-7 gap-1.5">
+                                      <For each={COLOR_SWATCHES}>
+                                        {(swatch) => (
+                                          <button type="button" class="w-7 h-7 rounded-md transition-transform hover:scale-110 active:scale-95 ring-offset-1" classList={{ "ring-2 ring-white": color() === swatch }} style={{ background: swatch }} onClick={() => applyColor(project.worktree, swatch)} />
+                                        )}
+                                      </For>
+                                    </div>
+                                  </div>
+                                </Show>
+                                <Show when={colorTab() !== "color"}>
+                                  <div class="p-4 flex flex-col items-center gap-2">
+                                    <span class="text-12-regular text-text-weak">Coming soon</span>
+                                  </div>
+                                </Show>
                               </div>
                             </Show>
                           </div>
-                        </Show>
-                      </div>
-
-                      {/* Edit + Delete buttons */}
-                      <div class="flex items-center gap-1">
-                        <button
-                          type="button"
-                          class="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
-                          style={{ background: "rgba(0,0,0,0.25)" }}
-                          title="Edit workspace"
-                          onClick={(e) => openEditModal(project.worktree, e)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          class="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
-                          style={{ background: "rgba(0,0,0,0.25)" }}
-                          title="Remove workspace"
-                          onClick={(e) => openRemoveConfirm(project.worktree, e)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                          </svg>
-                        </button>
+                          <div class="flex items-center gap-1">
+                            <button type="button" class="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "rgba(0,0,0,0.25)" }} title="Edit" onClick={(e) => openEditModal(project.worktree, e)}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            </button>
+                            <button type="button" class="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "rgba(0,0,0,0.25)" }} title="Remove" onClick={(e) => openRemoveConfirm(project.worktree, e)}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                <path d="M10 11v6M14 11v6"/>
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
+                      <div class="absolute bottom-0 left-0 right-0 p-3">
+                        <div class="text-14-medium text-white truncate">{name()}</div>
+                        <div class="text-12-regular mt-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>knowledge base</div>
                       </div>
                     </div>
-                  </Show>
+                  )
+                }}
+              </For>
+            </div>
 
-                  {/* Card label */}
-                  <div class="absolute bottom-0 left-0 right-0 p-3">
-                    <div class="text-14-medium text-white truncate">{name()}</div>
-                    <div class="text-12-regular mt-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>
-                      knowledge base
-                    </div>
-                  </div>
-                </div>
-              )
-            }}
-          </For>
+            <Show when={sync.data.project.length === 0 && sync.ready}>
+              <div class="mt-16 flex flex-col items-center gap-3 text-center">
+                <div class="text-14-medium text-text-strong">No workspaces yet</div>
+                <div class="text-13-regular text-text-weak">Create your first Knowledge Base to get started</div>
+              </div>
+            </Show>
+          </div>
         </div>
 
-        <Show when={sync.data.project.length === 0 && sync.ready}>
-          <div class="mt-16 flex flex-col items-center gap-3 text-center">
-            <div class="text-14-medium text-text-strong">No workspaces yet</div>
-            <div class="text-13-regular text-text-weak">Create your first Knowledge Base to get started</div>
+        {/* ── Right: chat panel ── */}
+        <div class="flex flex-col w-80 flex-shrink-0 border-l border-border-base overflow-hidden">
+          {/* Chat header */}
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-border-base flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span class="text-13-medium text-text-strong flex-1">Chat</span>
+            <Show when={activeWorktree()}>
+              <span class="text-11-regular text-text-weak truncate max-w-24">{workspaceName(activeWorktree()!)}</span>
+            </Show>
           </div>
-        </Show>
+
+          {/* Messages */}
+          <div class="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+            <Show when={chatMessages().length === 0}>
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-weak">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <p class="text-12-regular text-text-weak">Ask anything about your workspace</p>
+              </div>
+            </Show>
+            <For each={chatMessages()}>
+              {(msg) => (
+                <div class="flex flex-col gap-1" style={{ "align-items": msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div class="text-10-medium text-text-weak uppercase tracking-wider px-1">
+                    {msg.role === "user" ? "you" : "supadense"}
+                  </div>
+                  <div
+                    class="text-13-regular text-text-strong px-3 py-2 rounded-xl max-w-[88%]"
+                    style={{
+                      background: msg.role === "user" ? "rgba(228,166,74,0.15)" : "var(--color-surface-raised-base)",
+                      border: msg.role === "user" ? "1px solid rgba(228,166,74,0.3)" : "1px solid var(--color-border-base)",
+                      "border-radius": msg.role === "user" ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
+                      "white-space": "pre-wrap",
+                      "word-break": "break-word",
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              )}
+            </For>
+            <Show when={chatLoading()}>
+              <div class="text-12-regular text-text-weak italic px-1">thinking…</div>
+            </Show>
+          </div>
+
+          {/* Input */}
+          <div class="flex-shrink-0 px-3 pb-3 pt-2 border-t border-border-base flex flex-col gap-2">
+            <textarea
+              value={chatInput()}
+              onInput={(e) => setChatInput(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendChat() }
+              }}
+              placeholder="Ask about this workspace…"
+              rows={3}
+              class="w-full rounded-lg border border-border-base bg-background-input px-3 py-2 text-13-regular text-text-strong outline-none focus:border-border-focus placeholder:text-text-weak resize-none"
+              style={{ "line-height": "1.4", "box-sizing": "border-box" }}
+            />
+            <div class="flex items-center justify-between">
+              <span class="text-10-regular text-text-weak">↵ send · shift+↵ newline</span>
+              <button
+                type="button"
+                onClick={() => void sendChat()}
+                disabled={!chatInput().trim() || chatLoading()}
+                class="px-3 py-1.5 rounded-md text-12-medium transition-all"
+                style={{
+                  background: chatInput().trim() ? "#e4a64a" : "var(--color-surface-raised-base)",
+                  color: chatInput().trim() ? "#131010" : "var(--color-text-weak)",
+                  border: "none",
+                  cursor: chatInput().trim() ? "pointer" : "default",
+                }}
+              >
+                {chatLoading() ? "…" : "Ask →"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* KB creation modal */}
