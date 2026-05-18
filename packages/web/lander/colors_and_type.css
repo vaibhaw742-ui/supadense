@@ -1,0 +1,271 @@
+/* ============================================================
+   SUPADENSE DESIGN TOKENS — WHITE + ORANGE
+   Pure white surfaces, neutral grey hairlines, orange as the only accent.
+   Original dark tokens preserved in colors_and_type_dark.css.
+   ============================================================ */
+
+/* ---------- GLOBAL TYPE BASE ----------
+   Engineers, not marketers. Italic and serif emphasis are killed system-wide.
+   The browser default for <em> and <i> would re-introduce italic — we explicitly
+   override here so any unstyled em/i renders straight Geist with an orange weight
+   bump. Use <strong> for the same effect; both map to the same treatment. */
+em, i, .sd-em {
+  font-style: normal;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--sd-amber-300);
+}
+
+.sd-code {
+  font-family: var(--sd-font-mono);
+  font-weight: 500;
+  font-size: 0.92em;
+  background: var(--sd-amber-100);
+  border: 1px solid rgb(214 138 46 / 25%);
+  padding: 1px 6px;
+  border-radius: var(--sd-radius-xs);
+  color: var(--sd-amber-500);
+}
+
+
+/* Fonts are loaded via Google Fonts in each HTML file:
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+   FLAGGED SUBSTITUTIONS — no font files provided by the founder:
+   - Geist (Sans + Mono) — chosen for engineer credibility & high x-height.
+   - Instrument Serif — token kept for legacy refs only. NOT used — italic and
+     serif treatments are killed throughout the system. Emphasis = orange + weight.
+   Swap these for the real Supadense faces when available.
+*/
+
+:root {
+  /* ---------- COLOR: GROUND ---------- */
+  /* Neutral white + grey series. No warm tint — pure, clean.
+     Higher number = lifted surface; lower = recessed/canvas. */
+  --sd-ground-000: #f4f4f5;  /* deepest tint — recess, page edges */
+  --sd-ground-050: #ffffff;  /* canvas — pure white, the page bg */
+  --sd-ground-100: #ffffff;  /* surface (cards, panels) — pure white */
+  --sd-ground-150: #fafafa;  /* surface raised (hover, popovers) */
+  --sd-ground-200: #ffffff;  /* surface high (modals, command-k) */
+  --sd-ground-300: #e5e5e5;  /* hairline-strong, borders on raised */
+  --sd-ground-400: #d4d4d4;  /* hairline, dividers, muted icons */
+  --sd-ground-500: #a3a3a3;  /* disabled text, helper */
+
+  /* ---------- COLOR: INK ---------- */
+  /* Neutral near-black series. Pure greys, not warm. */
+  --sd-ink-100: #0a0a0a;  /* primary text — high contrast */
+  --sd-ink-200: #262626;  /* secondary text */
+  --sd-ink-300: #525252;  /* tertiary text, metadata */
+  --sd-ink-400: #737373;  /* muted, labels */
+
+  /* ---------- COLOR: ACCENT (Orange — the spark) ---------- */
+  /* Warm honey-orange. Pulled toward gold (more yellow, less red) for
+     a sunlit, candle-glow feel — easy on the eyes, still clearly orange. */
+  --sd-amber-100: #fceedb;  /* lightest — tag/chip fills */
+  --sd-amber-200: #f0b87a;  /* mid — hover-lighter on primary */
+  --sd-amber-300: #d68a2e;  /* PRIMARY ACCENT — honey orange */
+  --sd-amber-400: #a8661c;  /* press, deep accent */
+  --sd-amber-500: #6e4112;  /* deepest — text on amber-100 */
+  --sd-amber-glow: rgb(214 138 46 / 14%);  /* soft halos */
+
+  /* ---------- COLOR: SECONDARY (Cyan — for data viz only) ---------- */
+  --sd-cyan-300: #0e7490;
+  --sd-cyan-500: #155e75;
+
+  /* ---------- COLOR: SEMANTIC ---------- */
+  --sd-success: #16a34a;
+  --sd-warning: #f97316;
+  --sd-danger:  #dc2626;
+  --sd-info:    #0e7490;
+
+  /* ---------- TYPE: FAMILIES ---------- */
+  --sd-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --sd-font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", monospace;
+  --sd-font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+
+  /* ---------- TYPE: SIZE SCALE ---------- */
+  /* Modular scale 1.250 (major third), anchored at 14px base */
+  --sd-text-2xs: 10px;   /* meta, hotkey HUD */
+  --sd-text-xs:  12px;   /* labels, captions */
+  --sd-text-sm:  13px;   /* dense UI */
+  --sd-text-md:  14px;   /* body */
+  --sd-text-lg:  17px;   /* lead */
+  --sd-text-xl:  21px;   /* h4 */
+  --sd-text-2xl: 26px;   /* h3 */
+  --sd-text-3xl: 33px;   /* h2 */
+  --sd-text-4xl: 44px;   /* h1 */
+  --sd-text-5xl: 64px;   /* display */
+  --sd-text-6xl: 96px;   /* hero display */
+
+  /* ---------- TYPE: WEIGHT ---------- */
+  --sd-weight-regular: 400;
+  --sd-weight-medium:  500;
+  --sd-weight-semibold: 600;
+  --sd-weight-bold:    700;
+
+  /* ---------- TYPE: TRACKING / LEADING ---------- */
+  --sd-leading-tight:   1.1;
+  --sd-leading-snug:    1.25;
+  --sd-leading-normal:  1.45;
+  --sd-leading-relaxed: 1.6;
+
+  --sd-tracking-tighter: -0.03em;  /* display, large headings */
+  --sd-tracking-tight:   -0.015em; /* body headings */
+  --sd-tracking-normal:  0em;
+  --sd-tracking-wide:    0.04em;   /* small caps labels */
+  --sd-tracking-mono:    -0.01em;  /* mono looks better slightly tightened */
+
+  /* ---------- SPACING (4px base) ---------- */
+  --sd-space-0:  0px;
+  --sd-space-1:  4px;
+  --sd-space-2:  8px;
+  --sd-space-3:  12px;
+  --sd-space-4:  16px;
+  --sd-space-5:  20px;
+  --sd-space-6:  24px;
+  --sd-space-8:  32px;
+  --sd-space-10: 40px;
+  --sd-space-12: 48px;
+  --sd-space-16: 64px;
+  --sd-space-20: 80px;
+  --sd-space-24: 96px;
+
+  /* ---------- RADII ---------- */
+  /* Supadense uses small radii — sharp, dense, technical. */
+  --sd-radius-none: 0px;
+  --sd-radius-xs:   2px;   /* default for chips, inputs */
+  --sd-radius-sm:   4px;   /* buttons, cards */
+  --sd-radius-md:   6px;   /* dialogs */
+  --sd-radius-lg:   10px;  /* large surfaces */
+  --sd-radius-full: 9999px;
+
+  /* ---------- ELEVATION (NOT shadows — hairlines + fills) ---------- */
+  --sd-border-hairline: 1px solid var(--sd-ground-300);
+  --sd-border-faint:    1px solid var(--sd-ground-400);
+  --sd-border-strong:   1px solid var(--sd-ink-400);
+
+  /* Drop shadows are reserved for floating overlays (popovers, modals). */
+  --sd-shadow-pop:   0 8px 24px -8px rgb(0 0 0 / 12%), 0 2px 6px -2px rgb(0 0 0 / 8%);
+  --sd-shadow-modal: 0 32px 64px -16px rgb(0 0 0 / 18%), 0 8px 24px -8px rgb(0 0 0 / 10%);
+
+  /* Inner highlight — subtle top edge catch on surfaces */
+  --sd-inner-glow: inset 0 1px 0 rgb(255 255 255 / 60%);
+
+  /* ---------- MOTION ---------- */
+  --sd-ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
+  --sd-ease-in:    cubic-bezier(0.55, 0, 1, 0.45);
+  --sd-ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --sd-dur-instant: 80ms;
+  --sd-dur-fast:    140ms;
+  --sd-dur-base:    220ms;
+  --sd-dur-slow:    400ms;
+
+  /* ---------- LAYOUT ---------- */
+  --sd-content-narrow:  640px;
+  --sd-content-base:    960px;
+  --sd-content-wide:    1280px;
+  --sd-content-max:     1440px;
+}
+
+/* ============================================================
+   SEMANTIC ELEMENT STYLES
+   Use these via class names like .sd-h1, .sd-body, .sd-mono.
+   ============================================================ */
+
+.sd-display {
+  font-family: var(--sd-font-sans);
+  font-weight: 600;
+  font-style: normal;
+  font-size: var(--sd-text-6xl);
+  line-height: var(--sd-leading-tight);
+  letter-spacing: var(--sd-tracking-tighter);
+  color: var(--sd-ink-100);
+}
+
+.sd-h1 {
+  font-family: var(--sd-font-sans);
+  font-weight: 500;
+  font-size: var(--sd-text-4xl);
+  line-height: var(--sd-leading-tight);
+  letter-spacing: var(--sd-tracking-tighter);
+  color: var(--sd-ink-100);
+}
+
+.sd-h2 {
+  font-family: var(--sd-font-sans);
+  font-weight: 500;
+  font-size: var(--sd-text-3xl);
+  line-height: var(--sd-leading-snug);
+  letter-spacing: var(--sd-tracking-tight);
+  color: var(--sd-ink-100);
+}
+
+.sd-h3 {
+  font-family: var(--sd-font-sans);
+  font-weight: 500;
+  font-size: var(--sd-text-2xl);
+  line-height: var(--sd-leading-snug);
+  letter-spacing: var(--sd-tracking-tight);
+  color: var(--sd-ink-100);
+}
+
+.sd-h4 {
+  font-family: var(--sd-font-sans);
+  font-weight: 600;
+  font-size: var(--sd-text-xl);
+  line-height: var(--sd-leading-snug);
+  letter-spacing: var(--sd-tracking-tight);
+  color: var(--sd-ink-100);
+}
+
+.sd-lead {
+  font-family: var(--sd-font-sans);
+  font-weight: 400;
+  font-size: var(--sd-text-lg);
+  line-height: var(--sd-leading-relaxed);
+  color: var(--sd-ink-200);
+}
+
+.sd-body {
+  font-family: var(--sd-font-sans);
+  font-weight: 400;
+  font-size: var(--sd-text-md);
+  line-height: var(--sd-leading-normal);
+  color: var(--sd-ink-200);
+}
+
+.sd-small {
+  font-family: var(--sd-font-sans);
+  font-weight: 400;
+  font-size: var(--sd-text-sm);
+  line-height: var(--sd-leading-normal);
+  color: var(--sd-ink-300);
+}
+
+.sd-label {
+  font-family: var(--sd-font-mono);
+  font-weight: 500;
+  font-size: var(--sd-text-xs);
+  line-height: 1;
+  letter-spacing: var(--sd-tracking-wide);
+  text-transform: uppercase;
+  color: var(--sd-ink-400);
+}
+
+.sd-mono {
+  font-family: var(--sd-font-mono);
+  font-weight: 400;
+  font-size: var(--sd-text-sm);
+  letter-spacing: var(--sd-tracking-mono);
+  color: var(--sd-ink-200);
+}
+
+.sd-serif-accent {
+  font-family: var(--sd-font-sans);
+  font-style: normal;
+  font-weight: 600;
+  color: var(--sd-amber-300);
+}

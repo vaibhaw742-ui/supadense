@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <title>supadense · sign in</title>
 <meta name="theme-color" content="#ffffff">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet">
@@ -45,6 +44,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    padding-left: 0;
   }
   .auth-card {
     width: 100%;
@@ -61,7 +61,7 @@
     color: var(--sd-amber-300);
   }
   .auth-card .eyebrow::before {
-    content: ""; width: 6px; height: 6px; background: var(--sd-amber-300); display: inline-block;
+    content: ""; width: 6px; height: 6px; background: var(--sd-amber-300);
   }
   .auth-card h1 {
     font-size: 48px;
@@ -70,7 +70,7 @@
     font-weight: 500;
     margin: 20px 0 14px;
   }
-  .auth-card h1 em { color: var(--sd-amber-300); font-weight: 400; }
+  .auth-card h1 em { font-family: var(--sd-font-sans); font-style: normal; color: var(--sd-amber-300); font-weight: 400; }
   .auth-card .sub {
     color: var(--sd-ink-300);
     font-size: 15px;
@@ -121,14 +121,13 @@
     transition: background var(--sd-dur-fast);
   }
   .auth-form button[type="submit"]:hover { background: var(--sd-amber-200); }
-  .auth-form .form-error {
-    font-size: 12px;
+  .auth-form .err {
     color: var(--sd-danger);
-    padding: 10px 14px;
-    background: rgba(220,38,38,0.06);
-    border: 1px solid rgba(220,38,38,0.2);
-    border-radius: 4px;
+    font-family: var(--sd-font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
     display: none;
+    margin-top: 4px;
   }
 
   .divider {
@@ -138,7 +137,10 @@
     gap: 14px;
   }
   .divider::before, .divider::after {
-    content: ""; flex: 1; height: 1px; background: var(--sd-ground-300);
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--sd-ground-300);
   }
   .divider span {
     font-family: var(--sd-font-mono);
@@ -155,7 +157,10 @@
     font-size: 13px;
     color: var(--sd-ink-300);
   }
-  .footnote a { color: var(--sd-amber-300); border-bottom: 1px solid var(--sd-amber-400); }
+  .footnote a {
+    color: var(--sd-amber-300);
+    border-bottom: 1px solid var(--sd-amber-400);
+  }
   .footnote a:hover { color: var(--sd-amber-200); }
 
   .auth-foot {
@@ -179,7 +184,6 @@
   body[data-state="sent"] .sent { display: block; }
   body[data-state="sent"] .signin-state,
   body[data-state="sent"] .waitlist-state { display: none; }
-
   .sent .icon {
     width: 56px; height: 56px;
     border: 1px solid var(--sd-amber-400);
@@ -187,7 +191,7 @@
     display: flex; align-items: center; justify-content: center;
     color: var(--sd-amber-300);
     margin-bottom: 24px;
-    background: rgba(214,138,46,0.06);
+    background: rgba(228,166,74,0.06);
     position: relative;
   }
   .sent .icon::before {
@@ -210,7 +214,7 @@
     border-radius: var(--sd-radius-sm);
     font-family: var(--sd-font-mono);
     font-size: 13px;
-    color: var(--sd-amber-300);
+    color: var(--sd-amber-200);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -245,7 +249,11 @@
     font-size: 11px;
     color: var(--sd-ink-400);
   }
-  .sent .actions { margin-top: 36px; display: flex; gap: 10px; }
+  .sent .actions {
+    margin-top: 36px;
+    display: flex;
+    gap: 10px;
+  }
   .demo-link {
     margin-top: 24px;
     font-family: var(--sd-font-mono);
@@ -295,7 +303,10 @@
     margin-right: 8px;
     vertical-align: middle;
   }
-  .quote-side .editorial { position: relative; margin-top: 96px; }
+  .quote-side .editorial {
+    position: relative;
+    margin-top: 96px;
+  }
   .quote-side .pull {
     font-family: var(--sd-font-sans);
     font-style: normal;
@@ -316,6 +327,7 @@
   }
   .quote-side .byline span { color: var(--sd-amber-300); }
 
+  /* graph snippet */
   .graph-vignette {
     margin-top: 56px;
     position: relative;
@@ -355,7 +367,7 @@
 </head>
 <body data-state="signin">
 
-  <!-- LEFT -->
+  <!-- ============ LEFT ============ -->
   <div class="auth-side">
     <div class="top">
       <a class="sd-wordmark" href="/">
@@ -379,58 +391,58 @@
           <h1>Sign in to<br>your <em>second memory.</em></h1>
           <p class="sub">Your library, your graph, your queue — right where you left them.</p>
 
-          <form class="auth-form" id="signin-form">
+          <form class="auth-form" onsubmit="handleSignin(event)">
             <div class="field">
               <label for="signin-email">email</label>
               <input type="email" id="signin-email" name="email" required placeholder="you@personal.com" autocomplete="email" />
             </div>
             <div class="field">
-              <label for="signin-pw" style="display:flex;justify-content:space-between;align-items:center;">
+              <label for="signin-pw" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>password</span>
-                <a href="#" style="font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-amber-300);border-bottom:1px solid var(--sd-amber-400);letter-spacing:0.06em;">forgot?</a>
+                <a href="#" style="font-family: var(--sd-font-mono); font-size: 10px; color: var(--sd-amber-300); border-bottom: 1px solid var(--sd-amber-400); letter-spacing: 0.06em;">forgot?</a>
               </label>
               <input type="password" id="signin-pw" name="password" required placeholder="••••••••••" autocomplete="current-password" />
             </div>
-            <div id="signin-error" class="form-error"></div>
+            <div class="err" id="signin-err"></div>
             <button type="submit" id="signin-btn">Sign in →</button>
           </form>
 
           <div class="footnote">
             New user? <a href="#" onclick="event.preventDefault(); document.body.setAttribute('data-state','waitlist');">Join the waitlist here →</a><br>
-            <span style="color:var(--sd-ink-400);font-size:12px;">By signing in you agree to our terms. We keep <span style="color:var(--sd-amber-300);">none</span> of your reading — it stays yours.</span>
+            <span style="color: var(--sd-ink-400); font-size: 12px;">By signing in you agree to our terms. We keep <span style="color: var(--sd-amber-300);">none</span> of your reading — it stays yours.</span>
           </div>
         </div>
 
         <!-- WAITLIST STATE -->
-        <div class="waitlist-state" style="display:none;">
+        <div class="waitlist-state" style="display: none;">
           <div class="eyebrow">private alpha · 100+ engineers</div>
           <h1>Join the<br><em>waitlist.</em></h1>
           <p class="sub">Drop your email — we'll send an invite the moment a seat opens.</p>
 
-          <form class="auth-form" id="waitlist-form">
+          <form class="auth-form" onsubmit="handleWaitlist(event)">
             <div class="field">
               <label for="wl-email">personal email</label>
               <input type="email" id="wl-email" name="email" required placeholder="you@personal.com" autocomplete="email" />
             </div>
-            <div id="wl-error" class="form-error"></div>
+            <div class="err" id="wl-err"></div>
             <button type="submit" id="wl-btn">Join waitlist →</button>
           </form>
 
           <div class="footnote">
             Already have an account? <a href="#" onclick="event.preventDefault(); document.body.setAttribute('data-state','signin');">← Sign in</a><br>
-            <span style="color:var(--sd-ink-400);font-size:12px;">We keep <span style="color:var(--sd-amber-300);">none</span> of your reading — it stays yours.</span>
+            <span style="color: var(--sd-ink-400); font-size: 12px;">We keep <span style="color: var(--sd-amber-300);">none</span> of your reading — it stays yours.</span>
           </div>
         </div>
 
         <!-- SENT STATE -->
-        <div class="sent" style="display:none;">
+        <div class="sent">
           <div class="icon">
             <svg class="sd-icon sd-icon--lg" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
           <div class="eyebrow">you're on the list</div>
-          <h1 style="margin-top:18px;">Welcome to the<br><em>waitlist.</em></h1>
+          <h1 style="margin-top: 18px;">Welcome to the<br><em>waitlist.</em></h1>
           <p class="sub">We'll send your invite the moment a seat opens. Until then, here's what to expect.</p>
 
           <div class="recipient">
@@ -439,14 +451,14 @@
           </div>
 
           <div class="check-list">
-            <div class="item"><div class="n">1</div><div>Check your inbox for a one-time link to <strong style="color:var(--sd-ink-100);font-weight:500;">confirm your spot</strong>.</div></div>
-            <div class="item"><div class="n">2</div><div>We're inviting <span style="color:var(--sd-amber-300);">batches of engineers</span> as alpha capacity opens up.</div></div>
+            <div class="item"><div class="n">1</div><div>Check your inbox for a one-time link to <strong style="color: var(--sd-ink-100); font-weight: 500;">confirm your spot</strong>.</div></div>
+            <div class="item"><div class="n">2</div><div>We're inviting <span style="color: var(--sd-amber-200);">batches of engineers</span> as alpha capacity opens up.</div></div>
             <div class="item"><div class="n">3</div><div>Your invite lands by email. Click it — supadense opens with your library ready to compound.</div></div>
           </div>
 
           <div class="actions">
             <button class="sd-btn sd-btn--primary" onclick="document.body.setAttribute('data-state','waitlist');">Use a different email</button>
-            <button class="sd-btn" onclick="document.body.setAttribute('data-state','signin');">Back to sign in</button>
+            <button class="sd-btn">Share with a friend</button>
           </div>
 
           <div class="demo-link">
@@ -460,12 +472,12 @@
     <div class="auth-foot">
       <a href="#">privacy</a>
       <a href="#">terms</a>
-      <a href="https://x.com/vaibhawkhemka6" target="_blank" rel="noopener noreferrer">x · @vaibhawkhemka6</a>
-      <span style="margin-left:auto;">© supadense · 2026</span>
+      <a href="#">x · @vaibhawkhemka6</a>
+      <span style="margin-left: auto;">© supadense · 2026</span>
     </div>
   </div>
 
-  <!-- RIGHT — editorial -->
+  <!-- ============ RIGHT — editorial ============ -->
   <div class="quote-side">
     <div class="top">
       <span><span class="dot"></span>alpha · invite-only</span>
@@ -536,69 +548,71 @@
   </div>
 
 <script>
-  document.getElementById('signin-form').addEventListener('submit', async function(e) {
-    e.preventDefault()
-    const btn = document.getElementById('signin-btn')
-    const errEl = document.getElementById('signin-error')
-    const email = document.getElementById('signin-email').value
-    const password = document.getElementById('signin-pw').value
-    btn.disabled = true
-    btn.textContent = 'Signing in…'
-    errEl.style.display = 'none'
+  async function handleSignin(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = document.getElementById('signin-btn');
+    const err = document.getElementById('signin-err');
+    err.style.display = 'none';
+    btn.textContent = 'signing in…';
+    btn.disabled = true;
     try {
       const res = await fetch('/api/supa-auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        errEl.textContent = data.error || 'Invalid email or password.'
-        errEl.style.display = 'block'
-        btn.disabled = false
-        btn.textContent = 'Sign in →'
-        return
+        body: JSON.stringify({
+          email: form.email.value,
+          password: form.password.value
+        })
+      });
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        err.textContent = data.error || 'invalid email or password';
+        err.style.display = 'block';
+        btn.textContent = 'Sign in →';
+        btn.disabled = false;
       }
-      window.location.href = '/'
     } catch {
-      errEl.textContent = 'Could not connect. Try again.'
-      errEl.style.display = 'block'
-      btn.disabled = false
-      btn.textContent = 'Sign in →'
+      err.textContent = 'connection error — try again';
+      err.style.display = 'block';
+      btn.textContent = 'Sign in →';
+      btn.disabled = false;
     }
-  })
+  }
 
-  document.getElementById('waitlist-form').addEventListener('submit', async function(e) {
-    e.preventDefault()
-    const btn = document.getElementById('wl-btn')
-    const errEl = document.getElementById('wl-error')
-    const email = document.getElementById('wl-email').value
-    btn.disabled = true
-    btn.textContent = 'Submitting…'
-    errEl.style.display = 'none'
+  async function handleWaitlist(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = document.getElementById('wl-btn');
+    const err = document.getElementById('wl-err');
+    err.style.display = 'none';
+    btn.textContent = 'joining…';
+    btn.disabled = true;
     try {
       const res = await fetch('/api/supa-auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        errEl.textContent = data.error || 'Something went wrong.'
-        errEl.style.display = 'block'
-        btn.disabled = false
-        btn.textContent = 'Join waitlist →'
-        return
+        body: JSON.stringify({ email: form.email.value })
+      });
+      if (res.ok) {
+        document.querySelector('.recipient .email').textContent = form.email.value;
+        document.body.setAttribute('data-state', 'sent');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        err.textContent = data.error || 'try again';
+        err.style.display = 'block';
+        btn.textContent = 'Join waitlist →';
+        btn.disabled = false;
       }
-      document.querySelector('.recipient .email').textContent = email
-      document.body.setAttribute('data-state', 'sent')
     } catch {
-      errEl.textContent = 'Could not connect. Try again.'
-      errEl.style.display = 'block'
-      btn.disabled = false
-      btn.textContent = 'Join waitlist →'
+      err.textContent = 'connection error — try again';
+      err.style.display = 'block';
+      btn.textContent = 'Join waitlist →';
+      btn.disabled = false;
     }
-  })
+  }
 </script>
 </body>
 </html>
