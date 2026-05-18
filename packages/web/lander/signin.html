@@ -406,7 +406,11 @@ body[data-state="sent"] .signin-state, body[data-state="sent"] .waitlist-state {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email.value, password: form.password.value })
       });
-      if (res.ok) { window.location.href = '/'; }
+      if (res.ok) {
+        const d = await res.json().catch(() => ({}));
+        if (d.token) localStorage.setItem('supadense.auth.token', d.token);
+        window.location.href = '/workspaces';
+      }
       else {
         const d = await res.json().catch(() => ({}));
         err.textContent = d.error || 'invalid email or password'; err.style.display = 'block';
