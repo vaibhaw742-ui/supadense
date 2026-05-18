@@ -85,6 +85,12 @@ RUN printf 'server {\n\
         try_files /signin.html =404;\n\
     }\n\
 \n\
+    # Platform demo iframe (used by lander "peek inside" section)\n\
+    location = /app.html {\n\
+        root /usr/share/nginx/html/lander;\n\
+        try_files /app.html =404;\n\
+    }\n\
+\n\
     # Workspaces — stable SPA entry point after login\n\
     location = /workspaces {\n\
         root /usr/share/nginx/html;\n\
