@@ -7,8 +7,97 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared.css">
 <link rel="icon" href="../assets/mark.svg">
+<style>
+/* ============================================================
+   DESIGN TOKENS + SHARED CHROME (inlined — no external @import)
+   ============================================================ */
+:root {
+  --sd-ground-000: #f4f4f5;
+  --sd-ground-050: #ffffff;
+  --sd-ground-100: #ffffff;
+  --sd-ground-150: #fafafa;
+  --sd-ground-200: #ffffff;
+  --sd-ground-300: #e5e5e5;
+  --sd-ground-400: #d4d4d4;
+  --sd-ground-500: #a3a3a3;
+  --sd-ink-100: #0a0a0a;
+  --sd-ink-200: #262626;
+  --sd-ink-300: #525252;
+  --sd-ink-400: #737373;
+  --sd-amber-100: #fceedb;
+  --sd-amber-200: #f0b87a;
+  --sd-amber-300: #d68a2e;
+  --sd-amber-400: #a8661c;
+  --sd-amber-500: #6e4112;
+  --sd-amber-glow: rgb(214 138 46 / 14%);
+  --sd-cyan-300: #0e7490;
+  --sd-cyan-500: #155e75;
+  --sd-success: #16a34a;
+  --sd-warning: #f97316;
+  --sd-danger:  #dc2626;
+  --sd-info:    #0e7490;
+  --sd-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --sd-font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", monospace;
+  --sd-radius-none: 0px; --sd-radius-xs: 2px; --sd-radius-sm: 4px;
+  --sd-radius-md: 6px; --sd-radius-lg: 10px; --sd-radius-full: 9999px;
+  --sd-border-hairline: 1px solid var(--sd-ground-300);
+  --sd-border-faint:    1px solid var(--sd-ground-400);
+  --sd-border-strong:   1px solid var(--sd-ink-400);
+  --sd-shadow-pop:   0 8px 24px -8px rgb(0 0 0 / 12%), 0 2px 6px -2px rgb(0 0 0 / 8%);
+  --sd-shadow-modal: 0 32px 64px -16px rgb(0 0 0 / 18%), 0 8px 24px -8px rgb(0 0 0 / 10%);
+  --sd-inner-glow: inset 0 1px 0 rgb(255 255 255 / 60%);
+  --sd-ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
+  --sd-ease-in:    cubic-bezier(0.55, 0, 1, 0.45);
+  --sd-ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --sd-dur-instant: 80ms; --sd-dur-fast: 140ms; --sd-dur-base: 220ms; --sd-dur-slow: 400ms;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--sd-ground-050); color: var(--sd-ink-100); }
+body { font-family: var(--sd-font-sans); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--sd-amber-300); color: var(--sd-ground-050); }
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; }
+em, i, .sd-em { font-style: normal; font-family: inherit; font-weight: 600; color: var(--sd-amber-300); }
+.sd-mark { display: inline-grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(4,1fr); gap: 1px; width: 24px; height: 24px; flex-shrink: 0; }
+.sd-mark i { display: block; background: var(--sd-ink-100); }
+.sd-mark i.amber { background: var(--sd-amber-300); }
+.sd-mark--lg { width: 40px; height: 40px; gap: 2px; }
+.sd-mark--xl { width: 64px; height: 64px; gap: 3px; }
+.sd-wordmark { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; letter-spacing: -0.02em; font-size: 16px; color: var(--sd-ink-100); }
+.sd-topnav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--sd-ground-300); }
+.sd-topnav-inner { max-width: 1200px; margin: 0 auto; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+.sd-topnav .links { display: flex; gap: 28px; font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sd-ink-300); }
+.sd-topnav .links a:hover { color: var(--sd-amber-300); }
+.sd-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--sd-radius-sm); font-family: var(--sd-font-sans); font-size: 13px; font-weight: 500; letter-spacing: -0.01em; border: 1px solid var(--sd-ground-300); background: var(--sd-ground-100); color: var(--sd-ink-100); transition: all var(--sd-dur-fast) var(--sd-ease-out); cursor: pointer; }
+.sd-btn:hover { border-color: var(--sd-ground-400); background: var(--sd-ground-150); }
+.sd-btn--primary { background: var(--sd-amber-300); color: var(--sd-ground-050); border-color: var(--sd-amber-300); font-weight: 600; }
+.sd-btn--primary:hover { background: var(--sd-amber-200); border-color: var(--sd-amber-200); }
+.sd-btn--ghost { background: transparent; border-color: transparent; }
+.sd-btn--ghost:hover { background: var(--sd-ground-100); border-color: var(--sd-ground-300); }
+.sd-btn--sm { padding: 6px 12px; font-size: 12px; }
+.sd-btn--lg { padding: 14px 22px; font-size: 15px; }
+.sd-kbd { display: inline-block; font-family: var(--sd-font-mono); font-size: 10px; padding: 2px 6px; background: var(--sd-ground-150); border: 1px solid var(--sd-ground-300); border-bottom-width: 2px; border-radius: var(--sd-radius-xs); color: var(--sd-ink-300); line-height: 1; }
+.sd-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; font-family: var(--sd-font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-xs); color: var(--sd-ink-300); background: var(--sd-ground-100); }
+.sd-tag--amber { color: var(--sd-amber-300); border-color: var(--sd-amber-400); background: rgba(228,166,74,0.08); }
+.sd-tag::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--sd-ground-400); }
+.sd-tag--amber::before { background: var(--sd-amber-300); }
+.sd-eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sd-amber-300); }
+.sd-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--sd-amber-300); display: inline-block; }
+.sd-h-display { font-size: 96px; line-height: 0.95; letter-spacing: -0.04em; font-weight: 500; color: var(--sd-ink-100); margin: 0; }
+.sd-h-1 { font-size: 64px; line-height: 1; letter-spacing: -0.03em; font-weight: 500; color: var(--sd-ink-100); margin: 0; }
+.sd-h-2 { font-size: 40px; line-height: 1.05; letter-spacing: -0.025em; font-weight: 500; color: var(--sd-ink-100); margin: 0; }
+.sd-h-3 { font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 500; color: var(--sd-ink-100); margin: 0; }
+em.serif, .sd-italic { font-family: var(--sd-font-sans); font-style: normal; color: var(--sd-amber-300); font-weight: 400; }
+.sd-card { background: var(--sd-ground-100); border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-sm); box-shadow: var(--sd-inner-glow); padding: 20px; }
+.sd-card:hover { border-color: var(--sd-ground-400); }
+.sd-hr { height: 1px; background: var(--sd-ground-300); border: 0; margin: 0; }
+.sd-vr { width: 1px; background: var(--sd-ground-300); align-self: stretch; }
+.sd-icon { width: 18px; height: 18px; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; stroke: currentColor; flex-shrink: 0; }
+.sd-icon--sm { width: 14px; height: 14px; }
+.sd-icon--lg { width: 22px; height: 22px; }
+</style>
 <style>
   /* Local override removed — the system kills italic and serif emphasis project-wide.
      Emphasis treatment now comes from colors_and_type.css: <em> renders as straight
