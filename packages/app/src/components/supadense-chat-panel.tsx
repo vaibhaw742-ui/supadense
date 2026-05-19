@@ -297,8 +297,8 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
             value={input()}
             onInput={(e) => setInput(e.currentTarget.value)}
             onKeyDown={onKeyDown}
-            placeholder={inSession() ? "Ask anything in your knowledge…" : "Open a session to start chatting…"}
-            disabled={sending() || !inSession()}
+            placeholder="Ask anything in your knowledge…"
+            disabled={sending()}
             rows={2}
             style={{
               display: "block", width: "100%", background: "none", border: "none",
