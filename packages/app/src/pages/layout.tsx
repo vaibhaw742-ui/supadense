@@ -88,7 +88,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { SupadenseMark } from "@/components/supadense-chat-panel"
+import { SupadenseFAB, SupadenseMark } from "@/components/supadense-chat-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2517,7 +2517,7 @@ export default function Layout(props: ParentProps) {
         {import.meta.env.DEV && <DebugBar />}
       </div>
       <Toast.Region />
-
+      <SupadenseFAB />
     </div>
   )
 }

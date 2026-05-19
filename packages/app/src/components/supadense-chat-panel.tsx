@@ -1,8 +1,9 @@
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64 } from "@/utils/base64"
 import { PromptInput } from "@/components/prompt-input"
+import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 function partText(parts: Part[] | undefined): string {
@@ -212,64 +213,63 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
   )
 }
 
-/** FAB + floating panel — rendered inside directory-layout so PromptInput has its contexts */
-export function SupadenseChatOverlay() {
-  const [chatOpen, setChatOpen] = createSignal(false)
-
+/** Global FAB — lives in layout.tsx (visible on all pages) */
+export function SupadenseFAB() {
   return (
-    <>
-      {/* FAB */}
-      <button
-        type="button"
-        title="Ask supadense"
-        aria-label="Ask supadense"
-        onClick={() => setChatOpen((v) => !v)}
-        style={{
-          position: "fixed",
-          bottom: "28px",
-          right: "28px",
-          width: "56px",
-          height: "56px",
-          "border-radius": "50%",
-          background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
-          border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
-          "box-shadow": chatOpen()
-            ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
-            : "0 4px 20px rgba(0,0,0,0.4)",
-          display: "flex",
-          "align-items": "center",
-          "justify-content": "center",
-          cursor: "pointer",
-          "z-index": "100",
-          transition: "border-color 160ms, box-shadow 160ms, background 160ms",
-          padding: "0",
-        }}
-      >
-        <SupadenseMark size={26} />
-      </button>
+    <button
+      type="button"
+      title="Ask supadense"
+      aria-label="Ask supadense"
+      onClick={() => setChatOpen((v) => !v)}
+      style={{
+        position: "fixed",
+        bottom: "28px",
+        right: "28px",
+        width: "56px",
+        height: "56px",
+        "border-radius": "50%",
+        background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
+        border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
+        "box-shadow": chatOpen()
+          ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
+          : "0 4px 20px rgba(0,0,0,0.4)",
+        display: "flex",
+        "align-items": "center",
+        "justify-content": "center",
+        cursor: "pointer",
+        "z-index": "100",
+        transition: "border-color 160ms, box-shadow 160ms, background 160ms",
+        padding: "0",
+      }}
+    >
+      <SupadenseMark size={26} />
+    </button>
+  )
+}
 
-      {/* Floating card panel */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "96px",
-          right: "28px",
-          width: "420px",
-          height: "600px",
-          "z-index": "99",
-          "border-radius": "14px",
-          overflow: "hidden",
-          "pointer-events": chatOpen() ? "auto" : "none",
-          opacity: chatOpen() ? "1" : "0",
-          transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
-          transition: "opacity 180ms ease, transform 180ms ease",
-        }}
-      >
-        <Show when={chatOpen()}>
-          <SupadenseChatPanel onClose={() => setChatOpen(false)} />
-        </Show>
-      </div>
-    </>
+/** Floating panel — lives in directory-layout.tsx so PromptInput has SDK/Sync/Local contexts */
+export function SupadenseChatOverlay() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "96px",
+        right: "28px",
+        width: "420px",
+        height: "600px",
+        "z-index": "99",
+        "border-radius": "14px",
+        overflow: "hidden",
+        "pointer-events": chatOpen() ? "auto" : "none",
+        opacity: chatOpen() ? "1" : "0",
+        transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
+        transition: "opacity 180ms ease, transform 180ms ease",
+      }}
+    >
+      <Show when={chatOpen()}>
+        <SupadenseChatPanel onClose={() => setChatOpen(false)} />
+      </Show>
+    </div>
   )
 }
 
