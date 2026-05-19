@@ -264,12 +264,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const armCollapse = () => {
-    if (!layout.sidebar.opened()) return
-    disarmCollapse()
-    collapseTimer.current = window.setTimeout(() => {
-      collapseTimer.current = undefined
-      layout.sidebar.close()
-    }, 400)
+    // Sidebar only collapses via explicit button click, not on mouse-leave
   }
 
   let peekt: number | undefined
@@ -2112,9 +2107,9 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
-          "border border-b-0 border-border-weak-base": !merged(),
-          "border-l border-t border-border-weaker-base": merged(),
+          "flex flex-col min-h-0 min-w-0 box-border px-3": true,
+          "border-r border-border-weak-base": !merged(),
+          "border-r border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
           "bg-background-stronger": !merged() && !hover(),
           "flex-1 min-w-0 max-w-full overflow-hidden": true,
@@ -2381,7 +2376,7 @@ export default function Layout(props: ParentProps) {
               classList={{
                 "hidden xl:block": layout.sidebar.opened(),
                 "hidden": !layout.sidebar.opened(),
-                "absolute inset-y-0 left-0": true,
+                "fixed top-0 bottom-0 left-0": true,
                 "z-10": true,
               }}
               style={{ width: `${side()}px` }}
@@ -2403,14 +2398,14 @@ export default function Layout(props: ParentProps) {
 
             <Show when={layout.sidebar.opened()}>
               <div
-                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                class="hidden xl:block fixed top-0 bottom-0 z-30 w-0 overflow-visible"
                 style={{ left: `${side()}px` }}
                 onPointerDown={() => setState("sizing", true)}
               >
                 <ResizeHandle
                   direction="horizontal"
                   size={layout.sidebar.width()}
-                  min={244}
+                  min={220}
                   max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
                   onResize={(w) => {
                     setState("sizing", true)
@@ -2473,6 +2468,21 @@ export default function Layout(props: ParentProps) {
                   {props.children}
                 </Show>
               </main>
+
+              {/* Re-open sidebar button — visible only when sidebar is closed */}
+              <Show when={!layout.sidebar.opened()}>
+                <div class="hidden xl:block fixed top-3 left-3 z-20">
+                  <Tooltip value="Open sidebar" placement="right">
+                    <IconButton
+                      icon="sidebar-active"
+                      variant="ghost"
+                      class="size-8 rounded-md border border-border-base bg-background-base shadow-sm"
+                      onClick={() => layout.sidebar.open()}
+                      aria-label="Open sidebar"
+                    />
+                  </Tooltip>
+                </div>
+              </Show>
             </div>
 
             <div

@@ -44,6 +44,9 @@ import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { SupadenseChatOverlay } from "@/components/supadense-chat-panel"
+import { SessionHeader } from "@/components/session"
+import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { createSizing } from "@/pages/session/helpers"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
@@ -66,10 +69,34 @@ if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname))
   void loadSession()
 }
 
+function SessionRouteContent() {
+  const size = createSizing()
+  return (
+    <>
+      <SessionHeader />
+      <div class="size-full bg-background-base relative flex min-h-0 overflow-hidden">
+        <div class="flex-1 min-w-0 min-h-0" />
+        <SessionSidePanel
+          canReview={() => false}
+          diffs={() => []}
+          diffsReady={() => true}
+          empty={() => ""}
+          hasReview={() => false}
+          reviewCount={() => 0}
+          reviewPanel={() => <></>}
+          focusReviewDiff={() => {}}
+          reviewSnap={false}
+          size={size}
+        />
+      </div>
+      <SupadenseChatOverlay />
+    </>
+  )
+}
+
 const SessionRoute = () => (
   <SessionProviders>
-    <Session />
-    <SupadenseChatOverlay />
+    <SessionRouteContent />
   </SessionProviders>
 )
 
