@@ -1,19 +1,11 @@
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64 } from "@/utils/base64"
 import { PromptInput } from "@/components/prompt-input"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-
-function partText(parts: Part[] | undefined): string {
-  if (!parts) return ""
-  return parts
-    .filter((p) => (p as any).type === "text")
-    .map((p) => (p as any).text ?? (p as any).content ?? "")
-    .join("")
-    .trim()
-}
+import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import type { Message } from "@opencode-ai/sdk/v2/client"
 
 export function SupadenseMark(props: { size?: number; class?: string }) {
   const s = props.size ?? 20
@@ -66,11 +58,6 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
     return (childStore as any).message?.[id] ?? []
   })
 
-  const parts = createMemo(() => {
-    if (!childStore) return {} as Record<string, Part[]>
-    return (childStore as any).part ?? {}
-  })
-
   const isActive = createMemo(() => {
     const id = params.id
     if (!id || !childStore) return false
@@ -79,6 +66,13 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
   })
 
   const hasMessages = createMemo(() => messages().length > 0)
+
+  // User messages drive the turn list — each UserMessage ID maps to one SessionTurn
+  const userMessages = createMemo(() =>
+    messages().filter((m) => m.role === "user")
+  )
+
+  let scrollRef: HTMLDivElement | undefined
 
   return (
     <div style={{
@@ -114,17 +108,18 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </button>
-        <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
-          <button type="button" style={headerIconBtn} aria-label="Close" onClick={props.onClose}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
-        </div>
+        <button type="button" onClick={props.onClose} style={headerIconBtn} aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
       </div>
 
       {/* ── Messages ── */}
-      <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", display: "flex", "flex-direction": "column" }}>
+      <div
+        ref={scrollRef}
+        style={{ flex: "1", "min-height": "0", "overflow-y": "auto", display: "flex", "flex-direction": "column" }}
+      >
         <Show
           when={hasMessages()}
           fallback={
@@ -168,44 +163,26 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
             </div>
           }
         >
-          <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px", flex: "1" }}>
-            <For each={messages()}>
-              {(msg) => {
-                const msgParts = createMemo(() => parts()[msg.id] as Part[] | undefined)
-                const text = createMemo(() => partText(msgParts()))
-                const isUser = msg.role === "user"
-                return (
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "4px", "align-items": isUser ? "flex-end" : "flex-start" }}>
-                    <div style={{ "font-size": "10px", "font-family": "'Geist Mono', monospace", "letter-spacing": "0.08em", "text-transform": "uppercase", color: isUser ? "#d68a2e" : "var(--color-text-weak)", padding: "0 2px" }}>
-                      {isUser ? "you" : "supadense"}
-                    </div>
-                    <div style={{
-                      "max-width": "88%", padding: "8px 12px",
-                      "border-radius": isUser ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
-                      background: isUser ? "rgba(214,138,46,0.12)" : "var(--color-surface-raised-base)",
-                      border: isUser ? "1px solid rgba(214,138,46,0.25)" : "1px solid var(--color-border-base)",
-                      "font-size": "13px", "line-height": "1.5", color: "var(--color-text-strong)",
-                      "word-break": "break-word", "white-space": "pre-wrap",
-                    }}>
-                      <Show when={text()} fallback={<span style={{ color: "var(--color-text-weak)", "font-style": "italic" }}>thinking…</span>}>
-                        {text()}
-                      </Show>
-                    </div>
-                  </div>
-                )
-              }}
+          <div style={{ padding: "8px 0 8px", display: "flex", "flex-direction": "column" }}>
+            <For each={userMessages()}>
+              {(msg) => (
+                <SessionTurn
+                  sessionID={params.id ?? ""}
+                  messageID={msg.id}
+                  active={isActive()}
+                  classes={{
+                    root: "min-w-0 w-full relative",
+                    content: "flex flex-col justify-between !overflow-visible",
+                    container: "w-full px-3",
+                  }}
+                />
+              )}
             </For>
-            <Show when={isActive()}>
-              <div style={{ display: "flex", "align-items": "center", gap: "6px", padding: "4px 2px", "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#d68a2e", "letter-spacing": "0.06em" }}>
-                <span style={{ width: "5px", height: "5px", "border-radius": "50%", background: "#d68a2e", display: "inline-block" }} />
-                working…
-              </div>
-            </Show>
           </div>
         </Show>
       </div>
 
-      {/* ── Input (exact same PromptInput as left chat) ── */}
+      {/* ── Input ── */}
       <div style={{ "flex-shrink": "0", padding: "0 8px 8px" }}>
         <PromptInput onSubmit={() => {}} />
       </div>
@@ -247,7 +224,7 @@ export function SupadenseFAB() {
   )
 }
 
-/** Floating panel — lives in directory-layout.tsx so PromptInput has SDK/Sync/Local contexts */
+/** Floating panel — lives inside SessionRoute so all providers (File, Prompt, SDK, Sync) are available */
 export function SupadenseChatOverlay() {
   return (
     <div
