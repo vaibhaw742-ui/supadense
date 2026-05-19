@@ -2527,7 +2527,7 @@ export default function Layout(props: ParentProps) {
         style={{
           position: "fixed",
           bottom: "28px",
-          right: chatOpen() ? "396px" : "28px",
+          right: "28px",
           width: "56px",
           height: "56px",
           "border-radius": "50%",
@@ -2548,17 +2548,21 @@ export default function Layout(props: ParentProps) {
         <SupadenseMark size={26} />
       </button>
 
-      {/* Supadense Chat Panel */}
+      {/* Supadense Chat Panel — floating card above FAB */}
       <div
         style={{
           position: "fixed",
-          top: "0",
-          right: chatOpen() ? "0" : "-380px",
+          bottom: "96px",
+          right: "28px",
           width: "380px",
-          height: "100%",
+          height: "540px",
           "z-index": "99",
-          transition: "right 200ms ease",
-          "padding-top": "40px",
+          "border-radius": "14px",
+          overflow: "hidden",
+          "pointer-events": chatOpen() ? "auto" : "none",
+          opacity: chatOpen() ? "1" : "0",
+          transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
+          transition: "opacity 180ms ease, transform 180ms ease",
         }}
       >
         <Show when={chatOpen()}>
