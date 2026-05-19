@@ -8,6 +8,7 @@ import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { SupadenseChatOverlay } from "@/components/supadense-chat-panel"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -36,7 +37,10 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
     >
-      <LocalProvider>{props.children}</LocalProvider>
+      <LocalProvider>
+        {props.children}
+        <SupadenseChatOverlay />
+      </LocalProvider>
     </DataProvider>
   )
 }

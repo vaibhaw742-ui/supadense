@@ -88,7 +88,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { SupadenseChatPanel, SupadenseMark } from "@/components/supadense-chat-panel"
+import { SupadenseMark } from "@/components/supadense-chat-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -129,7 +129,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
-  const [chatOpen, setChatOpen] = createSignal(false)
+
   const initialDirectory = decode64(params.dir)
   const route = createMemo(() => {
     const slug = params.dir
@@ -2518,57 +2518,6 @@ export default function Layout(props: ParentProps) {
       </div>
       <Toast.Region />
 
-      {/* Supadense Ask FAB */}
-      <button
-        type="button"
-        title="Ask supadense"
-        aria-label="Ask supadense"
-        onClick={() => setChatOpen((v) => !v)}
-        style={{
-          position: "fixed",
-          bottom: "28px",
-          right: "28px",
-          width: "56px",
-          height: "56px",
-          "border-radius": "50%",
-          background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
-          border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
-          "box-shadow": chatOpen()
-            ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
-            : "0 4px 20px rgba(0,0,0,0.4)",
-          display: "flex",
-          "align-items": "center",
-          "justify-content": "center",
-          cursor: "pointer",
-          "z-index": "100",
-          transition: "right 200ms ease, border-color 160ms, box-shadow 160ms, background 160ms",
-          padding: "0",
-        }}
-      >
-        <SupadenseMark size={26} />
-      </button>
-
-      {/* Supadense Chat Panel — floating card above FAB */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "96px",
-          right: "28px",
-          width: "380px",
-          height: "540px",
-          "z-index": "99",
-          "border-radius": "14px",
-          overflow: "hidden",
-          "pointer-events": chatOpen() ? "auto" : "none",
-          opacity: chatOpen() ? "1" : "0",
-          transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
-          transition: "opacity 180ms ease, transform 180ms ease",
-        }}
-      >
-        <Show when={chatOpen()}>
-          <SupadenseChatPanel onClose={() => setChatOpen(false)} />
-        </Show>
-      </div>
     </div>
   )
 }

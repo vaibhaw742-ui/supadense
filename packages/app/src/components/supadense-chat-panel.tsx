@@ -1,8 +1,8 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useGlobalSync } from "@/context/global-sync"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { decode64 } from "@/utils/base64"
+import { PromptInput } from "@/components/prompt-input"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 function partText(parts: Part[] | undefined): string {
@@ -43,10 +43,9 @@ const SUGGESTIONS = [
   { icon: "M20 6L9 17l-5-5", label: "Compare with what past-you wrote", muted: true },
 ]
 
-export function SupadenseChatPanel(props: { onClose: () => void }) {
+function SupadenseChatPanel(props: { onClose: () => void }) {
   const params = useParams<{ dir?: string; id?: string }>()
   const globalSync = useGlobalSync()
-  const globalSDK = useGlobalSDK()
 
   const directory = createMemo(() => {
     const dir = params.dir
@@ -77,51 +76,6 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
     const status = (childStore as any).session_status?.[id]
     return status?.type !== "idle" && status !== undefined
   })
-
-  const inSession = createMemo(() => !!params.dir && !!params.id)
-
-  const [input, setInput] = createSignal("")
-  const [sending, setSending] = createSignal(false)
-
-  async function send() {
-    const text = input().trim()
-    const sessionID = params.id
-    const dir = directory()
-    if (!text || !sessionID || !dir || sending()) return
-
-    // Derive model from last user message, or from child store config
-    const msgs = messages()
-    const lastUserMsg = [...msgs].reverse().find((m) => m.role === "user")
-    const model = lastUserMsg?.model
-      ?? (() => {
-        const cfgModel = (childStore as any)?.config?.model as string | undefined
-        if (!cfgModel) return undefined
-        const [providerID, modelID] = cfgModel.split("/")
-        return providerID && modelID ? { providerID, modelID } : undefined
-      })()
-
-    setSending(true)
-    setInput("")
-    try {
-      await globalSDK.client.session.promptAsync({
-        sessionID,
-        directory: dir,
-        model,
-        parts: [{ type: "text", text }],
-      })
-    } catch {
-      // session error handling covers this
-    } finally {
-      setSending(false)
-    }
-  }
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      void send()
-    }
-  }
 
   const hasMessages = createMemo(() => messages().length > 0)
 
@@ -160,17 +114,7 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
           </svg>
         </button>
         <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
-          <button type="button" style={headerIconBtn}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-          <button type="button" style={headerIconBtn}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>
-            </svg>
-          </button>
-          <button type="button" onClick={props.onClose} style={headerIconBtn} aria-label="Close">
+          <button type="button" style={headerIconBtn} aria-label="Close" onClick={props.onClose}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
@@ -178,7 +122,7 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* ── Body ── */}
+      {/* ── Messages ── */}
       <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", display: "flex", "flex-direction": "column" }}>
         <Show
           when={hasMessages()}
@@ -201,7 +145,6 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
                   {(s) => (
                     <button
                       type="button"
-                      onClick={() => !s.muted && setInput(s.label)}
                       style={{
                         display: "flex", "align-items": "center", gap: "14px",
                         background: "none", border: "none", cursor: s.muted ? "default" : "pointer",
@@ -221,11 +164,6 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
                   )}
                 </For>
               </div>
-              <Show when={!inSession()}>
-                <p style={{ "font-size": "12px", color: "var(--color-text-weak)", "margin-top": "20px", "font-family": "'Geist Mono', monospace", "letter-spacing": "0.04em" }}>
-                  Open a session to start chatting
-                </p>
-              </Show>
             </div>
           }
         >
@@ -266,91 +204,72 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
         </Show>
       </div>
 
-      {/* ── Input ── */}
-      <div style={{ "flex-shrink": "0", padding: "12px 14px 14px" }}>
-        <div style={{
-          border: `1.5px solid ${input().trim() ? "#d68a2e" : "var(--color-border-base)"}`,
-          "border-radius": "10px",
-          background: "var(--color-background-base)",
-          transition: "border-color 150ms",
-          overflow: "hidden",
-        }}>
-          <div style={{ padding: "9px 12px 0", display: "flex", gap: "8px", "align-items": "center" }}>
-            <div style={{
-              display: "inline-flex", "align-items": "center", gap: "5px",
-              background: "var(--color-surface-raised-base)",
-              border: "1px solid var(--color-border-base)",
-              "border-radius": "6px",
-              padding: "3px 8px",
-              "font-size": "11px",
-              "font-family": "'Geist Mono', monospace",
-              color: "var(--color-text-weak)",
-              "letter-spacing": "0.04em",
-            }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-              </svg>
-              Scope · this view
-            </div>
-          </div>
-          <textarea
-            value={input()}
-            onInput={(e) => setInput(e.currentTarget.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Ask anything in your knowledge…"
-            disabled={sending()}
-            rows={2}
-            style={{
-              display: "block", width: "100%", background: "none", border: "none",
-              padding: "8px 12px 6px",
-              color: "var(--color-text-strong)",
-              "font-family": "'Geist', system-ui, sans-serif",
-              "font-size": "13px", "line-height": "1.45",
-              resize: "none", outline: "none",
-              "box-sizing": "border-box",
-            }}
-          />
-          <div style={{ display: "flex", "align-items": "center", padding: "6px 10px 8px", gap: "6px" }}>
-            <button type="button" style={toolbarIconBtn} aria-label="Attach">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-            </button>
-            <button type="button" style={toolbarIconBtn} aria-label="Options">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
-                <circle cx="4" cy="6" r="2" fill="currentColor"/><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="4" cy="18" r="2" fill="currentColor"/>
-              </svg>
-            </button>
-            <span style={{ flex: "1" }} />
-            <span style={{ "font-size": "11px", color: "var(--color-text-weak)", "font-family": "'Geist Mono', monospace", "letter-spacing": "0.04em" }}>Auto</span>
-            <button type="button" style={toolbarIconBtn} aria-label="Voice">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => void send()}
-              disabled={!input().trim() || sending() || !inSession()}
-              style={{
-                width: "26px", height: "26px", "border-radius": "7px",
-                background: input().trim() && inSession() ? "#d68a2e" : "var(--color-surface-raised-base)",
-                border: "none", cursor: input().trim() && inSession() ? "pointer" : "default",
-                display: "flex", "align-items": "center", "justify-content": "center",
-                transition: "background 120ms",
-                "flex-shrink": "0",
-              }}
-              aria-label="Send"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={input().trim() && inSession() ? "#fff" : "var(--color-text-weak)"} stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+      {/* ── Input (exact same PromptInput as left chat) ── */}
+      <div style={{ "flex-shrink": "0", padding: "0 8px 8px" }}>
+        <PromptInput onSubmit={() => {}} />
       </div>
     </div>
+  )
+}
+
+/** FAB + floating panel — rendered inside directory-layout so PromptInput has its contexts */
+export function SupadenseChatOverlay() {
+  const [chatOpen, setChatOpen] = createSignal(false)
+
+  return (
+    <>
+      {/* FAB */}
+      <button
+        type="button"
+        title="Ask supadense"
+        aria-label="Ask supadense"
+        onClick={() => setChatOpen((v) => !v)}
+        style={{
+          position: "fixed",
+          bottom: "28px",
+          right: "28px",
+          width: "56px",
+          height: "56px",
+          "border-radius": "50%",
+          background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
+          border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
+          "box-shadow": chatOpen()
+            ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
+            : "0 4px 20px rgba(0,0,0,0.4)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          cursor: "pointer",
+          "z-index": "100",
+          transition: "border-color 160ms, box-shadow 160ms, background 160ms",
+          padding: "0",
+        }}
+      >
+        <SupadenseMark size={26} />
+      </button>
+
+      {/* Floating card panel */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: "96px",
+          right: "28px",
+          width: "420px",
+          height: "600px",
+          "z-index": "99",
+          "border-radius": "14px",
+          overflow: "hidden",
+          "pointer-events": chatOpen() ? "auto" : "none",
+          opacity: chatOpen() ? "1" : "0",
+          transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
+          transition: "opacity 180ms ease, transform 180ms ease",
+        }}
+      >
+        <Show when={chatOpen()}>
+          <SupadenseChatPanel onClose={() => setChatOpen(false)} />
+        </Show>
+      </div>
+    </>
   )
 }
 
@@ -359,10 +278,4 @@ const headerIconBtn: Record<string, string> = {
   color: "var(--color-text-weak)", padding: "5px", "border-radius": "6px",
   display: "flex", "align-items": "center", "justify-content": "center",
   transition: "background 100ms, color 100ms",
-}
-
-const toolbarIconBtn: Record<string, string> = {
-  background: "none", border: "none", cursor: "pointer",
-  color: "var(--color-text-weak)", padding: "4px", "border-radius": "5px",
-  display: "flex", "align-items": "center", "justify-content": "center",
 }
