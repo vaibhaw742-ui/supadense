@@ -2141,111 +2141,191 @@ export default function Layout(props: ParentProps) {
           }
         >
           <>
-            <div class="shrink-0 pl-1 py-1">
-              <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
-                <div class="flex flex-col min-w-0">
-                  <InlineEditor
-                    id={`project:${projectId()}`}
-                    value={projectName}
-                    onSave={(next) => {
-                      const item = project()
-                      if (!item) return
-                      renameProject(item, next)
-                    }}
-                    class="text-14-medium text-text-strong truncate"
-                    displayClass="text-14-medium text-text-strong truncate"
-                    stopPropagation
-                  />
-
+            {/* Sidebar header — supadense wordmark + collapse + new session */}
+            <div class="shrink-0 px-3 py-2.5 flex items-center justify-between" style={{ "border-bottom": "1px solid var(--color-border-base)" }}>
+              <div class="flex items-center gap-2 min-w-0">
+                <div style={{ display: "inline-grid", "grid-template-columns": "repeat(4, 1fr)", "grid-template-rows": "repeat(4, 1fr)", gap: "1.5px", width: "18px", height: "18px", "flex-shrink": "0" }}>
+                  {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((i) => (
+                    <div style={{ background: i === 5 ? "#d68a2e" : "var(--color-text-strong)", "border-radius": "0.5px" }} />
+                  ))}
                 </div>
-
-                <div class="flex items-center gap-0.5 shrink-0">
-                  <Show when={panelProps.onCollapse}>
-                    <Tooltip value="Collapse" placement="bottom">
-                      <IconButton
-                        icon="sidebar-active"
-                        variant="ghost"
-                        class="size-6 rounded-md transition-opacity"
-                        classList={{
-                          "opacity-100": panelProps.mobile || merged(),
-                          "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100":
-                            !panelProps.mobile && !merged(),
-                        }}
-                        onClick={panelProps.onCollapse}
-                        aria-label="Collapse sidebar"
-                      />
-                    </Tooltip>
-                  </Show>
-                </div>
+                <span style={{ "font-weight": "500", "letter-spacing": "-0.02em", "font-size": "14px", color: "var(--color-text-strong)" }}>supadense</span>
+              </div>
+              <div class="flex items-center gap-0.5 shrink-0">
+                <Show when={panelProps.onCollapse}>
+                  <Tooltip value="Collapse" placement="bottom">
+                    <IconButton
+                      icon="sidebar-active"
+                      variant="ghost"
+                      class="size-6 rounded-md"
+                      onClick={panelProps.onCollapse}
+                      aria-label="Collapse sidebar"
+                    />
+                  </Tooltip>
+                </Show>
+                <Tooltip value="New session" placement="bottom">
+                  <button
+                    type="button"
+                    class="size-6 rounded-md flex items-center justify-center text-text-weak hover:bg-surface-base-active hover:text-text-strong transition-colors"
+                    onClick={() => { const dir = worktree(); if (dir) navigateWithSidebarReset(`/${slug()}/session`) }}
+                    aria-label="New session"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
-            <div class="flex-1 min-h-0 flex flex-col">
-              {/* Supadense primary nav */}
-              <div class="shrink-0 pt-2 pb-1">
-                <div
-                  style={{
-                    "font-family": "'Geist Mono', monospace",
-                    "font-size": "9px",
-                    "letter-spacing": "0.12em",
-                    "text-transform": "uppercase",
-                    color: "var(--color-text-weak)",
-                    padding: "0 12px 6px",
-                    opacity: "0.6",
-                  }}
-                >
-                  Navigate
+            {/* New supadense KB sidebar nav */}
+            <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div class="flex-1 min-h-0 overflow-y-auto" style={{ "scrollbar-width": "none" }}>
+
+                {/* WORKSPACE */}
+                <div style={{ padding: "14px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Workspace</div>
+                <div class="px-1.5 pb-1">
+                  {([
+                    { label: "Gaps", count: "14 open", svgPath: "M9 18 3 12l6-6M15 6l6 6-6 6", view: "gaps" },
+                    { label: "Practice", count: "7 due", svgPath: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01", view: "practice", active: true },
+                    { label: "Read", count: "3 new", svgPath: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z", view: "read" },
+                    { label: "Graph", count: "847", svgPath: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M5 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M5 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 10 7 7M14 10l3-3M10 14l-3 3M14 14l3 3", view: "lib" },
+                    { label: "Notes", count: "24", svgPath: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6", view: "notes" },
+                    { label: "Ask", svgPath: "M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z", view: "ask" },
+                  ] as { label: string; count?: string; svgPath: string; view: string; active?: boolean }[]).map((item) => (
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors text-13-medium"
+                      classList={{
+                        "bg-surface-base-active text-text-strong": !!item.active,
+                        "text-text-weak hover:text-text-strong hover:bg-surface-base-active": !item.active,
+                      }}
+                      onClick={() => {
+                        if (item.view === "ask") {
+                          const dir = worktree()
+                          if (dir) navigateWithSidebarReset(`/${slug()}/session`)
+                        }
+                      }}
+                      style={item.active ? { "border-left": "2px solid #d68a2e", "padding-left": "6px" } : {}}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                        <path d={item.svgPath} />
+                      </svg>
+                      <span class="flex-1 text-left truncate">{item.label}</span>
+                      {item.count && <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>}
+                    </button>
+                  ))}
                 </div>
-                {(
-                  [
-                    { label: "Today", icon: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 5v5l3 3", path: "/" },
-                    { label: "Gaps", icon: "M9 18 3 12l6-6M15 6l6 6-6 6", path: "/gaps" },
-                    { label: "Graph Notes", icon: "M5 12a7 7 0 1 0 14 0A7 7 0 0 0 5 12zm7-4v4l3 2M3 3l18 18", path: "/graph" },
-                    { label: "Captured", icon: "M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10", path: "/captured" },
-                  ] as { label: string; icon: string; path: string }[]
-                ).map((item) => (
+
+                {/* CLUSTERS */}
+                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Clusters</div>
+                <div class="px-1.5 pb-1">
+                  {([
+                    { label: "Agentic loops", count: "11", dot: "#d68a2e" },
+                    { label: "RAG & embeddings", count: "24", dot: "#d68a2e" },
+                    { label: "Postgres internals", count: "18", dot: "var(--color-border-strong)" },
+                    { label: "Long-context", count: "9", dot: "var(--color-border-strong)" },
+                    { label: "Embeddings", count: "12", dot: "var(--color-border-strong)" },
+                    { label: "Rust async", count: "6", dot: "#0ea5e9" },
+                  ] as { label: string; count: string; dot: string }[]).map((item) => (
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                    >
+                      <div style={{ width: "7px", height: "7px", "border-radius": "50%", background: item.dot, "flex-shrink": "0", "margin-left": "2px" }} />
+                      <span class="flex-1 text-left truncate">{item.label}</span>
+                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* PROJECTS */}
+                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Projects</div>
+                <div class="px-1.5 pb-1">
+                  {([
+                    { label: "RAG memory", count: "42" },
+                    { label: "Postgres internals", count: "18" },
+                    { label: "DeepSeek arch", count: "11" },
+                  ] as { label: string; count: string }[]).map((item) => (
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                      onClick={() => navigateWithSidebarReset("/projects")}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      </svg>
+                      <span class="flex-1 text-left truncate">{item.label}</span>
+                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
+                    </button>
+                  ))}
                   <button
                     type="button"
-                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                    onClick={() => navigateWithSidebarReset(item.path)}
+                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                    onClick={() => navigateWithSidebarReset("/projects")}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d={item.icon} />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}>
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
-                    {item.label}
+                    <span class="flex-1 text-left">New project</span>
                   </button>
-                ))}
-                <div
-                  style={{
-                    margin: "6px 12px",
-                    height: "1px",
-                    background: "var(--color-border-base)",
-                    opacity: "0.5",
-                  }}
-                />
+                </div>
+
+                {/* SOURCES */}
+                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Sources</div>
+                <div class="px-1.5 pb-3">
+                  {([
+                    { label: "arxiv.org", count: "231" },
+                    { label: "news.ycombinator", count: "112" },
+                    { label: "github stars", count: "88" },
+                  ] as { label: string; count: string }[]).map((item) => (
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
+                    >
+                      <span class="flex-1 text-left truncate">{item.label}</span>
+                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
+                    </button>
+                  ))}
+                </div>
+
               </div>
-              <div class="shrink-0 py-1">
-                <button
-                  type="button"
-                  class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                  onClick={() => navigateWithSidebarReset("/")}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="7"/>
-                    <rect x="14" y="3" width="7" height="7"/>
-                    <rect x="3" y="14" width="7" height="7"/>
-                    <rect x="14" y="14" width="7" height="7"/>
-                  </svg>
-                  All Workspaces
-                </button>
-              </div>
-              <div class="flex-1 min-h-0">
-                <LocalWorkspace
-                  ctx={workspaceSidebarCtx}
-                  project={project()!}
-                  sortNow={sortNow}
-                  mobile={panelProps.mobile}
-                />
+
+              {/* User profile footer */}
+              <div class="shrink-0 flex items-center gap-2.5 px-3 py-2.5" style={{ "border-top": "1px solid var(--color-border-base)" }}>
+                <div style={{
+                  width: "28px", height: "28px", "border-radius": "50%",
+                  background: "#d68a2e", color: "#fff",
+                  display: "flex", "align-items": "center", "justify-content": "center",
+                  "font-size": "11px", "font-weight": "600", "flex-shrink": "0",
+                  "letter-spacing": "0.02em",
+                }}>
+                  {(() => {
+                    try {
+                      const t = localStorage.getItem("supadense.auth.token")
+                      if (!t) return "U"
+                      const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
+                      const e: string = p.email || ""
+                      return e.substring(0, 2).toUpperCase()
+                    } catch { return "U" }
+                  })()}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-13-medium text-text-strong truncate">
+                    {(() => {
+                      try {
+                        const t = localStorage.getItem("supadense.auth.token")
+                        if (!t) return "user"
+                        const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
+                        const e: string = p.email || "user"
+                        return e.split("@")[0]
+                      } catch { return "user" }
+                    })()}
+                  </div>
+                  <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.06em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.6" }}>
+                    d12 streak · pro
+                  </div>
+                </div>
               </div>
             </div>
           </>
