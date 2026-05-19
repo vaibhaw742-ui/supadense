@@ -43,6 +43,7 @@ import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
+import { SupadenseChatOverlay } from "@/components/supadense-chat-panel"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
@@ -68,6 +69,7 @@ if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname))
 const SessionRoute = () => (
   <SessionProviders>
     <Session />
+    <SupadenseChatOverlay />
   </SessionProviders>
 )
 
