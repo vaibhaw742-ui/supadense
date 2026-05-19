@@ -1,4 +1,18 @@
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { decode64 } from "@/utils/base64"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+
+function partText(parts: Part[] | undefined): string {
+  if (!parts) return ""
+  return parts
+    .filter((p) => (p as any).type === "text")
+    .map((p) => (p as any).text ?? (p as any).content ?? "")
+    .join("")
+    .trim()
+}
 
 export function SupadenseMark(props: { size?: number; class?: string }) {
   const s = props.size ?? 20
@@ -29,34 +43,87 @@ const SUGGESTIONS = [
   { icon: "M20 6L9 17l-5-5", label: "Compare with what past-you wrote", muted: true },
 ]
 
-type LocalMessage = { role: "user" | "assistant"; text: string }
-
 export function SupadenseChatPanel(props: { onClose: () => void }) {
+  const params = useParams<{ dir?: string; id?: string }>()
+  const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
+
+  const directory = createMemo(() => {
+    const dir = params.dir
+    if (!dir) return undefined
+    try { return decode64(dir) } catch { return undefined }
+  })
+
+  const [childStore] = createMemo(() => {
+    const dir = directory()
+    if (!dir) return [undefined, undefined] as const
+    return globalSync.child(dir, { bootstrap: false })
+  })() ?? [undefined]
+
+  const messages = createMemo((): Message[] => {
+    const id = params.id
+    if (!id || !childStore) return []
+    return (childStore as any).message?.[id] ?? []
+  })
+
+  const parts = createMemo(() => {
+    if (!childStore) return {} as Record<string, Part[]>
+    return (childStore as any).part ?? {}
+  })
+
+  const isActive = createMemo(() => {
+    const id = params.id
+    if (!id || !childStore) return false
+    const status = (childStore as any).session_status?.[id]
+    return status?.type !== "idle" && status !== undefined
+  })
+
+  const inSession = createMemo(() => !!params.dir && !!params.id)
+
   const [input, setInput] = createSignal("")
-  const [messages, setMessages] = createSignal<LocalMessage[]>([])
   const [sending, setSending] = createSignal(false)
 
-  function send() {
+  async function send() {
     const text = input().trim()
-    if (!text || sending()) return
-    setMessages((m) => [...m, { role: "user", text }])
-    setInput("")
+    const sessionID = params.id
+    const dir = directory()
+    if (!text || !sessionID || !dir || sending()) return
+
+    // Derive model from last user message, or from child store config
+    const msgs = messages()
+    const lastUserMsg = [...msgs].reverse().find((m) => m.role === "user")
+    const model = lastUserMsg?.model
+      ?? (() => {
+        const cfgModel = (childStore as any)?.config?.model as string | undefined
+        if (!cfgModel) return undefined
+        const [providerID, modelID] = cfgModel.split("/")
+        return providerID && modelID ? { providerID, modelID } : undefined
+      })()
+
     setSending(true)
-    // placeholder — replace with actual API call when backend is wired
-    setTimeout(() => {
-      setMessages((m) => [...m, { role: "assistant", text: "I'm still learning your graph. Check back soon." }])
+    setInput("")
+    try {
+      await globalSDK.client.session.promptAsync({
+        sessionID,
+        directory: dir,
+        model,
+        parts: [{ type: "text", text }],
+      })
+    } catch {
+      // session error handling covers this
+    } finally {
       setSending(false)
-    }, 800)
+    }
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      send()
+      void send()
     }
   }
 
-  const hasMessages = () => messages().length > 0
+  const hasMessages = createMemo(() => messages().length > 0)
 
   return (
     <div style={{
@@ -154,12 +221,19 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
                   )}
                 </For>
               </div>
+              <Show when={!inSession()}>
+                <p style={{ "font-size": "12px", color: "var(--color-text-weak)", "margin-top": "20px", "font-family": "'Geist Mono', monospace", "letter-spacing": "0.04em" }}>
+                  Open a session to start chatting
+                </p>
+              </Show>
             </div>
           }
         >
           <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px", flex: "1" }}>
             <For each={messages()}>
               {(msg) => {
+                const msgParts = createMemo(() => parts()[msg.id] as Part[] | undefined)
+                const text = createMemo(() => partText(msgParts()))
                 const isUser = msg.role === "user"
                 return (
                   <div style={{ display: "flex", "flex-direction": "column", gap: "4px", "align-items": isUser ? "flex-end" : "flex-start" }}>
@@ -174,13 +248,15 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
                       "font-size": "13px", "line-height": "1.5", color: "var(--color-text-strong)",
                       "word-break": "break-word", "white-space": "pre-wrap",
                     }}>
-                      {msg.text}
+                      <Show when={text()} fallback={<span style={{ color: "var(--color-text-weak)", "font-style": "italic" }}>thinking…</span>}>
+                        {text()}
+                      </Show>
                     </div>
                   </div>
                 )
               }}
             </For>
-            <Show when={sending()}>
+            <Show when={isActive()}>
               <div style={{ display: "flex", "align-items": "center", gap: "6px", padding: "4px 2px", "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#d68a2e", "letter-spacing": "0.06em" }}>
                 <span style={{ width: "5px", height: "5px", "border-radius": "50%", background: "#d68a2e", display: "inline-block" }} />
                 working…
@@ -221,8 +297,8 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
             value={input()}
             onInput={(e) => setInput(e.currentTarget.value)}
             onKeyDown={onKeyDown}
-            placeholder="Ask anything in your knowledge…"
-            disabled={sending()}
+            placeholder={inSession() ? "Ask anything in your knowledge…" : "Open a session to start chatting…"}
+            disabled={sending() || !inSession()}
             rows={2}
             style={{
               display: "block", width: "100%", background: "none", border: "none",
@@ -255,19 +331,19 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
             </button>
             <button
               type="button"
-              onClick={send}
-              disabled={!input().trim() || sending()}
+              onClick={() => void send()}
+              disabled={!input().trim() || sending() || !inSession()}
               style={{
                 width: "26px", height: "26px", "border-radius": "7px",
-                background: input().trim() ? "#d68a2e" : "var(--color-surface-raised-base)",
-                border: "none", cursor: input().trim() ? "pointer" : "default",
+                background: input().trim() && inSession() ? "#d68a2e" : "var(--color-surface-raised-base)",
+                border: "none", cursor: input().trim() && inSession() ? "pointer" : "default",
                 display: "flex", "align-items": "center", "justify-content": "center",
                 transition: "background 120ms",
                 "flex-shrink": "0",
               }}
               aria-label="Send"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={input().trim() ? "#fff" : "var(--color-text-weak)"} stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={input().trim() && inSession() ? "#fff" : "var(--color-text-weak)"} stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
               </svg>
             </button>
