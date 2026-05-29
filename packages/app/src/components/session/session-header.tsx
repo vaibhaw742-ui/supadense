@@ -29,6 +29,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { BgProcessMonitor, BgProcessContent } from "@/components/bg-process-monitor"
 import { bgProcessClear, bgProcesses, serverJobs, setNotesNavRequest } from "@/context/bg-processes"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
+import { CaptureDialog } from "@/components/capture-dialog"
+import { activeSidebarView } from "@/context/sidebar-view"
 
 
 const OPEN_APPS = [
@@ -720,6 +722,7 @@ export function SessionHeader() {
 
   const [tocOpen, setTocOpen] = createSignal(false)
   const [bgPanelOpen, setBgPanelOpen] = createSignal(false)
+  const [captureOpen, setCaptureOpen] = createSignal(false)
 
   // GitHub sync state (lifted from GitHubButton)
   const [ghModalOpen, setGhModalOpen] = createSignal(false)
@@ -799,6 +802,7 @@ export function SessionHeader() {
     finally { setGhSaving(false) }
   }
 
+  const leftMount = createMemo(() => document.getElementById("opencode-titlebar-left"))
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
   const panelMount = createMemo(() => document.getElementById("opencode-titlebar-panel"))
@@ -839,6 +843,19 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              {/* Capture button */}
+              <button
+                type="button"
+                class="titlebar-icon h-6 px-2 gap-1.5 box-border shrink-0 flex items-center rounded-md border border-border-base hover:border-border-stronger bg-background-input transition-colors text-12-medium text-text-strong"
+                onClick={() => setCaptureOpen(true)}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Capture
+              </button>
               {/* Workspace dropdown — left of TOC */}
               <div class="relative">
                 <button
@@ -905,6 +922,13 @@ export function SessionHeader() {
                 </Tooltip>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content>
+                    <DropdownMenu.Item onSelect={() => { layout.fileTree.open(); layout.fileTree.toggleAllFiles() }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                      </svg>
+                      <DropdownMenu.ItemLabel>{layout.fileTree.allFilesOpen() ? "Hide files" : "All files"}</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator />
                     <DropdownMenu.Item onSelect={() => window.open("https://supadense.com/docs", "_blank")}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
@@ -986,19 +1010,7 @@ export function SessionHeader() {
       <Show when={panelMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-2 pl-3">
-              <Tooltip placement="bottom" value={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}>
-                <IconButton
-                  icon={layout.sidebar.opened() ? "sidebar-active" : "sidebar"}
-                  variant="ghost"
-                  size="large"
-                  onClick={layout.sidebar.toggle}
-                  aria-label={layout.sidebar.opened() ? "Hide Sessions" : "Show Sessions"}
-                />
-              </Tooltip>
-              <AllFilesButton />
-              <span id="opencode-graph-nav-mount" class="flex items-center" />
-            </div>
+            <span id="opencode-graph-nav-mount" class="flex items-center" />
           </Portal>
         )}
       </Show>
@@ -1094,6 +1106,14 @@ export function SessionHeader() {
           </div>
         </div>
       </Portal>
+
+      {/* Capture dialog */}
+      <Show when={captureOpen()}>
+        <CaptureDialog
+          directory={projectDirectory()}
+          onClose={() => setCaptureOpen(false)}
+        />
+      </Show>
     </>
   )
 }

@@ -1,7 +1,6 @@
-import { createEffect, createMemo, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
@@ -9,6 +8,8 @@ import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
+import { activeSidebarView, setActiveSidebarView } from "@/context/sidebar-view"
+import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -29,10 +30,9 @@ type TauriApi = {
 }
 
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
-const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
 
-export function Titlebar() {
+export function Titlebar(props: { onCapture?: () => void }) {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
@@ -40,11 +40,6 @@ export function Titlebar() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-
-  const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
-  const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
-  const zoom = () => platform.webviewZoom?.() ?? 1
-  const minHeight = () => (mac() ? `${40 / zoom()}px` : undefined)
 
   const [history, setHistory] = createStore({
     stack: [] as string[],
@@ -56,7 +51,6 @@ export function Titlebar() {
 
   createEffect(() => {
     const current = path()
-
     untrack(() => {
       const next = applyPath(history, current)
       if (next === history) return
@@ -95,126 +89,210 @@ export function Titlebar() {
     },
   ])
 
-  const getWin = () => {
-    if (platform.platform !== "desktop") return
-    return currentDesktopWindow()
-  }
-
   createEffect(() => {
     if (platform.platform !== "desktop") return
-
     const scheme = theme.colorScheme()
     const value = scheme === "system" ? null : scheme
-
     const win = currentThemeWindow()
     if (!win?.setTheme) return
-
     void win.setTheme(value).catch(() => undefined)
   })
 
-  const interactive = (target: EventTarget | null) => {
-    if (!(target instanceof Element)) return false
+  const isGraph = () => activeSidebarView().view === "lib"
 
-    const selector =
-      "button, a, input, textarea, select, option, [role='button'], [role='menuitem'], [contenteditable='true'], [contenteditable='']"
+  const [hovWs, setHovWs] = createSignal(false)
+  const [hovGraph, setHovGraph] = createSignal(false)
+  const [hovCapture, setHovCapture] = createSignal(false)
+  const [hovSidebar, setHovSidebar] = createSignal(false)
+  const [hovPlus, setHovPlus] = createSignal(false)
+  const [hovChat, setHovChat] = createSignal(false)
 
-    return !!target.closest(selector)
+  /* Light theme tokens (sd v2: white canvas, dark ink) */
+  const T = {
+    bg: "#ffffff",
+    border: "#e5e5e5",
+    borderHov: "#d4d4d4",
+    text: "#0a0a0a",
+    textMuted: "#737373",
+    textFaint: "#a3a3a3",
+    amber: "#d68a2e",
+    surfaceHov: "#fafafa",
   }
 
-  const drag = (e: MouseEvent) => {
-    if (platform.platform !== "desktop") return
-    if (e.buttons !== 1) return
-    if (interactive(e.target)) return
+  const tabStyle = (active: boolean, hov: boolean) => ({
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "4px 2px",
+    "font-family": "'Geist Mono', 'JetBrains Mono', monospace",
+    "font-size": "11px",
+    "letter-spacing": "0.08em",
+    "text-transform": "uppercase" as const,
+    color: active ? T.amber : hov ? T.textMuted : T.textFaint,
+    "border-bottom": active ? `1px solid ${T.amber}` : "1px solid transparent",
+    transition: "color 120ms, border-color 120ms",
+  })
 
-    const win = getWin()
-    if (!win?.startDragging) return
-
-    e.preventDefault()
-    void win.startDragging().catch(() => undefined)
-  }
-
-  const maximize = (e: MouseEvent) => {
-    if (platform.platform !== "desktop") return
-    if (interactive(e.target)) return
-    if (e.target instanceof Element && e.target.closest("[data-tauri-decorum-tb]")) return
-
-    const win = getWin()
-    if (!win?.toggleMaximize) return
-
-    e.preventDefault()
-    void win.toggleMaximize().catch(() => undefined)
-  }
+  const iconBtnStyle = (hov: boolean) => ({
+    display: "flex",
+    "align-items": "center",
+    "justify-content": "center",
+    width: "30px",
+    height: "30px",
+    background: hov ? T.surfaceHov : "transparent",
+    border: `1px solid ${hov ? T.border : "transparent"}`,
+    "border-radius": "4px",
+    cursor: "pointer",
+    color: hov ? T.textMuted : T.textFaint,
+    transition: "background 120ms, border-color 120ms, color 120ms",
+    "flex-shrink": "0",
+  })
 
   return (
     <header
-      class="h-10 shrink-0 relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
       style={{
-        "min-height": minHeight(),
-        background: "var(--background-base)",
+        display: "flex",
+        "align-items": "center",
+        height: "52px",
+        "flex-shrink": "0",
+        background: T.bg,
+
+        "padding-right": "16px",
       }}
-      data-tauri-drag-region
-      onMouseDown={drag}
-      onDblClick={maximize}
     >
-      <div
-        classList={{
-          "flex items-center min-w-0": true,
-          "pl-2": !mac(),
-        }}
-      >
-        <Show when={mac()}>
-          <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
-          <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
-            <IconButton
-              icon="menu"
-              variant="ghost"
-              class="titlebar-icon rounded-md"
-              onClick={layout.mobileSidebar.toggle}
-              aria-label={language.t("sidebar.menu.toggle")}
-              aria-expanded={layout.mobileSidebar.opened()}
-            />
-          </div>
-        </Show>
-        <Show when={!mac()}>
-          <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
-            <IconButton
-              icon="menu"
-              variant="ghost"
-              class="titlebar-icon rounded-md"
-              onClick={layout.mobileSidebar.toggle}
-              aria-label={language.t("sidebar.menu.toggle")}
-              aria-expanded={layout.mobileSidebar.opened()}
-            />
-          </div>
-        </Show>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-      </div>
-
-      <div
-        id="opencode-titlebar-panel"
-        class="pointer-events-auto absolute inset-y-0 flex items-center"
-        style={{ left: "var(--session-panel-left, 9999px)" }}
-      />
-
-      <div
-        id="opencode-titlebar-right"
-        class="col-span-full pointer-events-auto absolute inset-y-0 right-2 flex items-center gap-1"
-      />
-
-      <div
-        classList={{
-          "flex items-center min-w-0 justify-end": true,
-          "pr-2": !windows(),
-        }}
-        data-tauri-drag-region
-        onMouseDown={drag}
-      >
-        <Show when={windows()}>
-          {!tauriApi() && <div class="w-36 shrink-0" />}
-          <div data-tauri-decorum-tb class="flex flex-row" />
+      {/* ── LEFT SPACER ── matches sidebar width so tabs start right after sidebar */}
+      <div style={{
+        display: "flex",
+        "align-items": "center",
+        "justify-content": "flex-end",
+        "flex-shrink": "0",
+        width: layout.sidebar.opened() ? `${layout.sidebar.width() + 8}px` : "auto",
+        padding: layout.sidebar.opened() ? "0" : "0 16px",
+        "box-sizing": "border-box",
+      }}>
+        <Show when={!layout.sidebar.opened()}>
+          <button
+            type="button"
+            title="Open sidebar"
+            style={iconBtnStyle(hovSidebar())}
+            onMouseEnter={() => setHovSidebar(true)}
+            onMouseLeave={() => setHovSidebar(false)}
+            onClick={() => layout.sidebar.open()}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2"/>
+              <line x1="9" y1="4" x2="9" y2="20"/>
+            </svg>
+          </button>
         </Show>
       </div>
 
+      {/* ── TABS ── appear just right of the sidebar */}
+      <div style={{ display: "flex", "align-items": "center", gap: "0", padding: "0 16px" }}>
+          <button
+            type="button"
+            style={tabStyle(!isGraph(), hovWs())}
+            onMouseEnter={() => setHovWs(true)}
+            onMouseLeave={() => setHovWs(false)}
+            onClick={() => {
+              if (isGraph()) setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" })
+            }}
+          >
+            Workspace
+          </button>
+          <span style={{
+            "font-family": "'Geist Mono', 'JetBrains Mono', monospace",
+            "font-size": "11px",
+            color: T.textFaint,
+            "padding": "0 10px",
+            "user-select": "none",
+          }}>·</span>
+          <button
+            type="button"
+            style={tabStyle(isGraph(), hovGraph())}
+            onMouseEnter={() => setHovGraph(true)}
+            onMouseLeave={() => setHovGraph(false)}
+            onClick={() => setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })}
+          >
+            Graph
+          </button>
+        </div>
+
+      {/* ── RIGHT ACTIONS ── pushed to far right */}
+      <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-left": "auto" }}>
+        {/* Capture button */}
+        <button
+          type="button"
+          title="Capture a resource"
+          style={{
+            display: "inline-flex",
+            "align-items": "center",
+            gap: "6px",
+            padding: "6px 12px",
+            "border-radius": "4px",
+            "font-family": "inherit",
+            "font-size": "12px",
+            "font-weight": "500",
+            "letter-spacing": "-0.01em",
+            border: `1px solid ${hovCapture() ? T.borderHov : T.border}`,
+            background: hovCapture() ? T.surfaceHov : T.bg,
+            color: hovCapture() ? T.textMuted : T.textMuted,
+            cursor: "pointer",
+            transition: "all 120ms",
+          }}
+          onMouseEnter={() => setHovCapture(true)}
+          onMouseLeave={() => setHovCapture(false)}
+          onClick={() => props.onCapture?.()}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Capture
+        </button>
+
+        {/* Chat toggle (sd-mark grid) */}
+        <button
+          type="button"
+          title="Ask supadense"
+          style={{
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "center",
+            width: "32px",
+            height: "32px",
+            background: chatOpen() ? "rgba(214,138,46,0.08)" : hovChat() ? T.surfaceHov : "transparent",
+            border: `1px solid ${chatOpen() ? "rgba(214,138,46,0.35)" : hovChat() ? T.border : "transparent"}`,
+            "border-radius": "4px",
+            cursor: "pointer",
+            transition: "background 120ms, border-color 120ms",
+            padding: "0",
+          }}
+          onMouseEnter={() => setHovChat(true)}
+          onMouseLeave={() => setHovChat(false)}
+          onClick={() => setChatOpen((v) => !v)}
+        >
+          {/* 3×3 ask-glyph matching app.html .rail-toggle */}
+          <span style={{
+            display: "inline-grid",
+            "grid-template-columns": "repeat(3, 1fr)",
+            "grid-template-rows": "repeat(3, 1fr)",
+            gap: "2px",
+            width: "16px",
+            height: "16px",
+            "flex-shrink": "0",
+          }} aria-hidden="true">
+            {([0,1,2,3,4,5,6,7,8] as const).map((i) => (
+              <span style={{
+                display: "block",
+                background: i === 4 ? T.amber : chatOpen() ? T.amber : T.text,
+                "border-radius": "1px",
+              }} />
+            ))}
+          </span>
+        </button>
+      </div>
     </header>
   )
 }

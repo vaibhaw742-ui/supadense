@@ -7,6 +7,7 @@ import { PromptInput } from "@/components/prompt-input"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { sessionTitle } from "@/utils/session-title"
+import { CaptureDialog } from "@/components/capture-dialog"
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 
 export function SupadenseMark(props: { size?: number; class?: string }) {
@@ -143,6 +144,7 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
 
   // Track which session the panel is viewing (null = follow route param)
   const [selectedSessionID, setSelectedSessionID] = createSignal<string | undefined>(undefined)
+  const [captureOpen, setCaptureOpen] = createSignal(false)
   const activeSessionID = createMemo(() => selectedSessionID() ?? params.id)
 
   const messages = createMemo((): Message[] => {
@@ -242,7 +244,7 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
           onClick={() => {
             setSelectedSessionID(undefined)
             setTab("chat")
-            navigate(`/${params.dir}/session`)
+            if (params.dir) navigate(`/${params.dir}/session`)
           }}
           style={{ ...headerIconBtn, "margin-bottom": "8px" }}
         >
@@ -363,41 +365,72 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
           <PromptInput onSubmit={() => {}} />
         </div>
       </Show>
+
+      {/* Capture dialog */}
+      <Show when={captureOpen() && directory()}>
+        <CaptureDialog
+          directory={directory()!}
+          onClose={() => setCaptureOpen(false)}
+        />
+      </Show>
     </div>
   )
 }
 
 /** Global FAB — lives in layout.tsx (visible on all pages) */
 export function SupadenseFAB() {
+  const [hov, setHov] = createSignal(false)
   return (
-    <button
-      type="button"
-      title="Ask supadense"
-      aria-label="Ask supadense"
-      onClick={() => setChatOpen((v) => !v)}
-      style={{
-        position: "fixed",
-        bottom: "28px",
-        right: "28px",
-        width: "56px",
-        height: "56px",
-        "border-radius": "50%",
-        background: chatOpen() ? "var(--color-surface-raised-base)" : "var(--color-background-base)",
-        border: chatOpen() ? "1px solid rgba(228,166,74,0.4)" : "1px solid var(--color-border-base)",
-        "box-shadow": chatOpen()
-          ? "0 4px 24px rgba(0,0,0,0.55), 0 0 20px rgba(228,166,74,0.3)"
-          : "0 4px 20px rgba(0,0,0,0.4)",
-        display: "flex",
-        "align-items": "center",
-        "justify-content": "center",
-        cursor: "pointer",
-        "z-index": "100",
-        transition: "border-color 160ms, box-shadow 160ms, background 160ms",
-        padding: "0",
-      }}
-    >
-      <SupadenseMark size={26} />
-    </button>
+    <Show when={!chatOpen()}>
+      <button
+        type="button"
+        title="Ask supadense"
+        aria-label="Ask supadense"
+        onClick={() => setChatOpen(true)}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          position: "fixed",
+          bottom: "96px",
+          right: "24px",
+          width: "52px",
+          height: "52px",
+          "border-radius": "50%",
+          background: "#ffffff",
+          border: hov() ? "1px solid #d68a2e" : "1px solid #e5e5e5",
+          "box-shadow": hov()
+            ? "0 10px 28px -8px rgba(214,138,46,0.30), 0 2px 4px -2px rgba(0,0,0,0.10)"
+            : "0 6px 20px -6px rgba(0,0,0,0.18), 0 2px 4px -2px rgba(0,0,0,0.08)",
+          display: "flex",
+          "align-items": "center",
+          "justify-content": "center",
+          cursor: "pointer",
+          "z-index": "70",
+          transform: hov() ? "translateY(-1px)" : "translateY(0)",
+          transition: "transform 140ms cubic-bezier(0.22,1,0.36,1), box-shadow 140ms, border-color 140ms",
+          padding: "0",
+        }}
+      >
+        {/* 3×3 glyph matching app.html .ask-fab .glyph */}
+        <span style={{
+          display: "inline-grid",
+          "grid-template-columns": "repeat(3, 1fr)",
+          "grid-template-rows": "repeat(3, 1fr)",
+          gap: "2px",
+          width: "24px",
+          height: "24px",
+        }} aria-hidden="true">
+          {([0,1,2,3,4,5,6,7,8] as const).map((i) => (
+            <span style={{
+              display: "block",
+              background: i === 4 ? "#d68a2e" : "#0a0a0a",
+              "border-radius": "1px",
+              "box-shadow": i === 4 && hov() ? "0 0 6px rgba(214,138,46,0.6)" : "none",
+            }} />
+          ))}
+        </span>
+      </button>
+    </Show>
   )
 }
 

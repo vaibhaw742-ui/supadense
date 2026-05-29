@@ -89,6 +89,8 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { SupadenseFAB, SupadenseMark } from "@/components/supadense-chat-panel"
+import { CaptureDialog } from "@/components/capture-dialog"
+import { activeSidebarView, setActiveSidebarView, setActiveClusterFilter } from "@/context/sidebar-view"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2057,6 +2059,8 @@ export default function Layout(props: ParentProps) {
     },
   }
 
+  const [topbarCaptureOpen, setTopbarCaptureOpen] = createSignal(false)
+
   const SidebarPanel = (panelProps: {
     project: Accessor<LocalProject | undefined>
     mobile?: boolean
@@ -2103,27 +2107,94 @@ export default function Layout(props: ParentProps) {
       return item.vcs === "git" || layout.sidebar.workspaces(item.worktree)()
     })
     const homedir = createMemo(() => globalSync.data.path.home)
+    const [sidebarCaptureOpen, setSidebarCaptureOpen] = createSignal(false)
+
+    const [sidebarClusters] = createResource(
+      () => {
+        const http = server.current?.http
+        if (!http) return null
+        const dir = params.dir ? (decode64(params.dir) ?? "") : ""
+        return { http, dir }
+      },
+      async ({ http, dir }) => {
+        const baseUrl = typeof http === "string" ? http : (http as { url: string }).url
+        const token = getAuthToken()
+        const headers: Record<string, string> = {
+          "x-opencode-directory": dir,
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+        const res = await fetch(`${baseUrl}/wiki/clusters`, { headers })
+        if (!res.ok) return []
+        return res.json() as Promise<{ id: string; name: string; color: string; resource_count: number }[]>
+      },
+    )
+
+    const [hoveredView, setHoveredView] = createSignal("")
+    const a = (view: string) => activeSidebarView().view === view
+    const h = (view: string) => hoveredView() === view
+
+    const [profileOpen, setProfileOpen] = createSignal(false)
+    const [hoveredMenuItem, setHoveredMenuItem] = createSignal("")
+    const [workspaceExpanded, setWorkspaceExpanded] = createSignal(false)
+    let profileRef: HTMLDivElement | undefined
+
+    createEffect(() => { if (!profileOpen()) setWorkspaceExpanded(false) })
+
+    const getUserEmail = () => {
+      try {
+        const t = localStorage.getItem("supadense.auth.token")
+        if (!t) return ""
+        const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
+        return (p.email || "") as string
+      } catch { return "" }
+    }
+
+    createEffect(() => {
+      if (!profileOpen()) return
+      const handler = (e: MouseEvent) => {
+        if (profileRef && !profileRef.contains(e.target as Node)) setProfileOpen(false)
+      }
+      document.addEventListener("mousedown", handler, true)
+      onCleanup(() => document.removeEventListener("mousedown", handler, true))
+    })
+
+    // Light theme tokens (sd v2)
+    const C = {
+      bg: "#f4f4f5",         // ground-000: sidebar bg
+      surface: "#ffffff",    // ground-050/100: card/button bg
+      raised: "#fafafa",     // ground-150: hover/active bg
+      border: "#e5e5e5",     // ground-300: hairlines
+      divider: "#d4d4d4",    // ground-400: muted dividers
+      text: "#0a0a0a",       // ink-100: primary text
+      textSub: "#525252",    // ink-300: nav item default
+      textMuted: "#737373",  // ink-400: labels, icons, counts
+      amber: "#d68a2e",      // amber-300: accent
+      amberBg: "rgba(214,138,46,0.08)",
+    }
 
     return (
       <div
-        classList={{
-          "flex flex-col min-h-0 min-w-0 box-border px-3": true,
-          "border-r border-border-weak-base": !merged(),
-          "border-r border-border-weaker-base": merged(),
-          "bg-background-base": merged() || hover(),
-          "bg-background-stronger": !merged() && !hover(),
-          "flex-1 min-w-0 max-w-full overflow-hidden": true,
+        style={{
+          background: C.bg,
+          display: "flex",
+          "flex-direction": "column",
+          width: "100%",
+          height: "100%",
+          "min-height": "0",
+          overflow: "hidden",
+          "border-radius": "10px",
         }}
       >
         <Show
           when={project()}
           fallback={
             <Show when={empty()}>
-              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
+              <div class="flex-1 min-h-0 flex items-center justify-center px-6 pb-64 text-center">
                 <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
                   <div class="flex flex-col gap-3">
-                    <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
-                    <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                    <div class="text-14-medium" style={{ color: C.text }}>{language.t("sidebar.empty.title")}</div>
+                    <div class="text-14-regular" style={{ color: C.textSub, "line-height": "var(--line-height-normal)" }}>
                       {language.t("sidebar.empty.description")}
                     </div>
                   </div>
@@ -2136,196 +2207,252 @@ export default function Layout(props: ParentProps) {
           }
         >
           <>
-            {/* Sidebar header — supadense wordmark + collapse + new session */}
-            <div class="shrink-0 px-3 py-2.5 flex items-center justify-between" style={{ "border-bottom": "1px solid var(--color-border-base)" }}>
-              <div class="flex items-center gap-2 min-w-0">
-                <div style={{ display: "inline-grid", "grid-template-columns": "repeat(4, 1fr)", "grid-template-rows": "repeat(4, 1fr)", gap: "1.5px", width: "18px", height: "18px", "flex-shrink": "0" }}>
-                  {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((i) => (
-                    <div style={{ background: i === 5 ? "#d68a2e" : "var(--color-text-strong)", "border-radius": "0.5px" }} />
-                  ))}
+            {/* ── HEADER ── */}
+            <div style={{ padding: "16px 14px", display: "flex", "align-items": "center", "justify-content": "space-between", "border-bottom": `1px solid ${C.border}`, "flex-shrink": "0" }}>
+              <div style={{ display: "inline-flex", "align-items": "center", gap: "10px", "font-weight": "500", "letter-spacing": "-0.02em", "font-size": "14px", color: C.text }}>
+                <div style={{ display: "inline-grid", "grid-template-columns": "repeat(4, 1fr)", "grid-template-rows": "repeat(4, 1fr)", gap: "1px", width: "18px", height: "18px", "flex-shrink": "0" }}>
+                  <For each={[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}>
+                    {(i) => <div style={{ background: i === 5 ? C.amber : C.text }} />}
+                  </For>
                 </div>
-                <span style={{ "font-weight": "500", "letter-spacing": "-0.02em", "font-size": "14px", color: "var(--color-text-strong)" }}>supadense</span>
+                <span>supadense</span>
               </div>
-              <div class="flex items-center gap-0.5 shrink-0">
+              <div style={{ display: "flex", gap: "6px", "align-items": "center" }}>
                 <Show when={panelProps.onCollapse}>
-                  <Tooltip value="Collapse" placement="bottom">
-                    <IconButton
-                      icon="sidebar-active"
-                      variant="ghost"
-                      class="size-6 rounded-md"
-                      onClick={panelProps.onCollapse}
-                      aria-label="Collapse sidebar"
-                    />
-                  </Tooltip>
-                </Show>
-                <Tooltip value="New session" placement="bottom">
                   <button
                     type="button"
-                    class="size-6 rounded-md flex items-center justify-center text-text-weak hover:bg-surface-base-active hover:text-text-strong transition-colors"
-                    onClick={() => { const dir = worktree(); if (dir) navigateWithSidebarReset(`/${slug()}/session`) }}
-                    aria-label="New session"
+                    style={{ width: "26px", height: "26px", border: `1px solid ${C.border}`, "border-radius": "2px", background: C.surface, color: C.textSub, display: "inline-flex", "align-items": "center", "justify-content": "center", cursor: "pointer" }}
+                    onClick={panelProps.onCollapse}
+                    title="Collapse sidebar"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>
                     </svg>
                   </button>
-                </Tooltip>
+                </Show>
+                <button
+                  type="button"
+                  style={{ width: "26px", height: "26px", border: `1px solid ${C.border}`, "border-radius": "2px", background: C.surface, color: C.textSub, display: "inline-flex", "align-items": "center", "justify-content": "center", cursor: "pointer" }}
+                  onClick={() => { if (worktree()) setSidebarCaptureOpen(true) }}
+                  title="Capture"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
-            {/* New supadense KB sidebar nav */}
-            <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div class="flex-1 min-h-0 overflow-y-auto" style={{ "scrollbar-width": "none" }}>
+            {/* ── NAV ── */}
+            <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", "scrollbar-width": "none" }}>
+              <div style={{ padding: "12px 8px 6px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.14em", "text-transform": "uppercase", color: C.textMuted }}>workspace</div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "1px", padding: "0 8px 8px" }}>
 
-                {/* WORKSPACE */}
-                <div style={{ padding: "14px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Workspace</div>
-                <div class="px-1.5 pb-1">
-                  {([
-                    { label: "Gaps", count: "14 open", svgPath: "M9 18 3 12l6-6M15 6l6 6-6 6", view: "gaps" },
-                    { label: "Practice", count: "7 due", svgPath: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01", view: "practice", active: true },
-                    { label: "Read", count: "3 new", svgPath: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z", view: "read" },
-                    { label: "Graph", count: "847", svgPath: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M5 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M5 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 10 7 7M14 10l3-3M10 14l-3 3M14 14l3 3", view: "lib" },
-                    { label: "Notes", count: "24", svgPath: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6", view: "notes" },
-                    { label: "Ask", svgPath: "M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z", view: "ask" },
-                  ] as { label: string; count?: string; svgPath: string; view: string; active?: boolean }[]).map((item) => (
-                    <button
-                      type="button"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors text-13-medium"
-                      classList={{
-                        "bg-surface-base-active text-text-strong": !!item.active,
-                        "text-text-weak hover:text-text-strong hover:bg-surface-base-active": !item.active,
-                      }}
-                      onClick={() => {
-                        if (item.view === "ask") {
-                          const dir = worktree()
-                          if (dir) navigateWithSidebarReset(`/${slug()}/session`)
-                        }
-                      }}
-                      style={item.active ? { "border-left": "2px solid #d68a2e", "padding-left": "6px" } : {}}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
-                        <path d={item.svgPath} />
-                      </svg>
-                      <span class="flex-1 text-left truncate">{item.label}</span>
-                      {item.count && <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>}
-                    </button>
-                  ))}
-                </div>
+                {/* Graph */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("lib") || h("lib") ? C.text : C.textSub, background: a("lib") ? C.raised : h("lib") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("lib") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("lib")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("lib") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="10" y1="10" x2="7" y2="7"/><line x1="14" y1="10" x2="17" y2="7"/><line x1="10" y1="14" x2="7" y2="17"/><line x1="14" y1="14" x2="17" y2="17"/></svg>
+                  <span style={{ flex: "1" }}>Graph</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("lib") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>412</span>
+                </button>
 
-                {/* CLUSTERS */}
-                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Clusters</div>
-                <div class="px-1.5 pb-1">
-                  {([
-                    { label: "Agentic loops", count: "11", dot: "#d68a2e" },
-                    { label: "RAG & embeddings", count: "24", dot: "#d68a2e" },
-                    { label: "Postgres internals", count: "18", dot: "var(--color-border-strong)" },
-                    { label: "Long-context", count: "9", dot: "var(--color-border-strong)" },
-                    { label: "Embeddings", count: "12", dot: "var(--color-border-strong)" },
-                    { label: "Rust async", count: "6", dot: "#0ea5e9" },
-                  ] as { label: string; count: string; dot: string }[]).map((item) => (
-                    <button
-                      type="button"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                    >
-                      <div style={{ width: "7px", height: "7px", "border-radius": "50%", background: item.dot, "flex-shrink": "0", "margin-left": "2px" }} />
-                      <span class="flex-1 text-left truncate">{item.label}</span>
-                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
-                    </button>
-                  ))}
-                </div>
+                {/* Sources */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("read") || h("read") ? C.text : C.textSub, background: a("read") ? C.raised : h("read") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("read") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("read")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("read") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                  <span style={{ flex: "1" }}>Sources</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("read") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>3 new</span>
+                </button>
 
-                {/* PROJECTS */}
-                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Projects</div>
-                <div class="px-1.5 pb-1">
-                  {([
-                    { label: "RAG memory", count: "42" },
-                    { label: "Postgres internals", count: "18" },
-                    { label: "DeepSeek arch", count: "11" },
-                  ] as { label: string; count: string }[]).map((item) => (
-                    <button
-                      type="button"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                      onClick={() => navigateWithSidebarReset("/projects")}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                      </svg>
-                      <span class="flex-1 text-left truncate">{item.label}</span>
-                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                    onClick={() => navigateWithSidebarReset("/projects")}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}>
-                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    <span class="flex-1 text-left">New project</span>
-                  </button>
-                </div>
+                {/* Eng Notes */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("notes") || h("notes") ? C.text : C.textSub, background: a("notes") ? C.raised : h("notes") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("notes") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("notes")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "notes", label: "Eng Notes" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("notes") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                  <span style={{ flex: "1" }}>Eng Notes</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("notes") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>24</span>
+                </button>
 
-                {/* SOURCES */}
-                <div style={{ padding: "10px 12px 4px", "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.12em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.55" }}>Sources</div>
-                <div class="px-1.5 pb-3">
-                  {([
-                    { label: "arxiv.org", count: "231" },
-                    { label: "news.ycombinator", count: "112" },
-                    { label: "github stars", count: "88" },
-                  ] as { label: string; count: string }[]).map((item) => (
-                    <button
-                      type="button"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-text-weak hover:text-text-strong hover:bg-surface-base-active transition-colors text-13-medium"
-                    >
-                      <span class="flex-1 text-left truncate">{item.label}</span>
-                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", opacity: "0.55", "flex-shrink": "0" }}>{item.count}</span>
-                    </button>
-                  ))}
-                </div>
+                {/* Experiments */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("experiments") || h("experiments") ? C.text : C.textSub, background: a("experiments") ? C.raised : h("experiments") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("experiments") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("experiments")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "experiments", label: "Experiments" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("experiments") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0a3 3 0 1 0 6 0M9 14h6"/><path d="M14 3v11"/></svg>
+                  <span style={{ flex: "1" }}>Experiments</span>
+                </button>
+
+                {/* Members */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("members") || h("members") ? C.text : C.textSub, background: a("members") ? C.raised : h("members") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("members") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("members")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "members", label: "Members" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("members") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                  <span style={{ flex: "1" }}>Members</span>
+                </button>
+
+                {/* Today */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("dash") || h("dash") ? C.text : C.textSub, background: a("dash") ? C.raised : h("dash") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("dash") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("dash")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "dash", label: "Today" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("dash") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                  <span style={{ flex: "1" }}>Today</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("dash") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>7 due</span>
+                </button>
+
+                {/* Gaps */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("gaps") || h("gaps") ? C.text : C.textSub, background: a("gaps") ? C.raised : h("gaps") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("gaps") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("gaps")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "gaps", label: "Gaps" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("gaps") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>
+                  <span style={{ flex: "1" }}>Gaps</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("gaps") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>14 open</span>
+                </button>
+
+                {/* Review */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("practice") || h("practice") ? C.text : C.textSub, background: a("practice") ? C.raised : h("practice") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("practice") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("practice")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "practice", label: "Review" })}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("practice") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <span style={{ flex: "1" }}>Review</span>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("practice") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>7 due</span>
+                </button>
+
+                {/* Ask */}
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("ask") || h("ask") ? C.text : C.textSub, background: a("ask") ? C.raised : h("ask") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("ask") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("ask")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSidebarView({ section: "workspace", view: "ask", label: "Ask" }); const dir = worktree(); if (dir) navigateWithSidebarReset(`/${slug()}/session`) }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("ask") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+                  <span style={{ flex: "1" }}>Ask</span>
+                </button>
 
               </div>
+            </div>
 
-              {/* User profile footer */}
-              <div class="shrink-0 flex items-center gap-2.5 px-3 py-2.5" style={{ "border-top": "1px solid var(--color-border-base)" }}>
-                <div style={{
-                  width: "28px", height: "28px", "border-radius": "50%",
-                  background: "#d68a2e", color: "#fff",
-                  display: "flex", "align-items": "center", "justify-content": "center",
-                  "font-size": "11px", "font-weight": "600", "flex-shrink": "0",
-                  "letter-spacing": "0.02em",
-                }}>
-                  {(() => {
-                    try {
-                      const t = localStorage.getItem("supadense.auth.token")
-                      if (!t) return "U"
-                      const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
-                      const e: string = p.email || ""
-                      return e.substring(0, 2).toUpperCase()
-                    } catch { return "U" }
-                  })()}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-13-medium text-text-strong truncate">
-                    {(() => {
-                      try {
-                        const t = localStorage.getItem("supadense.auth.token")
-                        if (!t) return "user"
-                        const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
-                        const e: string = p.email || "user"
-                        return e.split("@")[0]
-                      } catch { return "user" }
-                    })()}
+            {/* ── USER PILL ── */}
+            <div ref={(el) => { profileRef = el }} style={{ position: "relative", "border-top": `1px solid ${C.border}`, "flex-shrink": "0" }}>
+
+              {/* Profile popover */}
+              <Show when={profileOpen()}>
+                <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "8px", right: "8px", background: C.surface, border: `1px solid ${C.border}`, "border-radius": "6px", "box-shadow": "0 8px 24px rgba(0,0,0,0.12)", "z-index": "100" }}>
+                  {/* User info header */}
+                  <div style={{ padding: "12px 14px 10px", "border-bottom": `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+                      <div style={{ width: "32px", height: "32px", "border-radius": "50%", background: C.amber, color: "#ffffff", display: "flex", "align-items": "center", "justify-content": "center", "font-family": "'Geist Mono', monospace", "font-weight": "600", "font-size": "13px", "flex-shrink": "0" }}>
+                        {getUserEmail().substring(0, 2).toUpperCase() || "U"}
+                      </div>
+                      <div style={{ "min-width": "0" }}>
+                        <div style={{ "font-size": "13px", "font-weight": "500", color: C.text, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {getUserEmail().split("@")[0] || "user"}
+                        </div>
+                        <div style={{ "font-size": "11px", color: C.textMuted, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "margin-top": "1px" }}>
+                          {getUserEmail() || "—"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.06em", "text-transform": "uppercase", color: "var(--color-text-weak)", opacity: "0.6" }}>
-                    d12 streak · pro
+                  {/* Menu items */}
+                  <div style={{ padding: "4px 0" }}>
+                    <button
+                      type="button"
+                      style={{ padding: "7px 14px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: hoveredMenuItem() === "workspace" ? C.text : C.textSub, background: workspaceExpanded() || hoveredMenuItem() === "workspace" ? C.raised : "transparent", border: "none", cursor: "pointer", width: "100%", "text-align": "left", "font-family": "inherit" }}
+                      onMouseEnter={() => setHoveredMenuItem("workspace")}
+                      onMouseLeave={() => setHoveredMenuItem("")}
+                      onClick={() => setWorkspaceExpanded(e => !e)}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                      </svg>
+                      <span style={{ flex: "1" }}>Workspace</span>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.divider} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", transform: workspaceExpanded() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 140ms" }}>
+                        <polyline points="18 15 12 9 6 15"/>
+                      </svg>
+                    </button>
+                    <Show when={workspaceExpanded()}>
+                      <div style={{ background: C.bg, "border-top": `1px solid ${C.border}`, "border-bottom": `1px solid ${C.border}`, "max-height": "240px", "overflow-y": "auto" }}>
+                        <For each={layout.projects.list()}>
+                          {(proj) => {
+                            const allDirs = () => workspaceIds(proj)
+                            return (
+                              <For each={allDirs()}>
+                                {(dir) => {
+                                  const isActive = () => workspaceKey(dir) === workspaceKey(currentDir() ?? "")
+                                  const [hov, setHov] = createSignal(false)
+                                  const label = () => workspaceLabel(dir, undefined, proj.id) || getFilename(dir)
+                                  return (
+                                    <button
+                                      type="button"
+                                      style={{ padding: "7px 14px 7px 20px", display: "flex", "align-items": "center", gap: "8px", "font-size": "12px", color: isActive() ? C.amber : hov() ? C.text : C.textSub, background: isActive() ? C.amberBg : hov() ? C.raised : "transparent", border: "none", cursor: "pointer", width: "100%", "text-align": "left", "font-family": "inherit" }}
+                                      onMouseEnter={() => setHov(true)}
+                                      onMouseLeave={() => setHov(false)}
+                                      onClick={() => { setProfileOpen(false); void navigateToProject(dir) }}
+                                    >
+                                      <Show when={isActive()} fallback={<span style={{ width: "12px", "flex-shrink": "0" }} />}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.amber} stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                                          <polyline points="20 6 9 17 4 12"/>
+                                        </svg>
+                                      </Show>
+                                      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                                        {label()}
+                                      </span>
+                                    </button>
+                                  )
+                                }}
+                              </For>
+                            )
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                    <button
+                      type="button"
+                      style={{ padding: "7px 14px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: hoveredMenuItem() === "settings" ? C.text : C.textSub, background: hoveredMenuItem() === "settings" ? C.raised : "transparent", border: "none", cursor: "pointer", width: "100%", "text-align": "left", "font-family": "inherit" }}
+                      onMouseEnter={() => setHoveredMenuItem("settings")}
+                      onMouseLeave={() => setHoveredMenuItem("")}
+                      onClick={() => { setProfileOpen(false); openSettings() }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                      </svg>
+                      <span style={{ flex: "1" }}>Settings</span>
+                      <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: C.divider, "letter-spacing": "0.04em" }}>⌘,</span>
+                    </button>
+                    <div style={{ height: "1px", background: C.border, margin: "4px 0" }} />
+                    <button
+                      type="button"
+                      style={{ padding: "7px 14px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: hoveredMenuItem() === "signout" ? C.text : C.textSub, background: hoveredMenuItem() === "signout" ? C.raised : "transparent", border: "none", cursor: "pointer", width: "100%", "text-align": "left", "font-family": "inherit" }}
+                      onMouseEnter={() => setHoveredMenuItem("signout")}
+                      onMouseLeave={() => setHoveredMenuItem("")}
+                      onClick={() => { setProfileOpen(false); clearAuthToken(); location.reload() }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                      </svg>
+                      Sign out
+                    </button>
                   </div>
                 </div>
-              </div>
+              </Show>
+
+              {/* Pill button */}
+              <button
+                type="button"
+                style={{ padding: "12px 10px", display: "flex", "align-items": "center", gap: "10px", width: "100%", background: profileOpen() ? C.raised : "transparent", border: "none", cursor: "pointer", "text-align": "left", "font-family": "inherit", transition: "background 120ms" }}
+                onMouseEnter={(e) => { if (!profileOpen()) (e.currentTarget as HTMLElement).style.background = C.surface }}
+                onMouseLeave={(e) => { if (!profileOpen()) (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                onClick={() => setProfileOpen(p => !p)}
+              >
+                <div style={{ width: "30px", height: "30px", "border-radius": "50%", background: C.amber, color: "#ffffff", display: "flex", "align-items": "center", "justify-content": "center", "font-family": "'Geist Mono', monospace", "font-weight": "600", "font-size": "12px", "flex-shrink": "0" }}>
+                  {getUserEmail().substring(0, 2).toUpperCase() || "U"}
+                </div>
+                <div style={{ flex: "1", "min-width": "0" }}>
+                  <div style={{ "font-size": "13px", "font-weight": "500", color: C.text, "line-height": "1.1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                    {getUserEmail().split("@")[0] || "user"}
+                  </div>
+                  <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "letter-spacing": "0.06em", color: C.textMuted, "text-transform": "uppercase" }}>
+                    12 eng commits · pro
+                  </div>
+                </div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.divider} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", transform: profileOpen() ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 140ms" }}>
+                  <polyline points="18 15 12 9 6 15"/>
+                </svg>
+              </button>
             </div>
           </>
         </Show>
 
+        <Show when={sidebarCaptureOpen() && worktree()}>
+          <CaptureDialog
+            directory={worktree()}
+            onClose={() => setSidebarCaptureOpen(false)}
+          />
+        </Show>
       </div>
     )
   }
@@ -2366,7 +2493,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-      <Titlebar />
+      <Titlebar onCapture={() => setTopbarCaptureOpen(true)} />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
@@ -2376,10 +2503,10 @@ export default function Layout(props: ParentProps) {
               classList={{
                 "hidden xl:block": layout.sidebar.opened(),
                 "hidden": !layout.sidebar.opened(),
-                "fixed top-0 bottom-0 left-0": true,
+                "fixed": true,
                 "z-10": true,
               }}
-              style={{ width: `${side()}px` }}
+              style={{ width: `${side()}px`, top: "8px", bottom: "8px", left: "8px" }}
               ref={(el) => {
                 setState("nav", el)
               }}
@@ -2398,8 +2525,8 @@ export default function Layout(props: ParentProps) {
 
             <Show when={layout.sidebar.opened()}>
               <div
-                class="hidden xl:block fixed top-0 bottom-0 z-30 w-0 overflow-visible"
-                style={{ left: `${side()}px` }}
+                class="hidden xl:block fixed z-30 w-0 overflow-visible"
+                style={{ left: `${side() + 8}px`, top: "8px", bottom: "8px" }}
                 onPointerDown={() => setState("sizing", true)}
               >
                 <ResizeHandle
@@ -2456,7 +2583,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${side()}px` : "0px",
+                "--main-left": layout.sidebar.opened() ? `${side() + 8}px` : "0px",
               }}
             >
               <main
@@ -2469,20 +2596,6 @@ export default function Layout(props: ParentProps) {
                 </Show>
               </main>
 
-              {/* Re-open sidebar button — visible only when sidebar is closed */}
-              <Show when={!layout.sidebar.opened()}>
-                <div class="hidden xl:block fixed top-3 left-3 z-20">
-                  <Tooltip value="Open sidebar" placement="right">
-                    <IconButton
-                      icon="sidebar-active"
-                      variant="ghost"
-                      class="size-8 rounded-md border border-border-base bg-background-base shadow-sm"
-                      onClick={() => layout.sidebar.open()}
-                      aria-label="Open sidebar"
-                    />
-                  </Tooltip>
-                </div>
-              </Show>
             </div>
 
             <div
@@ -2524,10 +2637,16 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && <DebugBar />}
+        {false && <DebugBar />}
       </div>
       <Toast.Region />
       <SupadenseFAB />
+      <Show when={topbarCaptureOpen() && currentProject()?.worktree}>
+        <CaptureDialog
+          directory={currentProject()!.worktree}
+          onClose={() => setTopbarCaptureOpen(false)}
+        />
+      </Show>
     </div>
   )
 }
