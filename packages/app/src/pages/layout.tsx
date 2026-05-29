@@ -89,6 +89,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { SupadenseFAB, SupadenseMark } from "@/components/supadense-chat-panel"
+import { chatOpen } from "@/context/chat-overlay"
 import { CaptureDialog } from "@/components/capture-dialog"
 import { activeSidebarView, setActiveSidebarView, setActiveClusterFilter } from "@/context/sidebar-view"
 
@@ -2492,7 +2493,13 @@ export default function Layout(props: ParentProps) {
   )
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div
+      class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+      style={{
+        "padding-right": chatOpen() ? "476px" : "0px",
+        transition: "padding-right 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+      }}
+    >
       <Titlebar onCapture={() => setTopbarCaptureOpen(true)} />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">

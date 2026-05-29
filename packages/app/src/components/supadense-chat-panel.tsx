@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
+import { Portal } from "solid-js/web"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useGlobalSync } from "@/context/global-sync"
 import { useSync } from "@/context/sync"
@@ -434,29 +435,34 @@ export function SupadenseFAB() {
   )
 }
 
-/** Floating panel — lives inside SessionRoute so all providers are available */
+/** Side panel — slides in from the right, pushes main content left (matches app.html .ask-pop) */
 export function SupadenseChatOverlay() {
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "96px",
-        right: "28px",
-        width: "420px",
-        height: "600px",
-        "z-index": "99",
-        "border-radius": "14px",
-        overflow: "hidden",
-        "pointer-events": chatOpen() ? "auto" : "none",
-        opacity: chatOpen() ? "1" : "0",
-        transform: chatOpen() ? "translateY(0) scale(1)" : "translateY(16px) scale(0.97)",
-        transition: "opacity 180ms ease, transform 180ms ease",
-      }}
-    >
-      <Show when={chatOpen()}>
+    <Portal mount={document.body}>
+      <div
+        style={{
+          position: "fixed",
+          top: "8px",
+          right: "8px",
+          bottom: "8px",
+          width: "460px",
+          "max-width": "calc(100vw - 16px)",
+          "z-index": "70",
+          "border-radius": "10px",
+          overflow: "hidden",
+          background: "#ffffff",
+          border: "1px solid #e5e5e5",
+          "box-shadow": "-12px 0 32px -16px rgba(0,0,0,0.12)",
+          display: "flex",
+          "flex-direction": "column",
+          transform: chatOpen() ? "translateX(0)" : "translateX(calc(100% + 16px))",
+          "pointer-events": chatOpen() ? "auto" : "none",
+          transition: "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         <SupadenseChatPanel onClose={() => setChatOpen(false)} />
-      </Show>
-    </div>
+      </div>
+    </Portal>
   )
 }
 
