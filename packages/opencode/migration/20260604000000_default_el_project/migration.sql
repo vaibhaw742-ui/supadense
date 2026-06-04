@@ -1,0 +1,1 @@
+ALTER TABLE el_projects ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
