@@ -77,11 +77,6 @@ export namespace Workspace {
 
   export function scaffoldFiles(workspace: Workspace): void {
     const { kb_path } = workspace
-
-    // Keep assets inside .supadense/ to avoid cluttering the project root
-    const assetsDir = path.join(kb_path, ".supadense", "assets")
-    mkdirSync(assetsDir, { recursive: true })
-
     KbWatcher.start(workspace.id, kb_path)
   }
 
