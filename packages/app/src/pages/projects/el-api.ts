@@ -23,6 +23,7 @@ export interface ElProject {
   supadense_init?: "none" | "local" | "pushed"
   repo_branch?: string | null
   repo_local_path?: string | null
+  is_default?: boolean
 }
 
 export interface ProjectNode {

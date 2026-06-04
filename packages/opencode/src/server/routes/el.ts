@@ -276,6 +276,43 @@ function ensureVirtualWorkspace(projectId: string): string {
 }
 
 /**
+ * Ensure every user has exactly one "Default" project.
+ * Called at list-projects time and on first capture.
+ * Returns the default project id.
+ */
+function ensureDefaultProject(userId: string): string {
+  const existing = Database.use((db) =>
+    db.select().from(ElProjectTable)
+      .where(and(eq(ElProjectTable.user_id, userId), eq(ElProjectTable.is_default, true)))
+      .get(),
+  )
+  if (existing) return existing.id
+
+  const now = Date.now()
+  const projectId = ulid()
+  Database.use((db) =>
+    db.insert(ElProjectTable).values({
+      id: projectId,
+      user_id: userId,
+      name: "Default",
+      status: "active",
+      context_json: {},
+      is_default: true,
+      time_created: now,
+      time_updated: now,
+    }).run(),
+  )
+  // Create the folder structure
+  const dir = path.join("/workspaces", userId, "el-projects", projectId)
+  mkdirSync(path.join(dir, ".supadense", "brain", "L0"), { recursive: true })
+  mkdirSync(path.join(dir, ".supadense", "brain", "L1"), { recursive: true })
+  mkdirSync(path.join(dir, ".supadense", "brain", "L2"), { recursive: true })
+  mkdirSync(path.join(dir, ".supadense", "sources"), { recursive: true })
+  ensureVirtualWorkspace(projectId)
+  return projectId
+}
+
+/**
  * Add a resource to a project: creates learning_resources row + join row,
  * kicks off background analysis.
  */
@@ -498,6 +535,7 @@ const ProjectOut = z.object({
   supadense_init: z.string().optional(),
   repo_branch: z.string().nullable().optional(),
   repo_local_path: z.string().nullable().optional(),
+  is_default: z.boolean().optional(),
 })
 
 const ResourceOut = z.object({
@@ -528,6 +566,8 @@ export const ELRoutes = lazy(() =>
       (c) => {
         const userId = getUserId(c)
         if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        ensureDefaultProject(userId)
 
         const projects = Database.use((db) =>
           db.select().from(ElProjectTable)
