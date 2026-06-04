@@ -759,13 +759,17 @@ export default function ProjectView() {
 const MONO = '"Geist Mono", ui-monospace, monospace'
 const SANS = '"Geist", ui-sans-serif, system-ui, sans-serif'
 
-// Flatten tree entries into a list with depth for rendering
-function flattenTree(entries: TreeEntry[], depth = 0): Array<TreeEntry & { depth: number }> {
+// Flatten tree entries into a list with depth, respecting collapsed set
+function flattenTree(
+  entries: TreeEntry[],
+  collapsed: Set<string>,
+  depth = 0,
+): Array<TreeEntry & { depth: number }> {
   const result: Array<TreeEntry & { depth: number }> = []
   for (const e of entries) {
     result.push({ ...e, depth })
-    if (e.type === "dir" && e.children) {
-      result.push(...flattenTree(e.children, depth + 1))
+    if (e.type === "dir" && e.children && !collapsed.has(e.path)) {
+      result.push(...flattenTree(e.children, collapsed, depth + 1))
     }
   }
   return result
@@ -785,6 +789,20 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
   const [openFiles, setOpenFiles] = createSignal<string[]>([])
   const [activeFile, setActiveFile] = createSignal<string | null>(null)
   const [search, setSearch] = createSignal("")
+  // Collapsed folder paths
+  const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set())
+
+  function toggleFolder(path: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  // Collapsed brain node paths
+  const [collapsedNodes, setCollapsedNodes] = createSignal<Set<string>>(new Set())
 
   const [fileContent] = createResource(activeFile, (path) =>
     path ? elApi.getFileContent(props.projectId, path) : Promise.resolve(null)
@@ -877,25 +895,35 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
               {(node) => {
                 const indent = node.depth * 16
                 const files = parseFilesJson(node)
+                const isCollapsed = () => collapsedNodes().has(node.path)
                 return (
                   <>
-                    <div style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: "#374151", cursor: "default" }}>
+                    <div
+                      onClick={() => setCollapsedNodes((prev) => { const n = new Set(prev); n.has(node.path) ? n.delete(node.path) : n.add(node.path); return n })}
+                      style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: "#374151", cursor: "pointer" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "#f5f5f5" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
+                    >
+                      {/* Chevron */}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" stroke-width="2.5" stroke-linecap="round" style={{ "flex-shrink": "0", transition: "transform 120ms", transform: isCollapsed() ? "rotate(-90deg)" : "rotate(0deg)" }}><polyline points="6 9 12 15 18 9"/></svg>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d68a2e" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                       <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{node.name}/</span>
                     </div>
-                    <For each={files}>
-                      {(file) => {
-                        const isActive = () => activeFile() === file.path
-                        return (
-                          <div onClick={() => openFile(file.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent + 16}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
-                            onMouseEnter={(e) => { if (!isActive()) e.currentTarget.style.background = "#f5f5f5" }}
-                            onMouseLeave={(e) => { if (!isActive()) e.currentTarget.style.background = "transparent" }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{file.name}</span>
-                          </div>
-                        )
-                      }}
-                    </For>
+                    <Show when={!isCollapsed()}>
+                      <For each={files}>
+                        {(file) => {
+                          const isActive = () => activeFile() === file.path
+                          return (
+                            <div onClick={() => openFile(file.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent + 26}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
+                              onMouseEnter={(e) => { if (!isActive()) e.currentTarget.style.background = "#f5f5f5" }}
+                              onMouseLeave={(e) => { if (!isActive()) e.currentTarget.style.background = "transparent" }}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{file.name}</span>
+                            </div>
+                          )
+                        }}
+                      </For>
+                    </Show>
                   </>
                 )
               }}
@@ -904,20 +932,27 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
 
           {/* Code mode: real repo tree */}
           <Show when={props.mode === "code"}>
-            <For each={flattenTree(tree()?.entries ?? [])}>
+            <For each={flattenTree(tree()?.entries ?? [], collapsed())}>
               {(entry) => {
                 const indent = entry.depth * 16
                 const isActive = () => entry.type === "file" && activeFile() === entry.path
+                const isCollapsed = () => entry.type === "dir" && collapsed().has(entry.path)
                 if (entry.type === "dir") {
                   return (
-                    <div style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: "#374151", cursor: "default" }}>
+                    <div
+                      onClick={() => toggleFolder(entry.path)}
+                      style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: "#374151", cursor: "pointer" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "#f5f5f5" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" stroke-width="2.5" stroke-linecap="round" style={{ "flex-shrink": "0", transition: "transform 120ms", transform: isCollapsed() ? "rotate(-90deg)" : "rotate(0deg)" }}><polyline points="6 9 12 15 18 9"/></svg>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                       <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{entry.name}</span>
                     </div>
                   )
                 }
                 return (
-                  <div onClick={() => openFile(entry.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
+                  <div onClick={() => openFile(entry.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent + 10}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
                     onMouseEnter={(e) => { if (!isActive()) e.currentTarget.style.background = "#f5f5f5" }}
                     onMouseLeave={(e) => { if (!isActive()) e.currentTarget.style.background = "transparent" }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>

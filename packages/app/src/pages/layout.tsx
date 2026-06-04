@@ -93,6 +93,7 @@ import { SupadenseSidebar, SidebarCollapseToggle } from "@/components/supadense-
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import { CaptureDialog } from "@/components/capture-dialog"
 import { activeSidebarView, setActiveSidebarView, setActiveSourceName } from "@/context/sidebar-view"
+import { ReadPanel } from "@/pages/read-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2510,6 +2511,7 @@ export default function Layout(props: ParentProps) {
           onToggle={() => setSupadenseSidebarCollapsed(v => !v)}
           userEmail={getTopLevelUserEmail()}
           onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
+          onCapture={() => setTopbarCaptureOpen(true)}
         />
       </div>
 
@@ -2530,7 +2532,14 @@ export default function Layout(props: ParentProps) {
           onCapture={() => setTopbarCaptureOpen(true)}
         />
 
-        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden" }}>
+        {/* ── Virtual panels (Sources etc.) — shown instead of router children ── */}
+        <Show when={activeSidebarView().view === "read"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff" }}>
+            <ReadPanel />
+          </div>
+        </Show>
+
+        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden", display: activeSidebarView().view === "read" ? "none" : undefined }}>
           <div class="size-full relative overflow-x-hidden">
             <nav
               aria-label={language.t("sidebar.nav.projectsAndSessions")}

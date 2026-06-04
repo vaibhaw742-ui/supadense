@@ -687,7 +687,7 @@ export const ELRoutes = lazy(() =>
 
         const projectIds = projects.map((p) => p.id)
         const joins = Database.use((db) =>
-          db.select({ resource_id: ElProjectResourceTable.resource_id, project_id: ElProjectResourceTable.project_id })
+          db.select({ id: ElProjectResourceTable.id, resource_id: ElProjectResourceTable.resource_id, project_id: ElProjectResourceTable.project_id })
             .from(ElProjectResourceTable)
             .where(inArray(ElProjectResourceTable.project_id, projectIds))
             .all(),
@@ -705,11 +705,11 @@ export const ELRoutes = lazy(() =>
         const urlById = new Map(resourceRows.filter((r) => r.url).map((r) => [r.id, r.url!]))
 
         const projectMap = new Map(projects.map((p) => [p.id, p.name]))
-        const result: Array<{ url: string; project_id: string; project_name: string }> = []
+        const result: Array<{ url: string; project_id: string; project_name: string; join_id: string }> = []
         for (const j of joins) {
           const url = urlById.get(j.resource_id)
           if (!url) continue
-          result.push({ url, project_id: j.project_id, project_name: projectMap.get(j.project_id) ?? "" })
+          result.push({ url, project_id: j.project_id, project_name: projectMap.get(j.project_id) ?? "", join_id: j.id })
         }
 
         return c.json(result)

@@ -280,7 +280,7 @@ export const elApi = {
     await fetch(`${apiBase()}/el/projects/${id}`, { method: "DELETE", headers: authHeaders() })
   },
 
-  async getResourceProjects(): Promise<Array<{ url: string; project_id: string; project_name: string }>> {
+  async getResourceProjects(): Promise<Array<{ url: string; project_id: string; project_name: string; join_id: string }>> {
     const res = await fetch(`${apiBase()}/el/resource-projects`, { headers: authHeaders() })
     if (!res.ok) return []
     return res.json()

@@ -159,14 +159,14 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
           gap: "0",
         }}
       >
-        <span
-          style={{ cursor: "pointer" }}
-          onClick={() => setActiveSidebarView({ section: "workspace", view: "graph", label: "Graph" })}
-        >
+        <span style={{ cursor: "pointer" }} onClick={() => navigate("/projects")}>
           workspace
         </span>
         <span style={{ padding: "0 10px", color: C.borderMid, "user-select": "none" }}>·</span>
-        <Show when={activeGraphProjectName()} fallback={<span style={{ color: C.ink100 }}>Graph</span>}>
+        <Show
+          when={activeGraphProjectName()}
+          fallback={<span style={{ color: C.ink100 }}>{activeSidebarView().label || "Graph"}</span>}
+        >
           <span
             style={{ cursor: "pointer", color: C.ink500 }}
             onClick={() => { setActiveGraphProjectId(null); setActiveGraphProjectName(null); navigate("/projects") }}
