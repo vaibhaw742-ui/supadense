@@ -18,6 +18,36 @@ export interface ElProject {
   context_json: Record<string, string> | null
   time_created: number
   resource_count?: number
+  clone_status?: "none" | "cloning" | "indexing" | "done" | "failed"
+  clone_error?: string | null
+  supadense_init?: "none" | "local" | "pushed"
+  repo_branch?: string | null
+  repo_local_path?: string | null
+}
+
+export interface ProjectNode {
+  id: string
+  project_id: string
+  path: string
+  name: string
+  depth: number
+  parent_path: string | null
+  node_type: string
+  file_count: number
+  total_file_count: number
+  files_json: Array<{ name: string; path: string; ext: string; size_bytes: number }>
+  key_files: string[]
+  time_created: number
+  time_updated: number
+}
+
+export interface CloneStatus {
+  clone_status: "none" | "cloning" | "indexing" | "done" | "failed"
+  clone_error: string | null
+  supadense_init: "none" | "local" | "pushed"
+  repo_branch: string | null
+  node_count: number
+  total_file_count: number
 }
 
 export interface ElResource {
@@ -46,6 +76,28 @@ export interface GraphEdge {
   target: string
 }
 
+export interface GitHubRepo {
+  id: number
+  full_name: string
+  private: boolean
+  description: string | null
+  language: string | null
+  pushed_at: string
+}
+
+export interface GitHubStatus {
+  configured: boolean
+  connected: boolean
+  login: string | null
+}
+
+export interface TreeEntry {
+  name: string
+  path: string
+  type: "file" | "dir"
+  children?: TreeEntry[]
+}
+
 export const elApi = {
   async listProjects(): Promise<ElProject[]> {
     const res = await fetch(`${apiBase()}/el/projects`, { headers: authHeaders() })
@@ -53,7 +105,7 @@ export const elApi = {
     return res.json()
   },
 
-  async createProject(data: { name: string; github_url?: string; arxiv_url?: string }): Promise<ElProject> {
+  async createProject(data: { name: string; github_url?: string; arxiv_url?: string; github_pat?: string }): Promise<ElProject> {
     const res = await fetch(`${apiBase()}/el/projects`, {
       method: "POST",
       headers: authHeaders(),
@@ -108,16 +160,6 @@ export const elApi = {
     return res.json()
   },
 
-  async memorize(id: string, url: string): Promise<ElResource> {
-    const res = await fetch(`${apiBase()}/el/projects/${id}/memorize`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ url }),
-    })
-    if (!res.ok) throw new Error("Failed to memorize resource")
-    return res.json()
-  },
-
   async listSessions(id: string): Promise<Array<{ id: string; title: string; time_created: number; time_updated: number }>> {
     const res = await fetch(`${apiBase()}/el/projects/${id}/sessions`, { headers: authHeaders() })
     if (!res.ok) return []
@@ -140,6 +182,116 @@ export const elApi = {
       body: JSON.stringify({ q: query, project_id: projectId, filters }),
     })
     if (!res.ok) throw new Error("Search failed")
+    return res.json()
+  },
+
+  async cloneRepo(id: string, branch?: string): Promise<{ status: string }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/clone`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ branch }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(err.error ?? "Failed to start clone")
+    }
+    return res.json()
+  },
+
+  async getCloneStatus(id: string): Promise<CloneStatus> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/clone-status`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to get clone status")
+    return res.json()
+  },
+
+  async pullRepo(id: string): Promise<{ status: string }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/pull`, {
+      method: "POST",
+      headers: authHeaders(),
+    })
+    if (!res.ok) throw new Error("Failed to pull")
+    return res.json()
+  },
+
+  async getNodes(id: string, maxDepth?: number): Promise<ProjectNode[]> {
+    const qs = maxDepth != null ? `?max_depth=${maxDepth}` : ""
+    const res = await fetch(`${apiBase()}/el/projects/${id}/nodes${qs}`, { headers: authHeaders() })
+    if (!res.ok) return []
+    return res.json()
+  },
+
+  async getNodeFiles(id: string, nodePath: string): Promise<ProjectNode & { children: ProjectNode[] }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/nodes/${encodeURIComponent(nodePath)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Node not found")
+    return res.json()
+  },
+
+  async initSupadense(id: string): Promise<{ status: string; pushed: boolean; message?: string }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/init-supadense`, {
+      method: "POST",
+      headers: authHeaders(),
+    })
+    if (!res.ok) throw new Error("Failed to init supadense")
+    return res.json()
+  },
+
+  async getGitHubStatus(): Promise<GitHubStatus> {
+    const res = await fetch(`${apiBase()}/el/github/status`, { headers: authHeaders() })
+    if (!res.ok) return { configured: false, connected: false, login: null }
+    return res.json()
+  },
+
+  async getGitHubConnectUrl(): Promise<{ url: string }> {
+    const res = await fetch(`${apiBase()}/el/github/connect`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("GitHub OAuth not configured on this server")
+    return res.json()
+  },
+
+  async listGitHubRepos(q?: string): Promise<GitHubRepo[]> {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : ""
+    const res = await fetch(`${apiBase()}/el/github/repos${qs}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to list repos")
+    return res.json()
+  },
+
+  async disconnectGitHub(): Promise<void> {
+    await fetch(`${apiBase()}/el/github/disconnect`, { method: "DELETE", headers: authHeaders() })
+  },
+
+  async listBranches(id: string): Promise<{ branches: string[]; commit_count: number }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/branches`, { headers: authHeaders() })
+    if (!res.ok) return { branches: [], commit_count: 0 }
+    return res.json()
+  },
+
+  async getTree(id: string): Promise<{ entries: TreeEntry[] }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/tree`, { headers: authHeaders() })
+    if (!res.ok) return { entries: [] }
+    return res.json()
+  },
+
+  async getFileContent(id: string, filePath: string): Promise<{ content: string; path: string }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/file-content?path=${encodeURIComponent(filePath)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to read file")
+    return res.json()
+  },
+
+  async deleteProject(id: string): Promise<void> {
+    await fetch(`${apiBase()}/el/projects/${id}`, { method: "DELETE", headers: authHeaders() })
+  },
+
+  async getResourceProjects(): Promise<Array<{ url: string; project_id: string; project_name: string }>> {
+    const res = await fetch(`${apiBase()}/el/resource-projects`, { headers: authHeaders() })
+    if (!res.ok) return []
+    return res.json()
+  },
+
+  async listCommits(id: string, branch?: string, limit?: number): Promise<{ commits: Array<{ sha: string; sha_full: string; message: string; author_name: string; author_email: string; date: string }> }> {
+    const qs = new URLSearchParams()
+    if (branch) qs.set("branch", branch)
+    if (limit) qs.set("limit", String(limit))
+    const res = await fetch(`${apiBase()}/el/projects/${id}/commits?${qs}`, { headers: authHeaders() })
+    if (!res.ok) return { commits: [] }
     return res.json()
   },
 }

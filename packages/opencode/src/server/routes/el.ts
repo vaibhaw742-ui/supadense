@@ -12,11 +12,17 @@ import z from "zod"
 import { eq, and, inArray, desc } from "drizzle-orm"
 import { ulid } from "ulid"
 import { mkdirSync, existsSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import path from "node:path"
-import { lazy } from "../../util/lazy"
+import { lazy }                 from "../../util/lazy"
+import { initElProjectDirs }   from "../../experiential/project-structure"
+import { initialSync }         from "../../brain/watcher"
+import { startBrainWatcher }   from "../../brain/watcher"
 import { Database } from "../../storage/db"
-import { ElProjectTable, ElProjectResourceTable } from "../../experiential/schema.sql"
-import { LearningKbWorkspaceTable, LearningResourceTable, LearningConceptTable } from "../../learning/schema.sql"
+import { ElProjectTable, ElProjectResourceTable, ElProjectNodeTable } from "../../experiential/schema.sql"
+import { RepoIndexer } from "../../experiential/repo-indexer"
+import { getStoredGitHubToken } from "./el-github"
+import { LearningKbWorkspaceTable, LearningResourceTable } from "../../learning/schema.sql"
 import { SessionTable } from "../../session/session.sql"
 import { Resource } from "../../learning/resource"
 import { Retrieval } from "../../learning/retrieval"
@@ -69,22 +75,29 @@ function parseArxivId(url: string): string | null {
   return null
 }
 
+
 /**
- * Fetch GitHub repo metadata and update the resource row.
+ * Fetch GitHub repo metadata, file tree, and package.json.
+ * Creates concept nodes that form the engineering brain graph.
  * Runs fire-and-forget after resource creation.
  */
-async function analyzeGitHubResource(resourceId: string, url: string): Promise<void> {
+async function analyzeGitHubResource(resourceId: string, url: string, githubPat?: string): Promise<void> {
   const parsed = parseGitHubRepo(url)
   if (!parsed) return
 
+  const ghHeaders: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    ...(githubPat ? { Authorization: `Bearer ${githubPat}` } : {}),
+  }
+
   try {
-    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
-      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-    })
+    // 1. Basic repo metadata
+    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, { headers: ghHeaders })
     if (!res.ok) {
       Database.use((db) =>
         db.update(LearningResourceTable)
-          .set({ status: "failed", error: `GitHub API ${res.status}`, time_updated: Date.now() })
+          .set({ status: "failed", error: `GitHub API ${res.status}${res.status === 403 ? " — add a GitHub PAT to avoid rate limits" : ""}`, time_updated: Date.now() })
           .where(eq(LearningResourceTable.id, resourceId))
           .run(),
       )
@@ -92,25 +105,45 @@ async function analyzeGitHubResource(resourceId: string, url: string): Promise<v
     }
 
     const data = await res.json() as Record<string, any>
+    const branch: string = data.default_branch ?? "main"
+    const language: string = data.language ?? ""
+    const topics: string[] = data.topics ?? []
 
-    // Fetch README for a richer summary
+    // 2. README (raw text, first 4000 chars)
     let readme = ""
     try {
       const readmeRes = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/readme`, {
-        headers: { Accept: "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" },
+        headers: { ...ghHeaders, Accept: "application/vnd.github.raw+json" },
       })
-      if (readmeRes.ok) readme = (await readmeRes.text()).slice(0, 3000)
+      if (readmeRes.ok) readme = (await readmeRes.text()).slice(0, 4000)
     } catch { /* readme optional */ }
 
+    // 3. File tree (recursive) — capped at 10 000 entries by GitHub
+    let filePaths: string[] = []
+    try {
+      const treeRes = await fetch(
+        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/git/trees/${branch}?recursive=1`,
+        { headers: ghHeaders },
+      )
+      if (treeRes.ok) {
+        const treeData = await treeRes.json() as { tree?: Array<{ type: string; path: string }> }
+        filePaths = (treeData.tree ?? [])
+          .filter((f) => f.type === "blob")
+          .map((f) => f.path)
+      }
+    } catch { /* tree optional */ }
+
+    // 4. Update resource row with full metadata
     const metadata = {
       type: "github",
       full_name: data.full_name,
       description: data.description ?? "",
       stars: data.stargazers_count ?? 0,
-      language: data.language ?? "",
-      topics: data.topics ?? [],
-      default_branch: data.default_branch ?? "main",
-      readme_preview: readme,
+      language,
+      topics,
+      default_branch: branch,
+      readme_preview: readme.slice(0, 2000),
+      file_count: filePaths.length,
     }
 
     Database.use((db) =>
@@ -246,7 +279,7 @@ function ensureVirtualWorkspace(projectId: string): string {
  * Add a resource to a project: creates learning_resources row + join row,
  * kicks off background analysis.
  */
-function addResourceToProject(projectId: string, url: string, role: "primary" | "supplementary" = "primary") {
+function addResourceToProject(projectId: string, url: string, role: "primary" | "supplementary" = "primary", githubPat?: string) {
   const workspaceId = ensureVirtualWorkspace(projectId)
   const { modality } = classifyUrl(url)
   const resourceType = detectResourceType(url)
@@ -280,7 +313,7 @@ function addResourceToProject(projectId: string, url: string, role: "primary" | 
 
   // Fire-and-forget analysis (GitHub/arxiv will call refreshClaudeMd when done)
   if (resourceType === "github") {
-    void analyzeGitHubResource(resource.id, url)
+    void analyzeGitHubResource(resource.id, url, githubPat)
   } else if (resourceType === "arxiv") {
     void analyzeArxivResource(resource.id, url)
   } else {
@@ -302,23 +335,10 @@ function addResourceToProject(projectId: string, url: string, role: "primary" | 
 
 // ─── Graph Builder ────────────────────────────────────────────────────────────
 
-function buildProjectGraph(projectId: string, projectName: string) {
-  type NodeType = "project" | "resource" | "concept" | "category"
-  const nodes: Array<{ id: string; type: NodeType; label: string; url?: string; resource_id?: string; status?: string }> = []
+function buildProjectGraph(projectId: string, _projectName: string) {
+  const nodes: Array<{ id: string; type: string; label: string; url?: string; resource_id?: string; status?: string }> = []
   const edges: Array<{ source: string; target: string }> = []
-  const seenEdges = new Set<string>()
 
-  const addEdge = (source: string, target: string) => {
-    const key = `${source}→${target}`
-    if (seenEdges.has(key)) return
-    seenEdges.add(key)
-    edges.push({ source, target })
-  }
-
-  // Project node (root)
-  nodes.push({ id: `proj_${projectId}`, type: "project", label: projectName })
-
-  // Resource nodes
   const joinRows = Database.use((db) =>
     db.select().from(ElProjectResourceTable)
       .where(eq(ElProjectResourceTable.project_id, projectId))
@@ -336,32 +356,22 @@ function buildProjectGraph(projectId: string, projectName: string) {
 
   for (const res of resources) {
     let label = "Source"
-    if (res.title) {
+    if (res.url) {
+      try {
+        const u = new URL(res.url)
+        if (u.hostname.includes("github.com")) {
+          const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/")
+          label = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : u.pathname.replace(/^\//, "") || "github"
+        } else if (u.hostname.includes("arxiv.org")) {
+          label = res.title ? res.title.split(" ").slice(0, 5).join(" ") : `arxiv${u.pathname}`
+        } else {
+          label = res.title ? res.title.split(" ").slice(0, 4).join(" ") : u.hostname.replace(/^www\./, "")
+        }
+      } catch { label = res.title ? res.title.split(" ").slice(0, 4).join(" ") : "Source" }
+    } else if (res.title) {
       label = res.title.split(" ").slice(0, 4).join(" ")
-    } else if (res.url) {
-      try { label = new URL(res.url).hostname.replace(/^www\./, "") } catch { /* ignore */ }
     }
     nodes.push({ id: `res_${res.id}`, type: "resource", label, url: res.url ?? undefined, resource_id: res.id, status: res.status })
-    addEdge(`proj_${projectId}`, `res_${res.id}`)
-  }
-
-  // Concept nodes — via virtual workspace
-  const virtualWsId = Database.use((db) =>
-    db.select({ id: LearningKbWorkspaceTable.id }).from(LearningKbWorkspaceTable)
-      .where(eq(LearningKbWorkspaceTable.project_id, `el-${projectId}`))
-      .get(),
-  )?.id
-
-  if (virtualWsId) {
-    const concepts = Database.use((db) =>
-      db.select().from(LearningConceptTable)
-        .where(eq(LearningConceptTable.workspace_id, virtualWsId))
-        .all(),
-    )
-    for (const concept of concepts) {
-      nodes.push({ id: `concept_${concept.id}`, type: "concept", label: concept.name })
-      addEdge(`proj_${projectId}`, `concept_${concept.id}`)
-    }
   }
 
   return { nodes, edges }
@@ -483,6 +493,11 @@ const ProjectOut = z.object({
   context_json: z.record(z.string(), z.string()).nullable(),
   time_created: z.number(),
   resource_count: z.number().optional(),
+  clone_status: z.string().optional(),
+  clone_error: z.string().nullable().optional(),
+  supadense_init: z.string().optional(),
+  repo_branch: z.string().nullable().optional(),
+  repo_local_path: z.string().nullable().optional(),
 })
 
 const ResourceOut = z.object({
@@ -517,6 +532,7 @@ export const ELRoutes = lazy(() =>
         const projects = Database.use((db) =>
           db.select().from(ElProjectTable)
             .where(eq(ElProjectTable.user_id, userId))
+            .orderBy(desc(ElProjectTable.time_created))
             .all(),
         )
 
@@ -545,14 +561,20 @@ export const ELRoutes = lazy(() =>
         name: z.string().min(1),
         github_url: z.string().url().optional(),
         arxiv_url: z.string().optional(),
+        github_pat: z.string().optional(),
       })),
       (c) => {
         const userId = getUserId(c)
         if (!userId) return c.json({ error: "Not authenticated" }, 401)
 
-        const { name, github_url, arxiv_url } = c.req.valid("json")
+        const { name, github_url, arxiv_url, github_pat } = c.req.valid("json")
         const now = Date.now()
         const projectId = ulid()
+
+        // Store github_url and PAT in context_json so the frontend can display them
+        const context_json: Record<string, string> = {}
+        if (github_url) context_json.github_url = github_url
+        if (github_pat) context_json.github_pat = github_pat
 
         Database.use((db) =>
           db.insert(ElProjectTable).values({
@@ -560,21 +582,27 @@ export const ELRoutes = lazy(() =>
             user_id: userId,
             name,
             status: "onboarding",
-            context_json: {},
+            context_json,
             time_created: now,
             time_updated: now,
           }).run(),
         )
 
         // Add initial resources if provided
-        if (github_url) addResourceToProject(projectId, github_url, "primary")
+        if (github_url) addResourceToProject(projectId, github_url, "primary", github_pat)
         if (arxiv_url) addResourceToProject(projectId, arxiv_url, "primary")
+
+        // Initialise brain/ + sources/ dirs for this project (async, non-blocking)
+        const paths = initElProjectDirs(userId, projectId)
+        initialSync(paths.brain, projectId)
+          .then(() => startBrainWatcher(paths.brain, projectId))
+          .catch(() => null)
 
         const project = Database.use((db) =>
           db.select().from(ElProjectTable).where(eq(ElProjectTable.id, projectId)).get(),
         )!
 
-        return c.json(project)
+        return c.json({ ...project, brain_dir: paths.brain, sources_dir: paths.sources })
       },
     )
 
@@ -634,6 +662,89 @@ export const ELRoutes = lazy(() =>
         return c.json({ project, resources })
       },
     )
+
+    // ── Resource → project mapping (for display in sources list) ─────────────
+    // EL project resources live in virtual workspaces with different IDs from KB
+    // resources, so we join through LearningResourceTable to match by URL.
+    .get(
+      "/resource-projects",
+      describeRoute({
+        summary: "Get project assignments for all resources keyed by URL",
+        operationId: "el.resource-projects",
+        responses: { 200: { description: "Array of { url, project_id, project_name }" } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json([])
+
+        const projects = Database.use((db) =>
+          db.select({ id: ElProjectTable.id, name: ElProjectTable.name })
+            .from(ElProjectTable)
+            .where(eq(ElProjectTable.user_id, userId))
+            .all(),
+        )
+        if (projects.length === 0) return c.json([])
+
+        const projectIds = projects.map((p) => p.id)
+        const joins = Database.use((db) =>
+          db.select({ resource_id: ElProjectResourceTable.resource_id, project_id: ElProjectResourceTable.project_id })
+            .from(ElProjectResourceTable)
+            .where(inArray(ElProjectResourceTable.project_id, projectIds))
+            .all(),
+        )
+        if (joins.length === 0) return c.json([])
+
+        // Resolve each EL resource_id → URL via LearningResourceTable
+        const resourceIds = [...new Set(joins.map((j) => j.resource_id))]
+        const resourceRows = Database.use((db) =>
+          db.select({ id: LearningResourceTable.id, url: LearningResourceTable.url })
+            .from(LearningResourceTable)
+            .where(inArray(LearningResourceTable.id, resourceIds))
+            .all(),
+        )
+        const urlById = new Map(resourceRows.filter((r) => r.url).map((r) => [r.id, r.url!]))
+
+        const projectMap = new Map(projects.map((p) => [p.id, p.name]))
+        const result: Array<{ url: string; project_id: string; project_name: string }> = []
+        for (const j of joins) {
+          const url = urlById.get(j.resource_id)
+          if (!url) continue
+          result.push({ url, project_id: j.project_id, project_name: projectMap.get(j.project_id) ?? "" })
+        }
+
+        return c.json(result)
+      },
+    )
+
+    // ── Delete project ────────────────────────────────────────────────────────
+    .delete(
+      "/projects/:id",
+      describeRoute({
+        summary: "Delete EL project",
+        operationId: "el.projects.delete",
+        responses: { 200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        Database.use((db) => {
+          db.delete(ElProjectNodeTable).where(eq(ElProjectNodeTable.project_id, project.id)).run()
+          db.delete(ElProjectResourceTable).where(eq(ElProjectResourceTable.project_id, project.id)).run()
+          db.delete(ElProjectTable).where(eq(ElProjectTable.id, project.id)).run()
+        })
+
+        return c.json({ ok: true })
+      },
+    )
+
 
     // ── Update project context (onboarding Q&A) ────────────────────────────────
     .patch(
@@ -785,13 +896,13 @@ export const ELRoutes = lazy(() =>
       },
     )
 
-    // ── Memorize (from /memorize command in session) ───────────────────────────
+    // ── Add resource (from /add-resource command in session) ──────────────────
     .post(
-      "/projects/:id/memorize",
+      "/projects/:id/add-resource",
       describeRoute({
-        summary: "Memorize resource into project",
-        operationId: "el.projects.memorize",
-        responses: { 200: { description: "Memorized resource", content: { "application/json": { schema: resolver(ResourceOut) } } } },
+        summary: "Add resource to project",
+        operationId: "el.projects.addResource",
+        responses: { 200: { description: "Resource added", content: { "application/json": { schema: resolver(ResourceOut) } } } },
       }),
       validator("json", z.object({ url: z.string().min(1) })),
       (c) => {
@@ -913,6 +1024,501 @@ export const ELRoutes = lazy(() =>
         // Sort by relevance and cap
         allResults.sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
         return c.json({ locations: allResults.slice(0, 15), concepts: [], sources: [], uncategorized_count: 0 })
+      },
+    )
+
+    // ── Clone repo ─────────────────────────────────────────────────────────────
+    .post(
+      "/projects/:id/clone",
+      describeRoute({
+        summary: "Clone GitHub repo for a project",
+        operationId: "el.projects.clone",
+        responses: { 200: { description: "Clone started", content: { "application/json": { schema: resolver(z.object({ status: z.string() })) } } } },
+      }),
+      validator("json", z.object({ branch: z.string().optional() })),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const githubUrl = project.context_json?.github_url
+        if (!githubUrl) return c.json({ error: "No GitHub URL configured for this project" }, 400)
+
+        // PAT from project context takes priority; fall back to user's stored GitHub OAuth token
+        const pat = project.context_json?.github_pat ?? getStoredGitHubToken(userId) ?? undefined
+        const localPath = path.join("/workspaces", userId, "el-projects", project.id, "repo")
+        const { branch: bodyBranch } = c.req.valid("json")
+
+        // Set status to cloning immediately
+        Database.use((db) =>
+          db.update(ElProjectTable)
+            .set({ clone_status: "cloning", clone_error: null, repo_local_path: localPath, time_updated: Date.now() })
+            .where(eq(ElProjectTable.id, project.id))
+            .run(),
+        )
+
+        // Fire-and-forget async pipeline
+        void (async () => {
+          try {
+            // Resolve branch
+            let branch = bodyBranch ?? project.repo_branch ?? "main"
+            if (!bodyBranch && !project.repo_branch) {
+              branch = RepoIndexer.getDefaultBranch(githubUrl, pat)
+            }
+
+            // Update branch
+            Database.use((db) =>
+              db.update(ElProjectTable)
+                .set({ repo_branch: branch, time_updated: Date.now() })
+                .where(eq(ElProjectTable.id, project.id))
+                .run(),
+            )
+
+            // Clone
+            const cloneResult = RepoIndexer.cloneRepo(githubUrl, localPath, branch, pat)
+            if (!cloneResult.ok) {
+              Database.use((db) =>
+                db.update(ElProjectTable)
+                  .set({ clone_status: "failed", clone_error: cloneResult.error ?? "Clone failed", time_updated: Date.now() })
+                  .where(eq(ElProjectTable.id, project.id))
+                  .run(),
+              )
+              return
+            }
+
+            // Clone done — no file indexing, just mark active
+            Database.use((db) =>
+              db.update(ElProjectTable)
+                .set({ clone_status: "done", cloned_at: Date.now(), indexed_at: Date.now(), status: "active", time_updated: Date.now() })
+                .where(eq(ElProjectTable.id, project.id))
+                .run(),
+            )
+          } catch (err) {
+            Database.use((db) =>
+              db.update(ElProjectTable)
+                .set({ clone_status: "failed", clone_error: String(err), time_updated: Date.now() })
+                .where(eq(ElProjectTable.id, project.id))
+                .run(),
+            )
+          }
+        })()
+
+        return c.json({ status: "cloning" })
+      },
+    )
+
+    // ── Clone status ───────────────────────────────────────────────────────────
+    .get(
+      "/projects/:id/clone-status",
+      describeRoute({
+        summary: "Get clone/index status",
+        operationId: "el.projects.cloneStatus",
+        responses: { 200: { description: "Status", content: { "application/json": { schema: resolver(z.any()) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const nodeCount = Database.use((db) =>
+          db.select().from(ElProjectNodeTable)
+            .where(eq(ElProjectNodeTable.project_id, project.id))
+            .all(),
+        ).length
+
+        const totalFiles = nodeCount > 0
+          ? Database.use((db) =>
+              db.select({ total_file_count: ElProjectNodeTable.total_file_count })
+                .from(ElProjectNodeTable)
+                .where(and(eq(ElProjectNodeTable.project_id, project.id), eq(ElProjectNodeTable.depth, 0)))
+                .get(),
+            )?.total_file_count ?? 0
+          : 0
+
+        return c.json({
+          clone_status: project.clone_status,
+          clone_error: project.clone_error,
+          supadense_init: project.supadense_init,
+          repo_branch: project.repo_branch,
+          node_count: nodeCount,
+          total_file_count: totalFiles,
+        })
+      },
+    )
+
+    // ── Branches ──────────────────────────────────────────────────────────────
+    .get(
+      "/projects/:id/branches",
+      describeRoute({
+        summary: "List remote branches for a cloned repo",
+        operationId: "el.projects.branches",
+        responses: { 200: { description: "Branch list", content: { "application/json": { schema: resolver(z.object({ branches: z.array(z.string()), commit_count: z.number() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ branches: [], commit_count: 0 })
+
+        // List remote branches
+        const branchResult = spawnSync("git", ["-C", project.repo_local_path, "branch", "-r"], {
+          encoding: "utf8", timeout: 10_000,
+        })
+        const branches = (branchResult.stdout ?? "")
+          .split("\n")
+          .map((l: string) => l.trim().replace(/^origin\//, "").replace(/^HEAD ->.*/, "").trim())
+          .filter((l: string) => l.length > 0 && !l.startsWith("HEAD"))
+
+        // Commit count on current branch
+        const countResult = spawnSync("git", ["-C", project.repo_local_path, "rev-list", "--count", "HEAD"], {
+          encoding: "utf8", timeout: 10_000,
+        })
+        const commit_count = parseInt((countResult.stdout ?? "").trim(), 10) || 0
+
+        return c.json({ branches: [...new Set(branches)], commit_count })
+      },
+    )
+
+    // ── Commits ───────────────────────────────────────────────────────────────
+    .get(
+      "/projects/:id/commits",
+      describeRoute({
+        summary: "List commits for a branch",
+        operationId: "el.projects.commits",
+        responses: { 200: { description: "Commit list" } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ commits: [] })
+
+        const branch = (c.req.query("branch") || "HEAD").trim()
+        const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200)
+
+        // Resolve ref: try origin/<branch> first, fall back to local branch, then HEAD
+        const refCandidates = branch === "HEAD"
+          ? ["HEAD"]
+          : [`origin/${branch}`, branch, "HEAD"]
+
+        let ref = "HEAD"
+        for (const candidate of refCandidates) {
+          const check = spawnSync("git", ["-C", project.repo_local_path, "rev-parse", "--verify", candidate], {
+            encoding: "utf8", timeout: 5_000,
+          })
+          if (check.status === 0) { ref = candidate; break }
+        }
+
+        const logResult = spawnSync(
+          "git",
+          ["-C", project.repo_local_path, "log", ref, `--max-count=${limit}`, "--format=%H\x1f%s\x1f%an\x1f%ae\x1f%ai"],
+          { encoding: "utf8", timeout: 15_000 },
+        )
+
+        const commits = (logResult.stdout ?? "")
+          .split("\n")
+          .filter((l: string) => l.trim().length > 0)
+          .map((line: string) => {
+            const [sha, message, author_name, author_email, date] = line.split("\x1f")
+            return {
+              sha: (sha ?? "").slice(0, 8),
+              sha_full: sha ?? "",
+              message: message ?? "",
+              author_name: author_name ?? "",
+              author_email: author_email ?? "",
+              date: date ?? "",
+            }
+          })
+
+        return c.json({ commits })
+      },
+    )
+
+    // ── Pull (re-sync) ─────────────────────────────────────────────────────────
+    .post(
+      "/projects/:id/pull",
+      describeRoute({
+        summary: "Pull latest + re-index",
+        operationId: "el.projects.pull",
+        responses: { 200: { description: "Pull started", content: { "application/json": { schema: resolver(z.object({ status: z.string() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ error: "Repo not cloned yet" }, 400)
+
+        const pat = project.context_json?.github_pat ?? getStoredGitHubToken(userId) ?? undefined
+
+        Database.use((db) =>
+          db.update(ElProjectTable)
+            .set({ clone_status: "cloning", time_updated: Date.now() })
+            .where(eq(ElProjectTable.id, project.id))
+            .run(),
+        )
+
+        void (async () => {
+          try {
+            const pullResult = RepoIndexer.pullRepo(project.repo_local_path!, pat)
+            if (!pullResult.ok) {
+              Database.use((db) =>
+                db.update(ElProjectTable)
+                  .set({ clone_status: "failed", clone_error: pullResult.error, time_updated: Date.now() })
+                  .where(eq(ElProjectTable.id, project.id))
+                  .run(),
+              )
+              return
+            }
+
+            // Pull done — no re-indexing
+            Database.use((db) =>
+              db.update(ElProjectTable)
+                .set({ clone_status: "done", indexed_at: Date.now(), time_updated: Date.now() })
+                .where(eq(ElProjectTable.id, project.id))
+                .run(),
+            )
+          } catch (err) {
+            Database.use((db) =>
+              db.update(ElProjectTable)
+                .set({ clone_status: "failed", clone_error: String(err), time_updated: Date.now() })
+                .where(eq(ElProjectTable.id, project.id))
+                .run(),
+            )
+          }
+        })()
+
+        return c.json({ status: "pulling" })
+      },
+    )
+
+    // ── Directory nodes ────────────────────────────────────────────────────────
+    .get(
+      "/projects/:id/nodes",
+      describeRoute({
+        summary: "Get indexed directory nodes",
+        operationId: "el.projects.nodes",
+        responses: { 200: { description: "Node list", content: { "application/json": { schema: resolver(z.array(z.any())) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const maxDepth = Number(c.req.query("max_depth") ?? "3")
+        const nodes = Database.use((db) =>
+          db.select().from(ElProjectNodeTable)
+            .where(and(eq(ElProjectNodeTable.project_id, project.id)))
+            .all(),
+        ).filter((n) => n.depth <= maxDepth)
+
+        return c.json(nodes)
+      },
+    )
+
+    // ── Files in a specific node ───────────────────────────────────────────────
+    .get(
+      "/projects/:id/nodes/:encodedPath",
+      describeRoute({
+        summary: "Get files for a directory node",
+        operationId: "el.projects.nodeFiles",
+        responses: { 200: { description: "Node detail", content: { "application/json": { schema: resolver(z.any()) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const nodePath = decodeURIComponent(c.req.param("encodedPath"))
+        const node = Database.use((db) =>
+          db.select().from(ElProjectNodeTable)
+            .where(and(eq(ElProjectNodeTable.project_id, project.id), eq(ElProjectNodeTable.path, nodePath)))
+            .get(),
+        )
+        if (!node) return c.json({ error: "Node not found" }, 404)
+
+        // Also return immediate child directories
+        const children = Database.use((db) =>
+          db.select().from(ElProjectNodeTable)
+            .where(and(eq(ElProjectNodeTable.project_id, project.id), eq(ElProjectNodeTable.parent_path, nodePath)))
+            .all(),
+        )
+
+        return c.json({ ...node, children })
+      },
+    )
+
+    // ── Repo source tree (actual filesystem) ──────────────────────────────────
+    .get(
+      "/projects/:id/tree",
+      describeRoute({
+        summary: "Get repo source file tree",
+        operationId: "el.projects.tree",
+        responses: { 200: { description: "Tree", content: { "application/json": { schema: resolver(z.any()) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ entries: [] })
+
+        const { join, relative } = require("node:path") as typeof import("node:path")
+        const { readdirSync, statSync, existsSync } = require("node:fs") as typeof import("node:fs")
+
+        const IGNORE = new Set([".git", "node_modules", "__pycache__", ".DS_Store", "dist", "build", ".supadense"])
+        const MAX_DEPTH = 3
+        const MAX_ENTRIES = 300
+
+        type TreeEntry = { name: string; path: string; type: "file" | "dir"; children?: TreeEntry[] }
+
+        function walk(dir: string, depth: number): TreeEntry[] {
+          if (depth > MAX_DEPTH) return []
+          let entries: TreeEntry[] = []
+          let items: string[]
+          try { items = readdirSync(dir) } catch { return [] }
+          for (const name of items.sort()) {
+            if (IGNORE.has(name) || name.startsWith(".")) continue
+            const full = join(dir, name)
+            let stat
+            try { stat = statSync(full) } catch { continue }
+            const relPath = relative(project.repo_local_path!, full)
+            if (stat.isDirectory()) {
+              entries.push({ name, path: relPath, type: "dir", children: walk(full, depth + 1) })
+            } else {
+              entries.push({ name, path: relPath, type: "file" })
+            }
+            if (entries.length >= MAX_ENTRIES) break
+          }
+          return entries
+        }
+
+        return c.json({ entries: walk(project.repo_local_path, 0) })
+      },
+    )
+
+    // ── Read a file from the cloned repo ──────────────────────────────────────
+    .get(
+      "/projects/:id/file-content",
+      describeRoute({
+        summary: "Read file content from cloned repo",
+        operationId: "el.projects.fileContent",
+        responses: { 200: { description: "File content", content: { "application/json": { schema: resolver(z.object({ content: z.string(), path: z.string() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ error: "Repo not cloned" }, 400)
+
+        const filePath = c.req.query("path")
+        if (!filePath) return c.json({ error: "Missing path" }, 400)
+
+        // Security: ensure path stays within repo_local_path
+        const { join, resolve } = require("node:path") as typeof import("node:path")
+        const { readFileSync, existsSync } = require("node:fs") as typeof import("node:fs")
+        const full = resolve(join(project.repo_local_path, filePath))
+        if (!full.startsWith(project.repo_local_path)) return c.json({ error: "Forbidden" }, 403)
+        if (!existsSync(full)) return c.json({ error: "File not found" }, 404)
+
+        try {
+          const content = readFileSync(full, "utf-8")
+          return c.json({ content, path: filePath })
+        } catch {
+          return c.json({ error: "Failed to read file" }, 500)
+        }
+      },
+    )
+
+    // ── Init supadense folder ──────────────────────────────────────────────────
+    .post(
+      "/projects/:id/init-supadense",
+      describeRoute({
+        summary: "Create supadense/ folder in cloned repo",
+        operationId: "el.projects.initSupadense",
+        responses: { 200: { description: "Init result", content: { "application/json": { schema: resolver(z.object({ status: z.string(), pushed: z.boolean(), message: z.string().optional() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+        if (!project.repo_local_path) return c.json({ error: "Repo not cloned yet" }, 400)
+
+        const pat = project.context_json?.github_pat
+        const branch = project.repo_branch ?? "main"
+
+        const result = RepoIndexer.initSupadenseFolder(project.repo_local_path, branch, pat)
+
+        const supadenseInit = result.pushed ? "pushed" : result.ok ? "local" : "none"
+        Database.use((db) =>
+          db.update(ElProjectTable)
+            .set({ supadense_init: supadenseInit, time_updated: Date.now() })
+            .where(eq(ElProjectTable.id, project.id))
+            .run(),
+        )
+
+        return c.json({
+          status: result.ok ? "ok" : "error",
+          pushed: result.pushed,
+          message: result.error,
+        })
       },
     )
 

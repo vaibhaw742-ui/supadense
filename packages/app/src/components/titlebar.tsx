@@ -1,45 +1,53 @@
-import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js"
+/**
+ * Supadense Topbar — matches app.html .topbar exactly
+ * breadcrumbs · view-mode-group · Capture · ask-glyph toggle
+ */
+import { createEffect, createSignal, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useTheme } from "@opencode-ai/ui/theme/context"
-
-import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { activeSidebarView, setActiveSidebarView } from "@/context/sidebar-view"
+import {
+  activeSidebarView,
+  setActiveSidebarView,
+  activeGraphProjectId,
+  activeGraphProjectName,
+  setActiveGraphProjectId,
+  setActiveGraphProjectName,
+  activeSourceName,
+  setActiveSourceName,
+  sessionViewMode,
+  setSessionViewMode,
+  projectViewMode,
+  setProjectViewMode,
+} from "@/context/sidebar-view"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 
-type TauriDesktopWindow = {
-  startDragging?: () => Promise<void>
-  toggleMaximize?: () => Promise<void>
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const C = {
+  bg:        "#ffffff",   /* sd-ground-100: topbar bg */
+  ground000: "#fafafa",   /* sd-ground-150: hover */
+  border:    "#e5e5e5",   /* sd-ground-300: hairlines */
+  borderMid: "#d4d4d4",   /* sd-ground-400 */
+  ink100:    "#0a0a0a",
+  ink300:    "#525252",
+  ink400:    "#737373",
+  ink500:    "#a3a3a3",
+  amber:     "#d68a2e",
+  amberBg:   "rgba(214,138,46,0.08)",
+  amberBorder:"rgba(214,138,46,0.35)",
+  fontMono:  '"Geist Mono", ui-monospace, monospace',
+  fontSans:  '"Geist", ui-sans-serif, system-ui, sans-serif',
 }
 
-type TauriThemeWindow = {
-  setTheme?: (theme?: "light" | "dark" | null) => Promise<void>
-}
-
-type TauriApi = {
-  window?: {
-    getCurrentWindow?: () => TauriDesktopWindow
-  }
-  webviewWindow?: {
-    getCurrentWebviewWindow?: () => TauriThemeWindow
-  }
-}
-
-const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
-const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
-
-export function Titlebar(props: { onCapture?: () => void }) {
-  const layout = useLayout()
-  const platform = usePlatform()
+export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () => void; sidebarCollapsed?: boolean }) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const command = useCommand()
   const language = useLanguage()
-  const theme = useTheme()
-  const navigate = useNavigate()
-  const location = useLocation()
 
   const [history, setHistory] = createStore({
     stack: [] as string[],
@@ -89,64 +97,26 @@ export function Titlebar(props: { onCapture?: () => void }) {
     },
   ])
 
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    const scheme = theme.colorScheme()
-    const value = scheme === "system" ? null : scheme
-    const win = currentThemeWindow()
-    if (!win?.setTheme) return
-    void win.setTheme(value).catch(() => undefined)
-  })
+  // ── Crumb derivation ──────────────────────────────────────────────────────
+  const isGraph    = () => activeSidebarView().view === "lib"
+  const isRead     = () => activeSidebarView().view === "read"
+  const hasProject = () => !!activeGraphProjectId()
+  const isGraphCtx = () => isGraph() || (isRead() && !!activeGraphProjectId())
+  const hasAnySource = () => isRead() && !!activeSourceName()
 
-  const isGraph = () => activeSidebarView().view === "lib"
-
-  const [hovWs, setHovWs] = createSignal(false)
-  const [hovGraph, setHovGraph] = createSignal(false)
-  const [hovCapture, setHovCapture] = createSignal(false)
-  const [hovSidebar, setHovSidebar] = createSignal(false)
-  const [hovPlus, setHovPlus] = createSignal(false)
-  const [hovChat, setHovChat] = createSignal(false)
-
-  /* Light theme tokens (sd v2: white canvas, dark ink) */
-  const T = {
-    bg: "#ffffff",
-    border: "#e5e5e5",
-    borderHov: "#d4d4d4",
-    text: "#0a0a0a",
-    textMuted: "#737373",
-    textFaint: "#a3a3a3",
-    amber: "#d68a2e",
-    surfaceHov: "#fafafa",
+  const crumbSection = () => {
+    if (isGraphCtx() && hasProject()) return activeGraphProjectName() ?? "Graph"
+    if (isGraphCtx()) return "Graph"
+    if (isRead() && hasAnySource()) return activeSourceName() ?? "Sources"
+    if (isRead()) return "Sources"
+    return activeSidebarView().label || "Workspace"
   }
 
-  const tabStyle = (active: boolean, hov: boolean) => ({
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "4px 2px",
-    "font-family": "'Geist Mono', 'JetBrains Mono', monospace",
-    "font-size": "11px",
-    "letter-spacing": "0.08em",
-    "text-transform": "uppercase" as const,
-    color: active ? T.amber : hov ? T.textMuted : T.textFaint,
-    "border-bottom": active ? `1px solid ${T.amber}` : "1px solid transparent",
-    transition: "color 120ms, border-color 120ms",
-  })
+  // show view-mode-group only in session routes
+  const isSession = () => /\/session(?:\/|$)/.test(location.pathname)
 
-  const iconBtnStyle = (hov: boolean) => ({
-    display: "flex",
-    "align-items": "center",
-    "justify-content": "center",
-    width: "30px",
-    height: "30px",
-    background: hov ? T.surfaceHov : "transparent",
-    border: `1px solid ${hov ? T.border : "transparent"}`,
-    "border-radius": "4px",
-    cursor: "pointer",
-    color: hov ? T.textMuted : T.textFaint,
-    transition: "background 120ms, border-color 120ms, color 120ms",
-    "flex-shrink": "0",
-  })
+  // ── Hover states ─────────────────────────────────────────────────────────
+  const [hovCapture, setHovCapture] = createSignal(false)
 
   return (
     <header
@@ -155,96 +125,170 @@ export function Titlebar(props: { onCapture?: () => void }) {
         "align-items": "center",
         height: "52px",
         "flex-shrink": "0",
-        background: T.bg,
-
-        "padding-right": "16px",
+        background: C.bg,
+        padding: "0 16px",
+        gap: "8px",
       }}
     >
-      {/* ── LEFT SPACER ── matches sidebar width so tabs start right after sidebar */}
-      <div style={{
-        display: "flex",
-        "align-items": "center",
-        "justify-content": "flex-end",
-        "flex-shrink": "0",
-        width: layout.sidebar.opened() ? `${layout.sidebar.width() + 8}px` : "auto",
-        padding: layout.sidebar.opened() ? "0" : "0 16px",
-        "box-sizing": "border-box",
-      }}>
-        <Show when={!layout.sidebar.opened()}>
-          <button
-            type="button"
-            title="Open sidebar"
-            style={iconBtnStyle(hovSidebar())}
-            onMouseEnter={() => setHovSidebar(true)}
-            onMouseLeave={() => setHovSidebar(false)}
-            onClick={() => layout.sidebar.open()}
+      {/* ── Topbar toggle — shown when sidebar is collapsed ── */}
+      <Show when={props.sidebarCollapsed}>
+        <button
+          type="button"
+          title="Open sidebar"
+          aria-label="Open sidebar"
+          onClick={props.onToggleSidebar}
+          style={iconBtn(false)}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <line x1="9" y1="4" x2="9" y2="20"/>
+          </svg>
+        </button>
+      </Show>
+
+      {/* ── Breadcrumbs ── */}
+      <div
+        style={{
+          display: "flex",
+          "align-items": "center",
+          "font-family": C.fontMono,
+          "font-size": "11px",
+          "letter-spacing": "0.08em",
+          "text-transform": "uppercase",
+          color: C.ink500,
+          gap: "0",
+        }}
+      >
+        <span
+          style={{ cursor: "pointer" }}
+          onClick={() => setActiveSidebarView({ section: "workspace", view: "graph", label: "Graph" })}
+        >
+          workspace
+        </span>
+        <span style={{ padding: "0 10px", color: C.borderMid, "user-select": "none" }}>·</span>
+        <Show when={activeGraphProjectName()} fallback={<span style={{ color: C.ink100 }}>Graph</span>}>
+          <span
+            style={{ cursor: "pointer", color: C.ink500 }}
+            onClick={() => { setActiveGraphProjectId(null); setActiveGraphProjectName(null); navigate("/projects") }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="16" rx="2"/>
-              <line x1="9" y1="4" x2="9" y2="20"/>
-            </svg>
-          </button>
+            Graph
+          </span>
+          <span style={{ padding: "0 10px", color: C.borderMid, "user-select": "none" }}>·</span>
+          <span style={{ color: C.ink100 }}>{activeGraphProjectName()}</span>
         </Show>
       </div>
 
-      {/* ── TABS ── appear just right of the sidebar */}
-      <div style={{ display: "flex", "align-items": "center", gap: "0", padding: "0 16px" }}>
-          <button
-            type="button"
-            style={tabStyle(!isGraph(), hovWs())}
-            onMouseEnter={() => setHovWs(true)}
-            onMouseLeave={() => setHovWs(false)}
-            onClick={() => {
-              if (isGraph()) setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" })
+      {/* ── Right actions ── */}
+      <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-left": "auto" }}>
+
+        {/* View-mode-group — only in session views */}
+        <Show when={isSession()}>
+          <div
+            style={{
+              display: "inline-flex",
+              "align-items": "center",
+              border: `1px solid ${C.borderMid}`,
+              "border-radius": "6px",
+              overflow: "hidden",
+              background: C.bg,
             }}
           >
-            Workspace
-          </button>
-          <span style={{
-            "font-family": "'Geist Mono', 'JetBrains Mono', monospace",
-            "font-size": "11px",
-            color: T.textFaint,
-            "padding": "0 10px",
-            "user-select": "none",
-          }}>·</span>
-          <button
-            type="button"
-            style={tabStyle(isGraph(), hovGraph())}
-            onMouseEnter={() => setHovGraph(true)}
-            onMouseLeave={() => setHovGraph(false)}
-            onClick={() => setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })}
-          >
-            Graph
-          </button>
-        </div>
+            {/* Brain */}
+            <VmgBtn
+              active={sessionViewMode() === "brain"}
+              title="Brain"
+              onClick={() => setSessionViewMode("brain")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 5a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V20h8v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/>
+                <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="15" y1="9" x2="15" y2="9.01"/>
+              </svg>
+            </VmgBtn>
 
-      {/* ── RIGHT ACTIONS ── pushed to far right */}
-      <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-left": "auto" }}>
+            {/* Sources/Files */}
+            <VmgBtn
+              active={sessionViewMode() === "sources"}
+              title="Sources"
+              onClick={() => setSessionViewMode("sources")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>
+              </svg>
+            </VmgBtn>
+
+            {/* Code — active by default */}
+            <VmgBtn
+              active={sessionViewMode() === "code"}
+              title="Code"
+              onClick={() => setSessionViewMode("code")}
+              label="Code"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+            </VmgBtn>
+
+            {/* Layers */}
+            <VmgBtn
+              active={sessionViewMode() === "layers"}
+              title="Layers"
+              onClick={() => setSessionViewMode("layers")}
+              last
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                <polyline points="2 17 12 22 22 17"/>
+                <polyline points="2 12 12 17 22 12"/>
+              </svg>
+            </VmgBtn>
+          </div>
+        </Show>
+
+        {/* Project action group — shown when viewing a project */}
+        <Show when={activeGraphProjectId()}>
+          <div style={{ display: "inline-flex", "align-items": "center", border: `1px solid ${C.borderMid}`, "border-radius": "6px", overflow: "hidden", background: C.bg }}>
+            <VmgBtn active={projectViewMode() === "graph"} title="Graph" onClick={() => setProjectViewMode("graph")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </VmgBtn>
+            <VmgBtn active={projectViewMode() === "brain"} title="Brain files (.supadense)" onClick={() => setProjectViewMode(projectViewMode() === "brain" ? "graph" : "brain")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </VmgBtn>
+            <VmgBtn active={projectViewMode() === "code"} title="Source code" onClick={() => setProjectViewMode(projectViewMode() === "code" ? "graph" : "code")} label="Code">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </VmgBtn>
+            <VmgBtn active={false} title="Layers" onClick={() => {}} last>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </VmgBtn>
+          </div>
+        </Show>
+
         {/* Capture button */}
         <button
           type="button"
-          title="Capture a resource"
+          title="Capture"
+          onMouseEnter={() => setHovCapture(true)}
+          onMouseLeave={() => setHovCapture(false)}
+          onClick={() => props.onCapture?.()}
           style={{
             display: "inline-flex",
             "align-items": "center",
             gap: "6px",
             padding: "6px 12px",
             "border-radius": "4px",
-            "font-family": "inherit",
+            "font-family": C.fontSans,
             "font-size": "12px",
             "font-weight": "500",
-            "letter-spacing": "-0.01em",
-            border: `1px solid ${hovCapture() ? T.borderHov : T.border}`,
-            background: hovCapture() ? T.surfaceHov : T.bg,
-            color: hovCapture() ? T.textMuted : T.textMuted,
+            border: `1px solid ${hovCapture() ? C.borderMid : C.border}`,
+            background: hovCapture() ? C.ground000 : C.bg,
+            color: C.ink300,
             cursor: "pointer",
             transition: "all 120ms",
           }}
-          onMouseEnter={() => setHovCapture(true)}
-          onMouseLeave={() => setHovCapture(false)}
-          onClick={() => props.onCapture?.()}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
@@ -252,41 +296,35 @@ export function Titlebar(props: { onCapture?: () => void }) {
           Capture
         </button>
 
-        {/* Chat toggle (sd-mark grid) */}
+        {/* Rail toggle — 3×3 ask glyph */}
         <button
           type="button"
-          title="Ask supadense"
-          style={{
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            width: "32px",
-            height: "32px",
-            background: chatOpen() ? "rgba(214,138,46,0.08)" : hovChat() ? T.surfaceHov : "transparent",
-            border: `1px solid ${chatOpen() ? "rgba(214,138,46,0.35)" : hovChat() ? T.border : "transparent"}`,
-            "border-radius": "4px",
-            cursor: "pointer",
-            transition: "background 120ms, border-color 120ms",
-            padding: "0",
-          }}
-          onMouseEnter={() => setHovChat(true)}
-          onMouseLeave={() => setHovChat(false)}
+          title="Toggle Ask panel"
+          aria-label="Toggle Ask panel"
           onClick={() => setChatOpen((v) => !v)}
+          style={{
+            ...iconBtn(chatOpen()),
+            background: chatOpen() ? C.amberBg : "transparent",
+            border: `1px solid ${chatOpen() ? C.amberBorder : C.border}`,
+            color: chatOpen() ? C.amber : C.ink300,
+          }}
         >
-          {/* 3×3 ask-glyph matching app.html .rail-toggle */}
-          <span style={{
-            display: "inline-grid",
-            "grid-template-columns": "repeat(3, 1fr)",
-            "grid-template-rows": "repeat(3, 1fr)",
-            gap: "2px",
-            width: "16px",
-            height: "16px",
-            "flex-shrink": "0",
-          }} aria-hidden="true">
+          {/* 3×3 glyph */}
+          <span
+            style={{
+              display: "inline-grid",
+              "grid-template-columns": "repeat(3, 1fr)",
+              "grid-template-rows": "repeat(3, 1fr)",
+              gap: "1.5px",
+              width: "14px",
+              height: "14px",
+            }}
+            aria-hidden="true"
+          >
             {([0,1,2,3,4,5,6,7,8] as const).map((i) => (
               <span style={{
                 display: "block",
-                background: i === 4 ? T.amber : chatOpen() ? T.amber : T.text,
+                background: i === 4 ? C.amber : chatOpen() ? C.amber : C.ink100,
                 "border-radius": "1px",
               }} />
             ))}
@@ -295,4 +333,64 @@ export function Titlebar(props: { onCapture?: () => void }) {
       </div>
     </header>
   )
+}
+
+// ── Vmg button helper ─────────────────────────────────────────────────────────
+function VmgBtn(props: {
+  active: boolean
+  title: string
+  onClick: () => void
+  label?: string
+  last?: boolean
+  children: any
+}) {
+  const [hov, setHov] = createSignal(false)
+  return (
+    <button
+      type="button"
+      title={props.title}
+      onClick={props.onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "inline-flex",
+        "align-items": "center",
+        gap: "5px",
+        padding: "5px 10px",
+        background: props.active ? "#fafafa" : hov() ? "#ffffff" : "none",
+        border: "none",
+        "border-right": props.last ? "none" : "1px solid #d4d4d4",
+        color: props.active ? "#0a0a0a" : hov() ? "#262626" : "#737373",
+        "font-family": '"Geist Mono", ui-monospace, monospace',
+        "font-size": "11px",
+        "letter-spacing": "0.04em",
+        cursor: "pointer",
+        transition: "background 120ms, color 120ms",
+        "flex-shrink": "0",
+      }}
+    >
+      {props.children}
+      <Show when={props.label}>
+        <span>{props.label}</span>
+      </Show>
+    </button>
+  )
+}
+
+function iconBtn(active: boolean): Record<string, string> {
+  return {
+    display: "inline-flex",
+    "align-items": "center",
+    "justify-content": "center",
+    width: "28px",
+    height: "28px",
+    border: `1px solid ${active ? "rgba(214,138,46,0.35)" : "#e5e5e5"}`,
+    "border-radius": "4px",
+    background: active ? "rgba(214,138,46,0.08)" : "transparent",
+    color: active ? "#d68a2e" : "#525252",
+    cursor: "pointer",
+    "flex-shrink": "0",
+    padding: "0",
+    transition: "background 120ms, border-color 120ms, color 120ms",
+  }
 }

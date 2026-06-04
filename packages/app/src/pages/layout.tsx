@@ -88,10 +88,11 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { SupadenseFAB, SupadenseMark } from "@/components/supadense-chat-panel"
-import { chatOpen } from "@/context/chat-overlay"
+import { SupadenseMark, SupadenseChatOverlay } from "@/components/supadense-chat-panel"
+import { SupadenseSidebar, SidebarCollapseToggle } from "@/components/supadense-sidebar"
+import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import { CaptureDialog } from "@/components/capture-dialog"
-import { activeSidebarView, setActiveSidebarView, setActiveClusterFilter } from "@/context/sidebar-view"
+import { activeSidebarView, setActiveSidebarView, setActiveSourceName } from "@/context/sidebar-view"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -132,6 +133,8 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+
+  const [supadenseSidebarCollapsed, setSupadenseSidebarCollapsed] = createSignal(false)
 
   const initialDirectory = decode64(params.dir)
   const route = createMemo(() => {
@@ -2110,27 +2113,6 @@ export default function Layout(props: ParentProps) {
     const homedir = createMemo(() => globalSync.data.path.home)
     const [sidebarCaptureOpen, setSidebarCaptureOpen] = createSignal(false)
 
-    const [sidebarClusters] = createResource(
-      () => {
-        const http = server.current?.http
-        if (!http) return null
-        const dir = params.dir ? (decode64(params.dir) ?? "") : ""
-        return { http, dir }
-      },
-      async ({ http, dir }) => {
-        const baseUrl = typeof http === "string" ? http : (http as { url: string }).url
-        const token = getAuthToken()
-        const headers: Record<string, string> = {
-          "x-opencode-directory": dir,
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        }
-        const res = await fetch(`${baseUrl}/wiki/clusters`, { headers })
-        if (!res.ok) return []
-        return res.json() as Promise<{ id: string; name: string; color: string; resource_count: number }[]>
-      },
-    )
-
     const [hoveredView, setHoveredView] = createSignal("")
     const a = (view: string) => activeSidebarView().view === view
     const h = (view: string) => hoveredView() === view
@@ -2160,10 +2142,10 @@ export default function Layout(props: ParentProps) {
       onCleanup(() => document.removeEventListener("mousedown", handler, true))
     })
 
-    // Light theme tokens (sd v2)
+    // Light theme tokens — warm parchment palette (sd v2)
     const C = {
       bg: "#f4f4f5",         // ground-000: sidebar bg
-      surface: "#ffffff",    // ground-050/100: card/button bg
+      surface: "#ffffff",    // ground-100: card/button bg
       raised: "#fafafa",     // ground-150: hover/active bg
       border: "#e5e5e5",     // ground-300: hairlines
       divider: "#d4d4d4",    // ground-400: muted dividers
@@ -2257,7 +2239,7 @@ export default function Layout(props: ParentProps) {
                 </button>
 
                 {/* Sources */}
-                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("read") || h("read") ? C.text : C.textSub, background: a("read") ? C.raised : h("read") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("read") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("read")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" })}>
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("read") || h("read") ? C.text : C.textSub, background: a("read") ? C.raised : h("read") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("read") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("read")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSourceName(null); setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" }) }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("read") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                   <span style={{ flex: "1" }}>Sources</span>
                   <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("read") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>3 new</span>
@@ -2492,17 +2474,63 @@ export default function Layout(props: ParentProps) {
     />
   )
 
+  // ── Supadense: get user email for sidebar ────────────────────────────────
+  const getTopLevelUserEmail = () => {
+    try {
+      const t = localStorage.getItem("supadense.auth.token")
+      if (!t) return ""
+      const p = JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))
+      return (p.email || "") as string
+    } catch { return "" }
+  }
+
+  // ── Supadense: always keep opencode session sidebar closed so only SupadenseSidebar shows ──
+  onMount(() => { layout.sidebar.close() })
+
   return (
     <div
-      class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+      class="select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
       style={{
-        "padding-right": chatOpen() ? "476px" : "0px",
-        transition: "padding-right 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+        display: "grid",
+        "grid-template-columns": supadenseSidebarCollapsed() ? "0fr 1fr" : "240px 1fr",
+        gap: supadenseSidebarCollapsed() ? "0" : "8px",
+        padding: supadenseSidebarCollapsed() ? "8px 8px 8px 0" : "8px",
+        background: "#ffffff",
+        height: "100vh",
+        "box-sizing": "border-box",
+        "padding-right": chatOpen() ? "484px" : "8px",
+        transition: "grid-template-columns 220ms cubic-bezier(0.22,1,0.36,1), padding 240ms cubic-bezier(0.22,1,0.36,1)",
+        overflow: "hidden",
       }}
     >
-      <Titlebar onCapture={() => setTopbarCaptureOpen(true)} />
-      <div class="flex-1 min-h-0 min-w-0 flex">
-        <div class="flex-1 min-h-0 relative">
+      {/* ── Supadense left sidebar (first grid cell) ── */}
+      <div style={{ overflow: "hidden", "min-width": "0" }}>
+        <SupadenseSidebar
+          collapsed={supadenseSidebarCollapsed()}
+          onToggle={() => setSupadenseSidebarCollapsed(v => !v)}
+          userEmail={getTopLevelUserEmail()}
+          onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
+        />
+      </div>
+
+      {/* ── Main area (second grid cell) ── */}
+      <main
+        style={{
+          display: "flex",
+          "flex-direction": "column",
+          overflow: "hidden",
+          "min-width": "0",
+          background: "#ffffff",
+          "border-radius": "10px",
+        }}
+      >
+        <Titlebar
+          sidebarCollapsed={supadenseSidebarCollapsed()}
+          onToggleSidebar={() => setSupadenseSidebarCollapsed(v => !v)}
+          onCapture={() => setTopbarCaptureOpen(true)}
+        />
+
+        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden" }}>
           <div class="size-full relative overflow-x-hidden">
             <nav
               aria-label={language.t("sidebar.nav.projectsAndSessions")}
@@ -2513,7 +2541,12 @@ export default function Layout(props: ParentProps) {
                 "fixed": true,
                 "z-10": true,
               }}
-              style={{ width: `${side()}px`, top: "8px", bottom: "8px", left: "8px" }}
+              style={{
+                width: `${side()}px`,
+                top: "8px",
+                bottom: "8px",
+                left: supadenseSidebarCollapsed() ? "8px" : "256px",
+              }}
               ref={(el) => {
                 setState("nav", el)
               }}
@@ -2533,7 +2566,7 @@ export default function Layout(props: ParentProps) {
             <Show when={layout.sidebar.opened()}>
               <div
                 class="hidden xl:block fixed z-30 w-0 overflow-visible"
-                style={{ left: `${side() + 8}px`, top: "8px", bottom: "8px" }}
+                style={{ left: `${side() + (supadenseSidebarCollapsed() ? 8 : 256)}px`, top: "8px", bottom: "8px" }}
                 onPointerDown={() => setState("sizing", true)}
               >
                 <ResizeHandle
@@ -2590,13 +2623,14 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${side() + 8}px` : "0px",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "0px",
               }}
             >
               <main
                 classList={{
-                  "size-full overflow-x-hidden flex flex-col items-start contain-strict bg-background-base": true,
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict": true,
                 }}
+                style={{ background: "#ffffff" }}
               >
                 <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
                   {props.children}
@@ -2645,14 +2679,78 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         {false && <DebugBar />}
-      </div>
+      </main>
       <Toast.Region />
-      <SupadenseFAB />
-      <Show when={topbarCaptureOpen() && currentProject()?.worktree}>
-        <CaptureDialog
-          directory={currentProject()!.worktree}
-          onClose={() => setTopbarCaptureOpen(false)}
-        />
+      <SupadenseChatOverlay />
+
+      {/* ── Floating chat button — visible on every tab ── */}
+      <Show when={!chatOpen()}>
+        <button
+          type="button"
+          title="Ask AI"
+          onClick={() => setChatOpen(true)}
+          style={{
+            position: "fixed",
+            bottom: "120px",
+            right: "32px",
+            width: "56px",
+            height: "56px",
+            "border-radius": "50%",
+            background: "#ffffff",
+            border: "2px solid #d68a2e",
+            "box-shadow": "0 4px 20px rgba(214,138,46,0.18)",
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "center",
+            cursor: "pointer",
+            "z-index": "100",
+            transition: "box-shadow 150ms, transform 150ms",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = "0 6px 28px rgba(214,138,46,0.32)"
+            e.currentTarget.style.transform = "scale(1.06)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = "0 4px 20px rgba(214,138,46,0.18)"
+            e.currentTarget.style.transform = "scale(1)"
+          }}
+        >
+          <span style={{
+            display: "inline-grid",
+            "grid-template-columns": "repeat(3, 1fr)",
+            "grid-template-rows": "repeat(3, 1fr)",
+            gap: "2.5px",
+            width: "22px",
+            height: "22px",
+          }}>
+            {([0,1,2,3,4,5,6,7,8] as const).map((i) => (
+              <span style={{
+                display: "block",
+                background: i === 4 ? "#d68a2e" : "#0a0a0a",
+                "border-radius": "2px",
+              }} />
+            ))}
+          </span>
+        </button>
+      </Show>
+      <Show when={topbarCaptureOpen()}>
+        {(() => {
+          const token = getAuthToken()
+          let userId: string | undefined
+          try {
+            if (token) {
+              const p = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+              userId = typeof p.userId === "string" ? p.userId : undefined
+            }
+          } catch {}
+          const dir = currentProject()?.worktree ?? (userId ? `/workspaces/${userId}` : process.cwd())
+          return (
+            <CaptureDialog
+              directory={dir}
+              onClose={() => setTopbarCaptureOpen(false)}
+            />
+          )
+        })()}
       </Show>
     </div>
   )
