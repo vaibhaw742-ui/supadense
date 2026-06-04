@@ -168,12 +168,15 @@ function ResourceCard(props: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div style={{
-        padding: "18px 20px 16px",
-        background: hovered() ? "#fafafa" : "transparent",
-        transition: "background 120ms",
-        cursor: "pointer",
-      }}>
+      <div
+        onClick={props.onClick}
+        style={{
+          padding: "18px 20px 16px",
+          background: hovered() ? "#fafafa" : "transparent",
+          transition: "background 120ms",
+          cursor: "pointer",
+        }}
+      >
 
         {/* ROW 1: type badge + status + path (left) | category chip (right) */}
         <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "10px", gap: "12px" }}>
@@ -405,7 +408,6 @@ function ResourceCard(props: {
 
         {/* ROW 2: large monospace title */}
         <div
-          onClick={props.onClick}
           style={{
             "font-family": "'Geist Mono', monospace",
             "font-size": "15px", "font-weight": "500",
@@ -421,7 +423,6 @@ function ResourceCard(props: {
 
           {/* Meta */}
           <div
-            onClick={props.onClick}
             style={{
               display: "flex", "align-items": "center", gap: "6px",
               "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3",
@@ -1101,7 +1102,7 @@ export function ReadPanel() {
     const map = new Map<string, Array<{ project_id: string; project_name: string }>>()
     for (const row of rows) {
       const existing = map.get(row.url) ?? []
-      existing.push({ project_id: row.project_id, project_name: row.project_name })
+      existing.push({ project_id: row.project_id, project_name: row.project_name, join_id: row.join_id })
       map.set(row.url, existing)
     }
     return map
