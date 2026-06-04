@@ -166,6 +166,9 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
     const workspace = Workspace.getById(resource.workspace_id)
     if (!workspace) throw new Error(`Workspace not found for resource`)
 
+    // assets are no longer stored on disk — return empty result immediately
+    return { asset_ids: [], downloaded: 0, skipped: params.image_urls.length, failed: 0, summary: [] }
+
     const nsPrefix = resource.workspace_id.slice(0, 8)
     const assetsDir = path.join(workspace.kb_path, ".supadense", "assets", nsPrefix)
     mkdirSync(assetsDir, { recursive: true })

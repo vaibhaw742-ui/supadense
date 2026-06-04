@@ -498,16 +498,6 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
       })
     }
 
-    // ── Write raw content to file ─────────────────────────────────────────────
-    // Stored under <kb_path>/.supadense/raw/<id>.md — DB holds only the path.
-    // getRawContent() reads the file; falls back to raw_content column for old records.
-    if (rawContent) {
-      const rawDir = path.join(workspace.kb_path, ".supadense", "raw")
-      mkdirSync(rawDir, { recursive: true })
-      const filename = `${resource.id}.md`
-      writeFileSync(path.join(rawDir, filename), rawContent, "utf8")
-      Resource.update(resource.id, { raw_content_path: `.supadense/raw/${filename}` })
-    }
     Resource.setStatus(resource.id, "processing", "awaiting_analysis")
 
     // If this is a virtual EL workspace (project_id starts with "el-"), link the
