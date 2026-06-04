@@ -1,7 +1,7 @@
 /**
  * kb_resource_create — Fetch + create a resource record in the KB.
  *
- * Step 1 of the memorize pipeline. Creates the DB row, fetches content,
+ * Step 1 of the add-resource pipeline. Creates the DB row, fetches content,
  * and automatically downloads images into assets/.
  */
 import z from "zod"
@@ -245,7 +245,7 @@ async function downloadImages(
 
 export const KbResourceCreateTool = Tool.define("kb_resource_create", {
   description: [
-    "Step 1 of the memorize pipeline. Creates a resource record, fetches content, and auto-downloads images.",
+    "Step 1 of the add-resource pipeline. Creates a resource record, fetches content, and auto-downloads images.",
     "",
     "⛔ MODALITY RULES — READ CAREFULLY:",
     "  url      — ANY web page URL (http/https). Fetches page + downloads images automatically.",
@@ -330,16 +330,18 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
     // ── Deduplication ────────────────────────────────────────────────────────
     if (["url", "linkedin", "youtube", "pdf"].includes(modality)) {
       const existing = Resource.getByUrl(workspace_id, input)
-      if (existing) {
+      // Skip dedup for "pending" stubs — those were pre-inserted by the capture
+      // route so the UI can show immediate feedback while this background task runs.
+      if (existing && existing.status !== "pending") {
         return {
-          title: `Already memorized: ${existing.title ?? input}`,
+          title: `Already added: ${existing.title ?? input}`,
           metadata: { resource_id: existing.id, duplicate: true, url: input } as Record<string, unknown>,
           output: [
-            `⚠️ This resource has already been memorized.`,
+            `⚠️ This resource has already been added.`,
             `resource_id: ${existing.id}`,
             `title: ${existing.title ?? "(untitled)"}`,
             `url: ${input}`,
-            `memorized_at: ${new Date(existing.memorized_at ?? existing.time_created).toLocaleString()}`,
+            `added_at: ${new Date(existing.added_at ?? existing.time_created).toLocaleString()}`,
             "",
             "No action taken. If you want to re-process it, remove the existing resource first.",
           ].join("\n"),
@@ -358,7 +360,22 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
       case "url":
       case "linkedin": {
         resolvedUrl = input
-        metadata = { domain: new URL(input).hostname }
+        const hostname = new URL(input).hostname
+        metadata = { domain: hostname }
+
+        // X/Twitter blocks automated fetches — store a stub so the resource
+        // is recorded and the curator can still label it.
+        const isTwitter = hostname === "x.com" || hostname === "twitter.com"
+          || hostname.endsWith(".x.com") || hostname.endsWith(".twitter.com")
+        if (isTwitter) {
+          rawContent = [
+            `X/Twitter post: ${input}`,
+            "",
+            "Note: X/Twitter blocks automated content fetching.",
+            "Add a manual note with the post content if you want it indexed.",
+          ].join("\n")
+          break
+        }
 
         const airtopKey = process.env.AIRTOP_API_KEY
         if (airtopKey) {
@@ -466,22 +483,30 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
 
     if (note) rawContent = `${rawContent ?? ""}\n\n--- User note ---\n${note}`
 
-    // ── Create DB record ─────────────────────────────────────────────────────
-    // raw_content is stored as a file, not in the DB column.
-    const resource = Resource.create({
-      workspace_id, modality, url: resolvedUrl,
-      title: resolvedTitle, author, metadata,
-    })
+    // ── Create DB record (or reuse pending stub) ──────────────────────────────
+    // If the capture route pre-inserted a "pending" stub for this URL, reuse it
+    // rather than creating a duplicate row.
+    const pendingStub = resolvedUrl ? Resource.getByUrl(workspace_id, resolvedUrl) : undefined
+    let resource: ReturnType<typeof Resource.create>
+    if (pendingStub?.status === "pending") {
+      Resource.update(pendingStub.id, { title: resolvedTitle ?? pendingStub.title, author: author ?? pendingStub.author, metadata })
+      resource = Resource.get(pendingStub.id)!
+    } else {
+      resource = Resource.create({
+        workspace_id, modality, url: resolvedUrl,
+        title: resolvedTitle, author, metadata,
+      })
+    }
 
     // ── Write raw content to file ─────────────────────────────────────────────
-    // Stored under <kb_path>/raw/<id>.md — DB holds only the path.
+    // Stored under <kb_path>/.supadense/raw/<id>.md — DB holds only the path.
     // getRawContent() reads the file; falls back to raw_content column for old records.
     if (rawContent) {
-      const rawDir = path.join(workspace.kb_path, "raw")
+      const rawDir = path.join(workspace.kb_path, ".supadense", "raw")
       mkdirSync(rawDir, { recursive: true })
       const filename = `${resource.id}.md`
       writeFileSync(path.join(rawDir, filename), rawContent, "utf8")
-      Resource.update(resource.id, { raw_content_path: `raw/${filename}` })
+      Resource.update(resource.id, { raw_content_path: `.supadense/raw/${filename}` })
     }
     Resource.setStatus(resource.id, "processing", "awaiting_analysis")
 
@@ -511,8 +536,8 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
     } catch { /* non-fatal: join row is best-effort */ }
 
     Workspace.logEvent(workspace_id, {
-      event_type: "memorize",
-      summary: `Resource created (${modality}): ${resolvedTitle ?? resolvedUrl ?? "text paste"}`,
+      event_type: "add_resource",
+      summary: `Resource added (${modality}): ${resolvedTitle ?? resolvedUrl ?? "text paste"}`,
       resource_id: resource.id,
       payload: { modality, url: resolvedUrl },
     })
@@ -526,6 +551,9 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
         // Non-fatal — continue without images
       }
     }
+
+    // Content capture is complete — mark as done so the reader shows "processed"
+    Resource.setStatus(resource.id, "done")
 
     const contentPreview = (rawContent ?? "").slice(0, 500)
     const isTruncated = (rawContent?.length ?? 0) > 500
@@ -555,13 +583,11 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
         isTruncated ? `\n[... truncated at 500 chars — full ${rawContent?.length} chars ...]` : "",
         "",
         "Next steps:",
-        "1. Analyze this content to determine the relevant category/subcategory and key concepts.",
+        "1. Analyze this content to extract key concepts.",
         imageResult.asset_ids.length > 0
-          ? `2. Call kb_resource_place for each section. Pass media_asset_ids: [${imageResult.asset_ids.map(id => `"${id}"`).join(", ")}] on the most relevant placement.`
-          : "2. Call kb_resource_place for each section chunk.",
-        "3. Call kb_concept_upsert for any new concepts discovered.",
-        "4. Call kb_wiki_build to regenerate the .md files.",
-        "5. Call kb_event_log to update log.md.",
+          ? `2. Call kb_concept_upsert for each concept. asset_ids available: [${imageResult.asset_ids.map(id => `"${id}"`).join(", ")}]`
+          : "2. Call kb_concept_upsert for each new concept discovered.",
+        "3. Call kb_event_log to update log.md.",
       ].filter(Boolean).join("\n"),
     }
   },

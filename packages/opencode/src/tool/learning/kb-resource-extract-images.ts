@@ -3,7 +3,7 @@
  *
  * Called after kb_resource_create when image_candidates are returned.
  * Downloads, filters, and stores images to assets/.
- * Returns asset_ids that can be passed to kb_resource_place via media_asset_ids.
+ * Returns asset_ids stored in the KB assets/ folder.
  */
 import z from "zod"
 import { createHash } from "crypto"
@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync, existsSync } from "fs"
 import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
-import { Resource, MediaAsset, Placement } from "../../learning/resource"
+import { Resource, MediaAsset } from "../../learning/resource"
 
 const TRACKING_DOMAINS = ["pixel.", "track.", "beacon.", "doubleclick.", "googlesyndication.", "analytics."]
 
@@ -127,7 +127,7 @@ async function downloadImage(
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8)
     const resPrefix = resourceId.slice(0, 8)
     const filename = `${resPrefix}-${hash}.${ext}`
-    const localPath = `assets/${nsPrefix}/${filename}`
+    const localPath = `.supadense/assets/${nsPrefix}/${filename}`
     const fullPath = path.join(assetsDir, filename)
 
     if (!existsSync(fullPath)) {
@@ -143,10 +143,10 @@ async function downloadImage(
 
 export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_images", {
   description: [
-    "Download and store images from a memorized resource into assets/.",
+    "Download and store images from a resource into assets/.",
     "",
     "Call this after kb_resource_create when image_candidates are returned in the metadata.",
-    "Returns asset_ids that you can pass to kb_resource_place via the media_asset_ids parameter.",
+    "Returns asset_ids that are stored in the KB assets/ folder.",
     "",
     "The tool filters out icons, tracking pixels, SVGs, and oversized images automatically.",
     "Images marked is_diagram: true are wide landscape images — best placed near concept introductions.",
@@ -154,12 +154,10 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
     "Parameters:",
     "  resource_id    — from kb_resource_create",
     "  image_urls     — the image_candidates array from kb_resource_create metadata",
-    "  placement_id   — optional: attach downloaded assets to an existing placement immediately",
   ].join("\n"),
   parameters: z.object({
     resource_id: z.string().describe("Resource ID from kb_resource_create"),
     image_urls: z.array(z.string()).max(10).describe("Candidate image URLs from kb_resource_create metadata.image_candidates"),
-    placement_id: z.string().optional().describe("Optional placement ID to attach assets to immediately"),
   }),
   async execute(params) {
     const resource = Resource.get(params.resource_id)
@@ -169,7 +167,7 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
     if (!workspace) throw new Error(`Workspace not found for resource`)
 
     const nsPrefix = resource.workspace_id.slice(0, 8)
-    const assetsDir = path.join(workspace.kb_path, "assets", nsPrefix)
+    const assetsDir = path.join(workspace.kb_path, ".supadense", "assets", nsPrefix)
     mkdirSync(assetsDir, { recursive: true })
 
     const assetIds: string[] = []
@@ -211,10 +209,6 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
       )
     }
 
-    if (params.placement_id && assetIds.length > 0) {
-      Placement.attachAssets(params.placement_id, assetIds)
-    }
-
     return {
       title: `Extracted ${downloaded} image${downloaded !== 1 ? "s" : ""}`,
       metadata: { asset_ids: assetIds, downloaded, skipped, failed },
@@ -227,7 +221,7 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
         ...summary,
         "",
         assetIds.length > 0
-          ? "Pass asset_ids to kb_resource_place via the media_asset_ids parameter."
+          ? "Images stored in assets/."
           : "No usable images found on this page.",
       ].join("\n"),
     }
