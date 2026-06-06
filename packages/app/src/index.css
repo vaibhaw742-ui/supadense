@@ -1,5 +1,15 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
+/* ── Base scaling — match app.html (sd design system base = 14px) ── */
+html {
+  font-size: 14px;
+}
+body {
+  font-size: 14px;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+}
+
 /* ── KB resource walkthrough ─────────────────────────────────── */
 @keyframes kb-pulse-ring {
   0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.6); }

@@ -82,7 +82,8 @@ export namespace Session {
         archived: row.time_archived ?? undefined,
       },
       elProjectId: row.el_project_id ?? undefined,
-      sessionType: (row.session_type as "workspace" | "project" | null) ?? undefined,
+      sessionType: (row.session_type as "workspace" | "project" | "learn" | null) ?? undefined,
+      learnResourceId: (row as any).learn_resource_id ?? undefined,
     }
   }
 
@@ -105,6 +106,7 @@ export namespace Session {
       permission: info.permission,
       el_project_id: info.elProjectId ?? null,
       session_type: info.sessionType ?? "workspace",
+      learn_resource_id: info.learnResourceId ?? null,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -161,7 +163,8 @@ export namespace Session {
         })
         .optional(),
       elProjectId: z.string().optional(),
-      sessionType: z.enum(["workspace", "project"]).optional(),
+      sessionType: z.enum(["workspace", "project", "learn"]).optional(),
+      learnResourceId: z.string().optional(),
     })
     .meta({
       ref: "Session",
@@ -379,6 +382,8 @@ export namespace Session {
         workspaceID?: WorkspaceID
         directory: string
         permission?: Permission.Ruleset
+        sessionType?: "workspace" | "project" | "learn"
+        learnResourceId?: string
       }) {
         const ctx = yield* InstanceState.context
         // Auto-detect EL project sessions from provisioned directory path
@@ -398,6 +403,7 @@ export namespace Session {
             updated: Date.now(),
           },
           ...(elMatch ? { elProjectId: elMatch[1], sessionType: "project" as const } : {}),
+          ...(input.sessionType === "learn" ? { sessionType: "learn" as const, learnResourceId: input.learnResourceId } : {}),
         }
         log.info("created", result)
 
@@ -495,6 +501,8 @@ export namespace Session {
         title?: string
         permission?: Permission.Ruleset
         workspaceID?: WorkspaceID
+        sessionType?: "workspace" | "project" | "learn"
+        learnResourceId?: string
       }) {
         const directory = yield* InstanceState.directory
         return yield* createNext({
@@ -503,6 +511,8 @@ export namespace Session {
           title: input?.title,
           permission: input?.permission,
           workspaceID: input?.workspaceID,
+          sessionType: input?.sessionType,
+          learnResourceId: input?.learnResourceId,
         })
       })
 
@@ -671,6 +681,8 @@ export namespace Session {
         title: z.string().optional(),
         permission: Info.shape.permission,
         workspaceID: WorkspaceID.zod.optional(),
+        sessionType: z.enum(["workspace", "project", "learn"]).optional(),
+        learnResourceId: z.string().optional(),
       })
       .optional(),
     (input) => runPromise((svc) => svc.create(input)),

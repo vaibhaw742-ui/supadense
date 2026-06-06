@@ -24,7 +24,7 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
     "This keeps context window efficient: only read the relevant sections,",
     "not entire wiki files.",
     "",
-    "Search covers: concepts, content placements, wiki page titles, category names.",
+    "Search covers: concepts and resource content.",
     "",
     "Typical usage:",
     "  1. Call kb_retrieve with the query",
@@ -45,7 +45,7 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
       .describe("Maximum results to return. Default: 5."),
   }),
   async execute(params) {
-    type M = { query?: string; result_count?: number; concept_count?: number; source_count?: number; results?: { file_path: string; abs_path: string; section_heading: string | null; match_type: string; relevance: number }[]; concepts?: unknown[]; sources?: unknown[] }
+    type M = { query?: string; result_count?: number; concept_count?: number; source_count?: number; results?: { file_path: string; abs_path: string; match_type: string; relevance: number }[]; concepts?: unknown[]; sources?: unknown[] }
 
     let workspaceId = params.workspace_id
     if (!workspaceId) {
@@ -137,7 +137,6 @@ export const KbRetrieveTool = Tool.define("kb_retrieve", {
         results: locations.map((r) => ({
           file_path: r.file_path,
           abs_path: r.abs_path,
-          section_heading: r.section_heading,
           match_type: r.match_type,
           relevance: r.relevance,
           images: r.images,

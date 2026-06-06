@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal, createResource, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -13,7 +13,9 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  ResourceAttachmentPart,
 } from "@/context/prompt"
+import { useWikiApi } from "@/pages/wiki/wiki-api"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -49,7 +51,7 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
-import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
+import { PromptPopover, type AtOption, type AtLevel, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
@@ -115,7 +117,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
+  const wikiApi = useWikiApi()
   let editorRef!: HTMLDivElement
+  let kbPickerRef: HTMLDivElement | undefined
+  let kbSearchRef: HTMLInputElement | undefined
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
@@ -439,7 +444,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => {
-    const text = "/memorize "
+    const text = "/add-resource "
     prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
     requestAnimationFrame(() => {
       editorRef?.focus()
@@ -447,6 +452,65 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
     window.dispatchEvent(new CustomEvent("kb:add-resource-clicked"))
   }
+
+  // ── @ menu two-level state ─────────────────────────────────────────────────
+  const [atLevel, setAtLevel] = createSignal<AtLevel>("top")
+  const [atQuery, setAtQuery] = createSignal("")
+
+  const [atMenuNotes] = createResource(
+    () => store.popover === "at" && atLevel() === "notes" ? true : null,
+    async () => {
+      try { return await wikiApi.pages() } catch { return [] }
+    },
+  )
+
+  // ── KB context picker ──────────────────────────────────────────────────────
+  const [kbPickerOpen, setKbPickerOpen] = createSignal(false)
+  const [kbPickerQuery, setKbPickerQuery] = createSignal("")
+
+  const [kbData] = createResource(kbPickerOpen, async (open) => {
+    if (!open) return null
+    try {
+      const resources = await wikiApi.resources()
+      return { resources }
+    } catch {
+      return null
+    }
+  })
+
+  const kbFiltered = createMemo(() => {
+    const data = kbData()
+    const q = kbPickerQuery().toLowerCase()
+    return {
+      resources: (data?.resources ?? []).filter((r) => r.status === "done" && r.title).filter((r) => !q || r.title!.toLowerCase().includes(q)),
+    }
+  })
+
+  const openKbPicker = () => {
+    setKbPickerOpen(true)
+    setKbPickerQuery("")
+    requestAnimationFrame(() => kbSearchRef?.focus())
+  }
+
+  const closeKbPicker = () => {
+    setKbPickerOpen(false)
+    requestAnimationFrame(() => editorRef.focus())
+  }
+
+  const pickKbItem = (id: string, label: string) => {
+    addPart({ type: "resource", id, title: label, content: "@" + label, start: 0, end: 0 })
+    closeKbPicker()
+  }
+
+  // Close picker on outside click
+  createEffect(() => {
+    if (!kbPickerOpen()) return
+    const handle = (e: MouseEvent) => {
+      if (!kbPickerRef?.contains(e.target as Node)) setKbPickerOpen(false)
+    }
+    setTimeout(() => document.addEventListener("click", handle), 50)
+    onCleanup(() => document.removeEventListener("click", handle))
+  })
 
   const setMode = (mode: "normal" | "shell") => {
     setStore("mode", mode)
@@ -484,7 +548,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
   ])
 
-  const closePopover = () => setStore("popover", null)
+  const closePopover = () => {
+    setStore("popover", null)
+    setAtLevel("top")
+    setAtQuery("")
+  }
 
   const resetHistoryNavigation = (force = false) => {
     if (!force && (store.historyIndex < 0 || store.applyingHistory)) return
@@ -575,14 +643,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
+    } else if (option.type === "resource") {
+      addPart({ type: "resource", id: option.id, title: option.title, content: "@" + option.title, start: 0, end: 0 })
+    } else if (option.type === "note") {
+      addPart({ type: "text", content: `@note:${option.title}`, start: 0, end: 0 })
     } else {
       addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
     }
+    setAtLevel("top")
+    setAtQuery("")
   }
 
   const atKey = (x: AtOption | undefined) => {
     if (!x) return ""
-    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
+    if (x.type === "agent") return `agent:${x.name}`
+    if (x.type === "resource") return `resource:${x.id}`
+    if (x.type === "note") return `note:${x.slug}`
+    return `file:${x.path}`
   }
 
   const {
@@ -597,25 +674,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
-      if (!query.trim()) return [...agents, ...pinned]
+
+      const q = query.trim().toLowerCase()
+
+      let resourceOptions: AtOption[] = []
+      try {
+        const resources = await wikiApi.resources()
+        resourceOptions = resources
+          .filter((r) => r.status === "done" && r.title)
+          .filter((r) => !q || r.title!.toLowerCase().includes(q))
+          .slice(0, 5)
+          .map((r): AtOption => ({ type: "resource", id: r.id, title: r.title!, display: r.title! }))
+      } catch {}
+
+      if (!query.trim()) return [...agents, ...pinned, ...resourceOptions]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions]
+      return [...agents, ...pinned, ...fileOptions, ...resourceOptions]
     },
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
-      if (item.recent) return "recent"
+      if (item.type === "resource") return "resource"
+      if (item.type === "file" && item.recent) return "recent"
       return "file"
     },
     sortGroupsBy: (a, b) => {
       const rank = (category: string) => {
         if (category === "agent") return 0
         if (category === "recent") return 1
-        return 2
+        if (category === "resource") return 2
+        return 3
       }
       return rank(a.category) - rank(b.category)
     },
@@ -678,12 +770,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
+  const createPill = (part: FileAttachmentPart | AgentPart | ResourceAttachmentPart) => {
     const pill = document.createElement("span")
     pill.textContent = part.content
     pill.setAttribute("data-type", part.type)
     if (part.type === "file") pill.setAttribute("data-path", part.path)
     if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "resource") {
+      pill.setAttribute("data-resource-id", part.id)
+      pill.setAttribute("data-resource-title", part.title)
+    }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -706,6 +802,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") return true
       if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "resource") return true
       return el.tagName === "BR"
     })
 
@@ -716,7 +813,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.appendChild(createTextFragment(part.content))
         continue
       }
-      if (part.type === "file" || part.type === "agent") {
+      if (part.type === "file" || part.type === "agent" || part.type === "resource") {
         editorRef.appendChild(createPill(part))
       }
     }
@@ -754,6 +851,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const selectPopoverActive = () => {
     if (store.popover === "at") {
+      if (atLevel() === "top") return // top level is mouse-driven
       const items = atFlat()
       if (items.length === 0) return
       const active = atActive()
@@ -835,6 +933,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushResource = (el: HTMLElement) => {
+      const content = el.textContent ?? ""
+      parts.push({
+        type: "resource",
+        id: el.dataset.resourceId!,
+        title: el.dataset.resourceTitle!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -851,6 +962,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "resource") {
+        flushText()
+        pushResource(el)
         return
       }
       if (el.tagName === "BR") {
@@ -908,6 +1024,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       if (atMatch) {
         atOnInput(atMatch[1])
+        setAtQuery(atMatch[1])
+        if (store.popover !== "at") {
+          setAtLevel("top")
+        }
         setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
@@ -942,7 +1062,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const range = selection.getRangeAt(0)
     if (!editorRef.contains(range.startContainer)) return false
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type === "file" || part.type === "agent" || part.type === "resource") {
       const cursorPosition = getCursorPosition(editorRef)
       const rawText = prompt
         .current()
@@ -1156,6 +1276,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "Escape") {
+      if (store.popover === "at" && atLevel() !== "top") {
+        setAtLevel("top")
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       if (store.popover) {
         closePopover()
         event.preventDefault()
@@ -1217,8 +1343,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
       const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
       if (nav || ctrlNav) {
-        if (store.popover === "at") {
+        if (store.popover === "at" && atLevel() !== "top") {
           atOnKeyDown(event)
+          event.preventDefault()
+          return
+        }
+        if (store.popover === "at") {
+          // top-level: arrow keys and enter are ignored (mouse-driven)
           event.preventDefault()
           return
         }
@@ -1291,6 +1422,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         atKey={atKey}
         setAtActive={setAtActive}
         onAtSelect={handleAtSelect}
+        atLevel={atLevel()}
+        onAtLevelChange={setAtLevel}
+        atNotes={atMenuNotes() ?? []}
+        atQuery={atQuery()}
         slashFlat={slashFlat()}
         slashActive={slashActive() ?? undefined}
         setSlashActive={setSlashActive}
@@ -1375,6 +1510,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
+                "[&_[data-type=resource]]:text-syntax-constant": true,
                 "font-mono!": store.mode === "shell",
               }}
               style={{ "padding-bottom": space }}
@@ -1433,15 +1569,59 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
           <div class="pointer-events-none absolute bottom-2 left-2">
             <div
+              ref={(el) => (kbPickerRef = el)}
               aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
-              style={{
-                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-              }}
+              class="pointer-events-auto relative"
+              style={{ "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none" }}
             >
+              {/* KB context picker panel */}
+              <Show when={kbPickerOpen()}>
+                <div
+                  class="absolute bottom-full left-0 mb-2 w-72 rounded-xl overflow-hidden z-50
+                         bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)]"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {/* Search */}
+                  <div class="px-2 pt-2 pb-1">
+                    <input
+                      ref={(el) => (kbSearchRef = el)}
+                      class="w-full text-[13px] bg-transparent text-text-strong placeholder:text-text-subtle outline-none px-2 py-1 rounded-md border border-[var(--border-weak-base)] focus:border-[var(--border-strong-base)] transition-colors"
+                      placeholder="Search…"
+                      value={kbPickerQuery()}
+                      onInput={(e) => setKbPickerQuery(e.currentTarget.value)}
+                      onKeyDown={(e) => { if (e.key === "Escape") closeKbPicker() }}
+                    />
+                  </div>
+                  {/* Items list */}
+                  <div class="overflow-y-auto max-h-52 p-1 no-scrollbar">
+                    <Show when={kbData.loading}>
+                      <div class="text-text-weak text-[13px] px-2 py-4 text-center">Loading…</div>
+                    </Show>
+                    <Show when={!kbData.loading}>
+                      <Show
+                        when={kbFiltered().resources.length > 0}
+                        fallback={<div class="text-text-weak text-[13px] px-2 py-3">No resources yet</div>}
+                      >
+                        <For each={kbFiltered().resources}>
+                          {(r) => (
+                            <button
+                              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover text-left"
+                              onMouseDown={(e) => { e.preventDefault(); pickKbItem(r.id, r.title!) }}
+                            >
+                              <Icon name="book" size="small" class="text-icon-warning shrink-0" />
+                              <span class="text-[13px] text-text-strong truncate">{r.title}</span>
+                            </button>
+                          )}
+                        </For>
+                      </Show>
+                    </Show>
+                  </div>
+                </div>
+              </Show>
+
               <TooltipKeybind
                 placement="top"
-                title={language.t("prompt.action.attachFile")}
+                title="Add KB context"
                 keybind={command.keybind("file.attach")}
               >
                 <Button
@@ -1451,12 +1631,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant="ghost"
                   class="size-8 p-0"
                   style={buttons()}
-                  onClick={pick}
+                  onClick={() => (kbPickerOpen() ? closeKbPicker() : openKbPicker())}
                   disabled={store.mode !== "normal"}
                   tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
+                  aria-label="Add KB context"
                 >
-                  <Icon name="plus" class="size-4.5" style={{ color: "#f59e0b" }} />
+                  <Icon
+                    name="plus"
+                    class="size-4.5"
+                    style={{ color: kbPickerOpen() ? "#d68a2e" : "#f59e0b" }}
+                  />
                 </Button>
               </TooltipKeybind>
             </div>

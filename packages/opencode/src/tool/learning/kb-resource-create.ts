@@ -10,10 +10,8 @@ import { mkdirSync, writeFileSync, existsSync } from "fs"
 import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
-import { Resource, MediaAsset } from "../../learning/resource"
+import { Resource } from "../../learning/resource"
 import { Database } from "../../storage/db"
-import { eq } from "../../storage/db"
-import { LearningKbWorkspaceTable } from "../../learning/schema.sql"
 import { ElProjectResourceTable } from "../../experiential/schema.sql"
 import { ulid } from "ulid"
 
@@ -215,25 +213,11 @@ async function downloadImages(
       const localPath = `assets/${nsPrefix}/${filename}`
       const fullPath = path.join(assetsDir, filename)
 
-      // DB dedup
-      const existing = MediaAsset.findByLocalPath(workspaceId, localPath)
-      if (existing) { assetIds.push(existing.id); skipped++; continue }
-
       if (!existsSync(fullPath)) writeFileSync(fullPath, bytes)
 
-      const is_diagram = !!(dims && dims.width / dims.height > 1.5 && dims.width > 400)
-      const asset = MediaAsset.create({
-        resource_id: resourceId,
-        workspace_id: workspaceId,
-        asset_type: "image",
-        source_url: url,
-        local_path: localPath,
-        mime_type: mime,
-        width: dims?.width,
-        height: dims?.height,
-        is_diagram,
-      })
-      assetIds.push(asset.id)
+      // generate a local id for tracking (no DB)
+      const assetId = `asset-${hash}`
+      assetIds.push(assetId)
       downloaded++
     } catch {
       skipped++
@@ -503,14 +487,9 @@ export const KbResourceCreateTool = Tool.define("kb_resource_create", {
     // If this is a virtual EL workspace (project_id starts with "el-"), link the
     // resource to the EL project so it appears in the project's resource list.
     try {
-      const wsRow = Database.use((db) =>
-        db.select({ project_id: LearningKbWorkspaceTable.project_id })
-          .from(LearningKbWorkspaceTable)
-          .where(eq(LearningKbWorkspaceTable.id, workspace_id))
-          .get(),
-      )
-      if (wsRow?.project_id?.startsWith("el-")) {
-        const projectId = wsRow.project_id.slice(3)
+      const ws = Workspace.getById(workspace_id)
+      if (ws?.project_id?.startsWith("el-")) {
+        const projectId = ws.project_id.slice(3)
         const now = Date.now()
         Database.use((db) =>
           db.insert(ElProjectResourceTable).values({

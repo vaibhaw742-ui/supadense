@@ -2433,7 +2433,6 @@ export default function Layout(props: ParentProps) {
 
         <Show when={sidebarCaptureOpen() && worktree()}>
           <CaptureDialog
-            directory={worktree()}
             onClose={() => setSidebarCaptureOpen(false)}
           />
         </Show>
@@ -2752,10 +2751,8 @@ export default function Layout(props: ParentProps) {
               userId = typeof p.userId === "string" ? p.userId : undefined
             }
           } catch {}
-          const dir = currentProject()?.worktree ?? (userId ? `/workspaces/${userId}` : process.cwd())
           return (
             <CaptureDialog
-              directory={dir}
               onClose={() => setTopbarCaptureOpen(false)}
             />
           )

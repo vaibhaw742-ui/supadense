@@ -1,3 +1,24 @@
+// ── Load deployment/.env early so OPENCODE_DB and AIRTOP_API_KEY are set before DB opens ──
+import { readFileSync } from "node:fs"
+import path from "node:path"
+;(function loadDeploymentEnvEarly() {
+  let dir = path.dirname(new URL(import.meta.url).pathname)
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, "deployment", ".env")
+    try {
+      const lines = readFileSync(candidate, "utf-8").split("\n")
+      for (const line of lines) {
+        const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim()
+      }
+      return
+    } catch { /* try parent */ }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+})()
+
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
@@ -22,10 +43,20 @@ import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
-import { KBRoutes } from "./routes/kb"
-import { KBGitRoutes } from "./routes/kb-git"
+// KB routes deprecated — replaced by EL project brain/ + sources/ structure
+// import { KBRoutes } from "./routes/kb"
+// import { KBGitRoutes } from "./routes/kb-git"
 import { ELRoutes } from "./routes/el"
+import { ElGitHubRoutes } from "./routes/el-github"
 import { initProjectors } from "./projectors"
+import { BrainRoutes }        from "./routes/brain"
+import { McpRoutes }           from "../brain/mcp/server"
+import { BrainProjectRoutes }  from "./routes/brain-project"
+import { LocalProjectRoutes }  from "./routes/local-project"
+import { runBrainMigrations } from "../brain/migrate"
+import { startEmbedWorker } from "../brain/embed"
+import { startVersioningBridge } from "../brain/versioning/bridge"
+// startBrainWatcher and initialSync called per-project, not at server boot
 import { ModelsDev } from "../provider/models"
 import { Provider } from "../provider/provider"
 import { Config } from "../config/config"
@@ -36,6 +67,20 @@ import { createAdaptorServer, type ServerType } from "@hono/node-server"
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 initProjectors()
+
+// Brain module startup — schema + embed worker only
+// Per-project brain folders (.supadense/brain/) are initialised when
+// projects are created or sessions are started, not at server boot.
+runBrainMigrations().catch((e: unknown) =>
+  console.error("[brain] migration error:", e instanceof Error ? e.message : e)
+)
+
+startEmbedWorker()
+if (process.env.BRAIN_TERMINUSDB_URL) {
+  startVersioningBridge().catch((e: unknown) =>
+    console.warn("[brain/bridge] versioning disabled:", e instanceof Error ? e.message : e)
+  )
+}
 
 export namespace Server {
   export type Listener = {
@@ -84,6 +129,7 @@ export namespace Server {
         // Skip auth for public endpoints
         if (c.req.path.startsWith("/supa-auth/")) return next()
         if (c.req.path === "/global/health") return next()
+        if (c.req.path === "/el/github/callback") return next()
 
         const secret = Flag.SUPADENSE_AUTH_SECRET
         if (secret) {
@@ -103,7 +149,12 @@ export namespace Server {
 
         // Fall back to Basic Auth if no session auth configured
         const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return next()
+        if (!password) {
+          // No auth configured — use the OS username as a stable local user ID
+          const os = await import("node:os")
+          ;(c as any).set("userId", os.userInfo().username)
+          return next()
+        }
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
         if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
         return basicAuth({ username, password })(c, next)
@@ -330,9 +381,13 @@ export namespace Server {
         }
         return c.json(true)
       })
-      .route("/kb", KBRoutes())
-      .route("/kb/git", KBGitRoutes())
+      // KB routes removed — use EL projects instead
+      .route("/el/github", ElGitHubRoutes())
       .route("/el", ELRoutes())
+      .route("/brain",         BrainRoutes)
+      .route("/mcp",           McpRoutes)
+      .route("/brain-project",  BrainProjectRoutes)
+      .route("/local-projects", LocalProjectRoutes)
       // Intercept GET /provider and GET /provider/auth ONLY when no directory is
       // specified — that is, global-context calls from bootstrapGlobal or the
       // connect-provider dialog that don't have a KB open yet.

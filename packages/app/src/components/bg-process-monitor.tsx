@@ -5,7 +5,7 @@ import { useServer } from "@/context/server"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getAuthToken } from "@/utils/server"
 
-// Estimated total duration for a memorize/pipeline job (ms)
+// Estimated total duration for an add-resource/pipeline job (ms)
 const ESTIMATED_MS = 2 * 60 * 1000
 
 export function formatEta(startedAt: number): string {
@@ -33,7 +33,7 @@ function formatTimeAgo(ts: number): string {
 }
 
 function eventIcon(eventType: string): string {
-  if (eventType === "memorize") return "⊕"
+  if (eventType === "add_resource") return "⊕"
   if (eventType === "resource_removed") return "⊖"
   if (eventType.includes("category_added") || eventType.includes("subcategory_added")) return "◈"
   if (eventType.includes("category_removed") || eventType.includes("subcategory_removed")) return "◉"
@@ -344,7 +344,7 @@ export function BgProcessMonitor(props: { directory: Accessor<string | undefined
     const stop = globalSDK.event.listen((e) => {
       if (e.details.type === "session.idle") pollJobs()
 
-      if (e.details.type === "command.executed" && (e.details as { name?: string }).name === "memorize") {
+      if (e.details.type === "command.executed" && (e.details as { name?: string }).name === "add-resource") {
         const url = ((e.details as { arguments?: string }).arguments ?? "").trim()
         if (!url) return
         const existing = bgProcesses().find((p) => p.label === url && p.status === "processing")

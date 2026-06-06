@@ -680,8 +680,16 @@ function ResourceReader(props: {
   const api = useWikiApi()
   const marked = useMarked()
 
-  // Poll resource until status leaves processing/pending
-  const [data, { refetch }] = createResource(() => props.id, (id) => api.resource(id))
+  const [data, { refetch }] = createResource(() => props.id, (id) => elApi.getResource(id))
+
+  // Poll every 2s while status is still processing/pending
+  createEffect(() => {
+    const status = data()?.status
+    if (status === "processing" || status === "pending") {
+      const t = setInterval(() => void refetch(), 2000)
+      onCleanup(() => clearInterval(t))
+    }
+  })
 
   // Use a signal for the prose ref so the content effect can track when it's mounted
   const [proseEl, setProseEl] = createSignal<HTMLDivElement | undefined>(undefined)
@@ -890,8 +898,20 @@ function ResourceReader(props: {
                 style={{ "font-size": "15px", "line-height": "1.7", color: "var(--color-text-base, var(--text-base))", "word-break": "break-word" }}
               />
               <Show when={!resource().content}>
-                <div style={{ color: "var(--color-text-weak)", "font-size": "14px", "font-style": "italic" }}>
-                  Content is still being processed…
+                <div style={{ color: "var(--color-text-weak)", "font-size": "14px", "font-style": "italic", display: "flex", "align-items": "center", gap: "8px" }}>
+                  {resource().status === "failed"
+                    ? "⚠️ Failed to fetch content."
+                    : resource().status === "done"
+                      ? "No readable content extracted from this URL."
+                      : (
+                        <>
+                          <svg style={{ "animation": "spin 1s linear infinite", "flex-shrink": "0" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                          </svg>
+                          Fetching content…
+                        </>
+                      )
+                  }
                 </div>
               </Show>
             </>
@@ -1092,7 +1112,7 @@ let cachedResources: WikiResourceListItem[] | undefined
 
 export function ReadPanel() {
   const api = useWikiApi()
-  const [resources, { refetch }] = createResource(() => api.resources())
+  const [resources, { refetch }] = createResource(() => elApi.listAllResources())
   const [resourceProjects] = createResource(() => elApi.getResourceProjects())
   const [selected, setSelected] = createSignal<{ id: string; badge: string } | null>(null)
 

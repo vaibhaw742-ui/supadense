@@ -34,7 +34,8 @@ export const SessionTable = sqliteTable(
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     el_project_id: text().references(() => ElProjectTable.id, { onDelete: "set null" }),
-    session_type: text().notNull().default("workspace"), // "workspace" | "project"
+    session_type: text().notNull().default("workspace"), // "workspace" | "project" | "learn"
+    learn_resource_id: text(), // set when session_type="learn", links to a learning resource
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
@@ -45,6 +46,7 @@ export const SessionTable = sqliteTable(
     index("session_parent_idx").on(table.parent_id),
     index("session_el_project_idx").on(table.el_project_id),
     index("session_type_idx").on(table.session_type),
+    index("session_learn_resource_idx").on(table.learn_resource_id),
   ],
 )
 

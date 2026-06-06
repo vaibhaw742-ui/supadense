@@ -13,21 +13,16 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import {
   KbWorkspaceInitTool,
-  KbOnboardCompleteTool,
   KbResourceCreateTool,
-  KbResourcePlaceTool,
   KbConceptUpsertTool,
   KbWikiBuildTool,
   KbRetrieveTool,
   KbEventLogTool,
-  KbCategoryManageTool,
   KbResourceExtractImagesTool,
   KbPipelineRunTool,
   KbWorkspaceDeleteTool,
   KbPipelineStatusTool,
-  KbSectionGroupTool,
   KbRemoveResourceTool,
-  KbRenameTool,
 } from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -42,6 +37,7 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { BrainSearchTool, BrainSaveTool, BrainContextTool, BrainDeleteTool } from "./brain"
 import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -185,23 +181,23 @@ export namespace ToolRegistry {
             question: Tool.init(question),
             lsp: Tool.init(LspTool),
             plan: Tool.init(PlanExitTool),
+            // Brain knowledge tools (search, save, context, delete)
+            brain_search:  Tool.init(BrainSearchTool),
+            brain_save:    Tool.init(BrainSaveTool),
+            brain_context: Tool.init(BrainContextTool),
+            brain_delete:  Tool.init(BrainDeleteTool),
             // Learning KB tools
             kb_workspace_init: Tool.init(KbWorkspaceInitTool),
-            kb_onboard_complete: Tool.init(KbOnboardCompleteTool),
             kb_resource_create: Tool.init(KbResourceCreateTool),
-            kb_resource_place: Tool.init(KbResourcePlaceTool),
             kb_concept_upsert: Tool.init(KbConceptUpsertTool),
             kb_wiki_build: Tool.init(KbWikiBuildTool),
             kb_retrieve: Tool.init(KbRetrieveTool),
             kb_event_log: Tool.init(KbEventLogTool),
-            kb_category_manage: Tool.init(KbCategoryManageTool),
             kb_resource_extract_images: Tool.init(KbResourceExtractImagesTool),
             kb_pipeline_run: Tool.init(kbPipelineRun),
             kb_workspace_delete: Tool.init(KbWorkspaceDeleteTool),
             kb_pipeline_status: Tool.init(KbPipelineStatusTool),
-            kb_section_group: Tool.init(KbSectionGroupTool),
             kb_remove_resource: Tool.init(KbRemoveResourceTool),
-            kb_rename: Tool.init(KbRenameTool),
           })
 
           return {
@@ -226,20 +222,15 @@ export namespace ToolRegistry {
               ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
               // Learning KB tools
               tool.kb_workspace_init,
-              tool.kb_onboard_complete,
               tool.kb_resource_create,
-              tool.kb_resource_place,
               tool.kb_concept_upsert,
               tool.kb_wiki_build,
               tool.kb_retrieve,
               tool.kb_event_log,
-              tool.kb_category_manage,
               tool.kb_pipeline_run,
               tool.kb_workspace_delete,
               tool.kb_pipeline_status,
-              tool.kb_section_group,
               tool.kb_remove_resource,
-              tool.kb_rename,
             ],
             task: tool.task,
             read: tool.read,

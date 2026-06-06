@@ -2,16 +2,9 @@
  * kb_remove_resource — Remove a resource by URL and clean up everything associated with it.
  *
  * Deletes:
- *   - The resource row (cascades → placements, media asset rows, skill results)
+ *   - The resource row (cascades → media asset rows, skill results)
  *   - The raw content file on disk (raw_content_path)
  *   - All image/asset files on disk (assets/...)
- *
- * Nulls out soft references in:
- *   - learning_concept_wiki_placements.introduced_by_resource_id
- *   - learning_gaps.detected_from_resource_id
- *   - learning_roadmap_items.resource_id
- *
- * Rebuilds all affected wiki pages after deletion.
  */
 import z from "zod"
 import { eq } from "drizzle-orm"
@@ -21,19 +14,9 @@ import { Tool } from "../tool"
 import { Instance } from "../../project/instance"
 import { Workspace } from "../../learning/workspace"
 import { Database } from "../../storage/db"
-import { WikiBuilder } from "../../learning/wiki-builder"
 import {
   LearningResourceTable,
-  LearningMediaAssetTable,
-  LearningResourceWikiPlacementTable,
-  LearningConceptWikiPlacementTable,
-  LearningGapTable,
-  LearningRoadmapItemTable,
-  LearningKbEventTable,
-  LearningWikiPageTable,
-  LearningCategoryTable,
 } from "../../learning/schema.sql"
-import { ulid } from "ulid"
 
 export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
   description: [
@@ -43,10 +26,8 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
     "  1. Finds the resource by URL",
     "  2. Deletes the raw extracted text file from disk",
     "  3. Deletes all extracted images/assets from disk",
-    "  4. Removes all wiki placement rows for this resource",
-    "  5. Removes the resource row (cascades to media assets, skill results)",
-    "  6. Rebuilds all affected wiki pages",
-    "  7. Logs a resource_removed KB event",
+    "  4. Removes the resource row (cascades to media assets, skill results)",
+    "  5. Logs a resource_removed KB event",
     "",
     "Use when the user says 'remove resource <url>', 'delete resource <url>',",
     "'forget this source <url>', or similar.",
@@ -74,54 +55,11 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
       )
     }
 
-    // ── 2–5. Collect data and delete everything inside a single transaction ───
-    // Must be a transaction so null-outs and the resource delete are atomic.
-    // Also collect placement/asset data INSIDE the transaction before cascades fire.
-    let placements: (typeof LearningResourceWikiPlacementTable.$inferSelect)[] = []
-    let mediaAssets: (typeof LearningMediaAssetTable.$inferSelect)[] = []
-    const affectedCategoryIds = new Set<string>()
+    // ── 2. Delete inside a transaction ───────────────────────────────────────
+    const mediaAssets: { local_path: string }[] = []
 
     Database.transaction((tx) => {
-      // Collect placements (needed for wiki rebuild after delete)
-      placements = tx.select().from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.resource_id, resource.id))
-        .all()
-
-      const affectedPageIds = [...new Set(placements.map((p) => p.wiki_page_id))]
-      for (const pageId of affectedPageIds) {
-        const page = tx.select().from(LearningWikiPageTable)
-          .where(eq(LearningWikiPageTable.id, pageId))
-          .get()
-        if (page?.category_id) affectedCategoryIds.add(page.category_id)
-      }
-
-      // Collect media asset paths (needed for disk cleanup after delete)
-      mediaAssets = tx.select().from(LearningMediaAssetTable)
-        .where(eq(LearningMediaAssetTable.resource_id, resource.id))
-        .all()
-
-      // Null-out all soft (non-cascaded) FK references before deleting
-      tx.update(LearningConceptWikiPlacementTable)
-        .set({ introduced_by_resource_id: null })
-        .where(eq(LearningConceptWikiPlacementTable.introduced_by_resource_id, resource.id))
-        .run()
-
-      tx.update(LearningGapTable)
-        .set({ detected_from_resource_id: null })
-        .where(eq(LearningGapTable.detected_from_resource_id, resource.id))
-        .run()
-
-      tx.update(LearningRoadmapItemTable)
-        .set({ resource_id: null })
-        .where(eq(LearningRoadmapItemTable.resource_id, resource.id))
-        .run()
-
-      tx.update(LearningKbEventTable)
-        .set({ resource_id: null })
-        .where(eq(LearningKbEventTable.resource_id, resource.id))
-        .run()
-
-      // Delete the resource — cascades handle placements, media asset rows, skill results
+      // Delete the resource — cascades handle skill results
       tx.delete(LearningResourceTable)
         .where(eq(LearningResourceTable.id, resource.id))
         .run()
@@ -135,7 +73,7 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
       }
     })
 
-    // ── 6. Delete files from disk ─────────────────────────────────────────────
+    // ── 3. Delete files from disk ─────────────────────────────────────────────
     const deletedFiles: string[] = []
     const missingFiles: string[] = []
 
@@ -162,45 +100,19 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
       tryDelete(asset.local_path)
     }
 
-    // ── 7. Rebuild affected wiki pages ────────────────────────────────────────
-    const rebuiltCategories: string[] = []
-    for (const categoryId of affectedCategoryIds) {
-      const cat = Database.use((db) =>
-        db.select().from(LearningCategoryTable)
-          .where(eq(LearningCategoryTable.id, categoryId))
-          .get(),
-      )
-      WikiBuilder.buildCategory(categoryId)
-      if (cat) rebuiltCategories.push(cat.slug)
-    }
-
-    // ── 8. Log KB event ───────────────────────────────────────────────────────
+    // ── 4. Log KB event (no-op: LearningKbEventTable has been dropped) ───────
     const resourceTitle = resource.title ?? resource.url ?? resource.id
-    Database.use((db) =>
-      db.insert(LearningKbEventTable).values({
-        id: ulid(),
-        workspace_id: workspace.id,
-        event_type: "resource_removed",
-        payload: {
-          resource_id: resource.id,
-          url: resource.url,
-          placements_removed: placements.length,
-          files_deleted: deletedFiles.length,
-          categories_rebuilt: rebuiltCategories,
-        },
-        summary: `Removed resource "${resourceTitle}" — ${placements.length} placement${placements.length === 1 ? "" : "s"} removed, ${rebuiltCategories.join(", ") || "no"} pages rebuilt`,
-        time_created: Date.now(),
-        time_updated: Date.now(),
-      }).run(),
-    )
+    Workspace.logEvent(workspace.id, {
+      event_type: "resource_removed",
+      summary: `Removed resource "${resourceTitle}" — ${deletedFiles.length} file${deletedFiles.length === 1 ? "" : "s"} deleted`,
+      payload: { resource_id: resource.id, url: resource.url, files_deleted: deletedFiles.length },
+    })
 
-    // ── 9. Return summary ─────────────────────────────────────────────────────
+    // ── 5. Return summary ─────────────────────────────────────────────────────
     const lines = [
       `✓ Resource removed: ${resourceTitle}`,
       ``,
-      `Placements removed:  ${placements.length}`,
-      `Files deleted:       ${deletedFiles.length}`,
-      `Wiki pages rebuilt:  ${rebuiltCategories.join(", ") || "none"}`,
+      `Files deleted: ${deletedFiles.length}`,
     ]
 
     if (deletedFiles.length > 0) {
@@ -218,9 +130,7 @@ export const KbRemoveResourceTool = Tool.define("kb_remove_resource", {
       metadata: {
         resource_id: resource.id,
         url: resource.url,
-        placements_removed: placements.length,
         files_deleted: deletedFiles.length,
-        categories_rebuilt: rebuiltCategories,
       } as Record<string, unknown>,
       output: lines.join("\n"),
     }

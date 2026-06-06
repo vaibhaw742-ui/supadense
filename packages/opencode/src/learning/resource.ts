@@ -1,5 +1,5 @@
 /**
- * resource.ts — Learning KB resource + placement operations
+ * resource.ts — Learning KB resource + concept operations
  */
 import { ulid } from "ulid"
 import { eq, and, desc } from "drizzle-orm"
@@ -8,36 +8,18 @@ import path from "path"
 import { Database } from "../storage/db"
 import {
   LearningResourceTable,
-  LearningResourceWikiPlacementTable,
-  LearningConceptTable,
-  LearningConceptWikiPlacementTable,
-  LearningWikiPageTable,
-  LearningMediaAssetTable,
 } from "./schema.sql"
 
 export type Resource = typeof LearningResourceTable.$inferSelect
-export type Placement = typeof LearningResourceWikiPlacementTable.$inferSelect
-export type Concept = typeof LearningConceptTable.$inferSelect
 
 export type Modality = "url" | "pdf" | "youtube" | "text" | "image" | "linkedin"
 export type ResourceStatus = "pending" | "processing" | "done" | "failed"
-
-export interface PlacementInput {
-  resource_id: string
-  wiki_page_id: string
-  section_slug: string
-  section_heading: string
-  extracted_content: string
-  media_asset_ids?: string[]
-  placement_position?: number
-  confidence?: number
-}
 
 // ─── Resource ─────────────────────────────────────────────────────────────────
 
 export namespace Resource {
   export function create(input: {
-    workspace_id: string
+    workspace_id?: string | null
     modality: Modality
     url?: string
     title?: string
@@ -52,7 +34,7 @@ export namespace Resource {
     Database.use((db) =>
       db.insert(LearningResourceTable).values({
         id,
-        workspace_id: input.workspace_id,
+        workspace_id: input.workspace_id ?? null,
         modality: input.modality,
         url: input.url,
         title: input.title,
@@ -64,7 +46,7 @@ export namespace Resource {
         relevance_score: 0,
         metadata: input.metadata ?? {},
         published_at: input.published_at,
-        memorized_at: now,
+        added_at: now,
         time_created: now,
         time_updated: now,
       }).run(),
@@ -125,283 +107,10 @@ export namespace Resource {
         .select()
         .from(LearningResourceTable)
         .where(eq(LearningResourceTable.workspace_id, workspaceId))
-        .orderBy(desc(LearningResourceTable.memorized_at))
+        .orderBy(desc(LearningResourceTable.added_at))
         .limit(limit)
         .all(),
     )
   }
 }
 
-// ─── Placement ────────────────────────────────────────────────────────────────
-
-export namespace Placement {
-  export function create(input: PlacementInput): Placement {
-    const now = Date.now()
-    const id = ulid()
-    Database.use((db) =>
-      db.insert(LearningResourceWikiPlacementTable).values({
-        id,
-        resource_id: input.resource_id,
-        wiki_page_id: input.wiki_page_id,
-        section_slug: input.section_slug,
-        section_heading: input.section_heading,
-        extracted_content: input.extracted_content,
-        media_asset_ids: input.media_asset_ids ?? [],
-        placement_position: input.placement_position ?? 0,
-        confidence: input.confidence ?? 1.0,
-        placed_at: now,
-        time_created: now,
-        time_updated: now,
-      }).run(),
-    )
-
-    // Increment resource_count on the wiki page
-    Database.use((db) => {
-      const page = db.select().from(LearningWikiPageTable).where(eq(LearningWikiPageTable.id, input.wiki_page_id)).get()
-      if (page) {
-        db.update(LearningWikiPageTable)
-          .set({ resource_count: page.resource_count + 1, time_updated: now })
-          .where(eq(LearningWikiPageTable.id, input.wiki_page_id))
-          .run()
-      }
-    })
-
-    return get(id)!
-  }
-
-  export function get(id: string): Placement | undefined {
-    return Database.use((db) =>
-      db.select().from(LearningResourceWikiPlacementTable).where(eq(LearningResourceWikiPlacementTable.id, id)).get(),
-    )
-  }
-
-  export function byPage(wikiPageId: string): Placement[] {
-    return Database.use((db) =>
-      db
-        .select()
-        .from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.wiki_page_id, wikiPageId))
-        .orderBy(LearningResourceWikiPlacementTable.section_slug, LearningResourceWikiPlacementTable.placement_position)
-        .all(),
-    )
-  }
-
-  export function byResource(resourceId: string): Placement[] {
-    return Database.use((db) =>
-      db
-        .select()
-        .from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.resource_id, resourceId))
-        .all(),
-    )
-  }
-
-  export function exists(resourceId: string, wikiPageId: string, sectionSlug: string): boolean {
-    const row = Database.use((db) =>
-      db
-        .select()
-        .from(LearningResourceWikiPlacementTable)
-        .where(
-          and(
-            eq(LearningResourceWikiPlacementTable.resource_id, resourceId),
-            eq(LearningResourceWikiPlacementTable.wiki_page_id, wikiPageId),
-            eq(LearningResourceWikiPlacementTable.section_slug, sectionSlug),
-          ),
-        )
-        .get(),
-    )
-    return !!row
-  }
-
-  export function attachAssets(placementId: string, assetIds: string[]): void {
-    const existing = Database.use((db) =>
-      db.select({ media_asset_ids: LearningResourceWikiPlacementTable.media_asset_ids })
-        .from(LearningResourceWikiPlacementTable)
-        .where(eq(LearningResourceWikiPlacementTable.id, placementId))
-        .get()
-    )
-    if (!existing) return
-    const current: string[] = (existing.media_asset_ids as string[] | null) ?? []
-    const merged = Array.from(new Set([...current, ...assetIds]))
-    Database.use((db) =>
-      db.update(LearningResourceWikiPlacementTable)
-        .set({ media_asset_ids: merged, time_updated: Date.now() })
-        .where(eq(LearningResourceWikiPlacementTable.id, placementId))
-        .run()
-    )
-  }
-}
-
-// ─── MediaAsset ───────────────────────────────────────────────────────────────
-
-export type MediaAsset = typeof LearningMediaAssetTable.$inferSelect
-
-export namespace MediaAsset {
-  export function create(input: {
-    resource_id: string
-    workspace_id: string
-    asset_type: string
-    source_url?: string
-    local_path: string
-    alt_text?: string
-    caption?: string
-    description?: string
-    width?: number
-    height?: number
-    mime_type?: string
-    is_diagram?: boolean
-  }): MediaAsset {
-    const now = Date.now()
-    const id = ulid()
-    Database.use((db) =>
-      db.insert(LearningMediaAssetTable).values({
-        id,
-        resource_id: input.resource_id,
-        workspace_id: input.workspace_id,
-        asset_type: input.asset_type,
-        source_url: input.source_url,
-        local_path: input.local_path,
-        alt_text: input.alt_text,
-        caption: input.caption,
-        description: input.description,
-        width: input.width,
-        height: input.height,
-        mime_type: input.mime_type,
-        is_diagram: input.is_diagram ?? false,
-        time_created: now,
-        time_updated: now,
-      }).run()
-    )
-    return get(id)!
-  }
-
-  export function get(id: string): MediaAsset | undefined {
-    return Database.use((db) =>
-      db.select().from(LearningMediaAssetTable).where(eq(LearningMediaAssetTable.id, id)).get()
-    )
-  }
-
-  export function byResource(resourceId: string): MediaAsset[] {
-    return Database.use((db) =>
-      db.select().from(LearningMediaAssetTable)
-        .where(eq(LearningMediaAssetTable.resource_id, resourceId))
-        .all()
-    )
-  }
-
-  export function findByLocalPath(workspaceId: string, localPath: string): MediaAsset | undefined {
-    return Database.use((db) =>
-      db.select().from(LearningMediaAssetTable)
-        .where(and(
-          eq(LearningMediaAssetTable.workspace_id, workspaceId),
-          eq(LearningMediaAssetTable.local_path, localPath),
-        ))
-        .get()
-    )
-  }
-}
-
-// ─── Concepts ─────────────────────────────────────────────────────────────────
-
-export namespace ConceptStore {
-  export function upsert(input: {
-    workspace_id: string
-    category_id?: string
-    name: string
-    slug: string
-    definition?: string
-    explanation?: string
-    aliases?: string[]
-    related_slugs?: string[]
-  }): Concept {
-    const existing = Database.use((db) =>
-      db
-        .select()
-        .from(LearningConceptTable)
-        .where(and(eq(LearningConceptTable.workspace_id, input.workspace_id), eq(LearningConceptTable.slug, input.slug)))
-        .get(),
-    )
-
-    const now = Date.now()
-    if (existing) {
-      Database.use((db) =>
-        db
-          .update(LearningConceptTable)
-          .set({
-            definition: input.definition ?? existing.definition,
-            explanation: input.explanation ?? existing.explanation,
-            aliases: [...new Set([...existing.aliases, ...(input.aliases ?? [])])],
-            related_slugs: [...new Set([...existing.related_slugs, ...(input.related_slugs ?? [])])],
-            time_updated: now,
-          })
-          .where(eq(LearningConceptTable.id, existing.id))
-          .run(),
-      )
-      return Database.use((db) =>
-        db.select().from(LearningConceptTable).where(eq(LearningConceptTable.id, existing.id)).get(),
-      )!
-    }
-
-    const id = ulid()
-    Database.use((db) =>
-      db.insert(LearningConceptTable).values({
-        id,
-        workspace_id: input.workspace_id,
-        category_id: input.category_id,
-        name: input.name,
-        slug: input.slug,
-        definition: input.definition,
-        explanation: input.explanation,
-        aliases: input.aliases ?? [],
-        related_slugs: input.related_slugs ?? [],
-        first_seen_at: now,
-        time_created: now,
-        time_updated: now,
-      }).run(),
-    )
-    return Database.use((db) =>
-      db.select().from(LearningConceptTable).where(eq(LearningConceptTable.id, id)).get(),
-    )!
-  }
-
-  export function linkToPage(conceptId: string, wikiPageId: string, sectionSlug?: string, introducedByResourceId?: string): void {
-    // Validate FK — skip silently if the wiki page doesn't exist
-    const pageExists = Database.use((db) =>
-      db.select({ id: LearningWikiPageTable.id }).from(LearningWikiPageTable)
-        .where(eq(LearningWikiPageTable.id, wikiPageId)).get(),
-    )
-    if (!pageExists) return
-
-    const existing = Database.use((db) =>
-      db
-        .select()
-        .from(LearningConceptWikiPlacementTable)
-        .where(
-          and(
-            eq(LearningConceptWikiPlacementTable.concept_id, conceptId),
-            eq(LearningConceptWikiPlacementTable.wiki_page_id, wikiPageId),
-          ),
-        )
-        .get(),
-    )
-    if (existing) return
-
-    const now = Date.now()
-    Database.use((db) =>
-      db.insert(LearningConceptWikiPlacementTable).values({
-        concept_id: conceptId,
-        wiki_page_id: wikiPageId,
-        section_slug: sectionSlug,
-        introduced_by_resource_id: introducedByResourceId,
-        time_created: now,
-        time_updated: now,
-      }).run(),
-    )
-  }
-
-  export function byWorkspace(workspaceId: string): Concept[] {
-    return Database.use((db) =>
-      db.select().from(LearningConceptTable).where(eq(LearningConceptTable.workspace_id, workspaceId)).all(),
-    )
-  }
-}

@@ -1,5 +1,6 @@
 import path from "path"
 import os from "os"
+import { readFileSync, existsSync } from "fs"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -33,6 +34,11 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
+import { Resource } from "@/learning/resource"
+import { Workspace as WorkspaceStore } from "@/learning/workspace"
+import { Instance } from "@/project/instance"
+import { Database } from "@/storage/db"
+import { eq, and } from "drizzle-orm"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
@@ -957,6 +963,31 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<MessageV2.Part>[]> = Effect.fn(
           "SessionPrompt.resolveUserPart",
         )(function* (part) {
+          if (part.type === "file" && part.url.startsWith("kb-resource:")) {
+            const resourceId = part.url.slice("kb-resource:".length)
+            const resource = Resource.get(resourceId)
+            if (!resource) {
+              return [{
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `KB Resource not found: ${resourceId}`,
+              }]
+            }
+            const workspace = WorkspaceStore.getById(resource.workspace_id)
+            const content = workspace
+              ? Resource.getRawContent(resource, workspace.kb_path)
+              : (resource.raw_content ?? "")
+            return [{
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text",
+              synthetic: true,
+              text: `[KB Resource: ${resource.title ?? resourceId}]\n\n${content}`,
+            }]
+          }
+
           if (part.type === "file") {
             if (part.source?.type === "resource") {
               const { clientName, uri } = part.source
@@ -1218,6 +1249,44 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             ]
           }
 
+          // Expand @note:Title mentions into wiki page content
+          if (part.type === "text" && part.text.includes("@note:")) {
+            const ws = WorkspaceStore.getByKbPath(Instance.directory)
+            if (ws) {
+              const noteMentions = [...part.text.matchAll(/@note:([^\s@,;]+(?:\s[^\s@,;]+)*)/g)]
+              if (noteMentions.length > 0) {
+                const expansions: string[] = []
+                for (const match of noteMentions) {
+                  const noteTitle = match[1].trim()
+                  const notePath = path.join(ws.kb_path, noteTitle.replace(/\s+/g, "-").toLowerCase() + ".md")
+                  let content = ""
+                  try {
+                    if (existsSync(notePath)) {
+                      content = readFileSync(notePath, "utf8").slice(0, 4000)
+                      expansions.push(`## Note context: "${noteTitle}"\n\n${content}`)
+                    } else {
+                      expansions.push(`[Note "${noteTitle}" not found in KB]`)
+                    }
+                  } catch {
+                    expansions.push(`[Note "${noteTitle}" could not be read]`)
+                  }
+                }
+                if (expansions.length > 0) {
+                  return [
+                    { ...part, messageID: info.id, sessionID: input.sessionID },
+                    {
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text" as const,
+                      synthetic: true,
+                      text: expansions.join("\n\n---\n\n"),
+                    },
+                  ]
+                }
+              }
+            }
+          }
+
           return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
         })
 
@@ -1284,7 +1353,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           if (input.noReply === true) return message
-          return yield* loop({ sessionID: input.sessionID })
+          const loopResult = yield* loop({ sessionID: input.sessionID })
+
+          // After each exchange in a learn session, fire-and-forget gaps update
+          if (session.sessionType === "learn" && session.learnResourceId) {
+            const sid = input.sessionID
+            const rid = session.learnResourceId
+            Database.effect(() => {
+              void import("@/learning/gaps").then(({ updateGapsAndGoals }) =>
+                updateGapsAndGoals(sid, rid).catch((e) =>
+                  Log.create({ service: "learn" }).error("gaps update failed", { error: e }),
+                ),
+              )
+            })
+          }
+
+          return loopResult
         },
       )
 
@@ -1472,6 +1556,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 MessageV2.toModelMessagesEffect(msgs, model),
               ])
               const system = [...env, ...(skills ? [skills] : []), ...instructions]
+
+              // Inject learn-mode system instruction when session_type is "learn"
+              if (session.sessionType === "learn" && session.learnResourceId) {
+                const learnResource = Resource.get(session.learnResourceId)
+                const learnTitle = learnResource?.title ?? learnResource?.url ?? "this resource"
+                system.push({
+                  type: "text" as const,
+                  text: [
+                    `You are helping the user learn about: "${learnTitle}".`,
+                    "Your role in this session:",
+                    "- Answer questions clearly and explain concepts from the resource",
+                    "- Use Socratic questioning to probe and deepen understanding",
+                    "- When the user demonstrates misunderstanding, gently correct it",
+                    "- At the end of each substantive exchange, briefly note what the user understood well and any gap that became apparent",
+                    "- Do NOT use tools unless the user explicitly asks you to search or read files",
+                    "Stay focused on the resource content and the user's learning.",
+                  ].join("\n"),
+                })
+              }
               const format = lastUser.format ?? { type: "text" as const }
               if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
               const result = yield* handle.process({
@@ -1615,7 +1718,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         // Mark all template text parts as synthetic so the raw template isn't
         // shown in chat. A short display part (the original command invocation)
-        // is prepended so the user sees e.g. "/memorize https://..." instead.
+        // is prepended so the user sees e.g. "/add-resource https://..." instead.
         const syntheticTemplateParts = templateParts.map((p) =>
           p.type === "text" ? { ...p, synthetic: true } : p,
         )

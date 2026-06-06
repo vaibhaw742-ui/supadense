@@ -1,4 +1,5 @@
 import { DataProvider } from "@opencode-ai/ui/context"
+import { SupadenseFAB } from "@/components/supadense-chat-panel"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
@@ -75,6 +76,7 @@ export default function Layout(props: ParentProps) {
         <SDKProvider directory={() => resolved}>
           <SyncProvider>
             <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            <SupadenseFAB />
           </SyncProvider>
         </SDKProvider>
       )}

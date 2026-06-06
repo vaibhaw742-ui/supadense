@@ -10,7 +10,7 @@ import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceRoutes } from "./instance"
 import { DirectoryInUseError } from "@/project/project"
-import { defaultKBDir } from "@/util/workspace-provision"
+import { userWorkspaceDir } from "@/util/workspace-provision"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -33,7 +33,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
 
   return async (c) => {
     const userId = c.get("userId") as string | undefined
-    const defaultDir = userId ? defaultKBDir(userId) : process.cwd()
+    const defaultDir = userId ? userWorkspaceDir(userId) : (typeof process !== "undefined" ? process.cwd() : "/")
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || defaultDir
     const directory = Filesystem.resolve(
       (() => {
@@ -46,11 +46,12 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     )
 
     // When auth is active, lock every request to the authenticated user's workspace.
-    // Reject any directory that isn't strictly under /workspaces/{userId}/ — this blocks
-    // both cross-user paths (/workspaces/other/) and arbitrary disk paths (/etc, /root, …).
+    // Allow the user's root dir itself (/workspaces/{userId}) and any subdirectory under it.
+    // Reject cross-user paths and arbitrary disk paths (/etc, /root, …).
     if (userId) {
-      const allowed = `/workspaces/${userId}/`
-      if (!directory.startsWith(allowed)) {
+      const userRoot = userWorkspaceDir(userId)
+      const allowed = `${userRoot}/`
+      if (directory !== userRoot && !directory.startsWith(allowed)) {
         return new Response(JSON.stringify({ error: "forbidden", message: "Directory does not belong to you." }), {
           status: 403,
           headers: { "content-type": "application/json" },

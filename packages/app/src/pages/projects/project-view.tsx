@@ -1,13 +1,12 @@
 import { createResource, createEffect, createSignal, onCleanup, Show, For } from "solid-js"
 import { useParams } from "@solidjs/router"
 import * as d3 from "d3"
-import { elApi, type GraphNode, type GraphEdge, type ProjectNode, type TreeEntry } from "./el-api"
+import { elApi, type GraphNode, type GraphEdge, type TreeEntry } from "./el-api"
 import { setActiveGraphProjectId, setActiveGraphProjectName, projectViewMode, setProjectViewMode } from "@/context/sidebar-view"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const AMBER = "#d68a2e"
-const CONTRIBUTOR_COLORS = ["#3b82f6", "#8b5cf6", "#f97316", "#06b6d4", "#10b981"]
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,27 +18,28 @@ interface ConceptNode extends d3.SimulationNodeDatum {
   radius: number
 }
 
-interface ContributorNode extends d3.SimulationNodeDatum {
-  kind: "contributor"
-  id: string
-  label: string
-  initials: string
-  color: string
-  branch: string
-}
-
 interface GapNode extends d3.SimulationNodeDatum {
   kind: "gap"
   id: string
   label: string
 }
 
-type SimNode = ConceptNode | ContributorNode | GapNode
+interface ResourceNode extends d3.SimulationNodeDatum {
+  kind: "resource"
+  subtype: "github" | "source"
+  id: string
+  label: string
+  url?: string
+  status?: string
+  resource_id?: string
+}
+
+type SimNode = ConceptNode | GapNode | ResourceNode
 
 interface SimEdge extends d3.SimulationLinkDatum<SimNode> {
   source: SimNode | string
   target: SimNode | string
-  kind: "concept-concept" | "contributor-concept" | "gap"
+  kind: "concept-concept" | "gap" | "github-concept" | "source-concept"
   label: string
 }
 
@@ -71,25 +71,6 @@ function buildGraph(
     return { kind: "concept", id: n.id, label: n.label, edgeCount: ec, radius }
   })
 
-  // --- Build contributor nodes ---
-  const seenEmails = new Set<string>()
-  const uniqueContributors: Array<{ name: string; email: string; sha: string }> = []
-  for (const c of commits) {
-    if (!seenEmails.has(c.author_email)) {
-      seenEmails.add(c.author_email)
-      uniqueContributors.push({ name: c.author_name, email: c.author_email, sha: c.sha })
-    }
-  }
-
-  const simContributorNodes: ContributorNode[] = uniqueContributors.map((c, i) => ({
-    kind: "contributor",
-    id: `contributor-${c.email}`,
-    label: c.name,
-    initials: c.name.split(" ").map((p) => p[0]?.toUpperCase() ?? "").slice(0, 2).join(""),
-    color: CONTRIBUTOR_COLORS[i % CONTRIBUTOR_COLORS.length],
-    branch: `#${c.sha.slice(0, 7)}`,
-  }))
-
   // --- Build gap nodes (orphaned concepts: no edges) ---
   const connectedIds = new Set(graphEdges.flatMap((e) => [e.source, e.target]))
   const orphanConcepts = conceptNodes.filter((n) => !connectedIds.has(n.id)).slice(0, 3)
@@ -99,7 +80,19 @@ function buildGraph(
     label: n.label,
   }))
 
-  const allNodes: SimNode[] = [...simConceptNodes, ...simContributorNodes, ...simGapNodes]
+  // --- Build resource nodes ---
+  const resourceNodes = graphNodes.filter((n) => n.type === "resource" || n.type === "github" || n.type === "source")
+  const simResourceNodes: ResourceNode[] = resourceNodes.map((n) => ({
+    kind: "resource",
+    subtype: n.type === "github" ? "github" : "source",
+    id: n.id,
+    label: n.label,
+    url: n.url,
+    status: n.status,
+    resource_id: n.resource_id,
+  }))
+
+  const allNodes: SimNode[] = [...simConceptNodes, ...simGapNodes, ...simResourceNodes]
 
   // --- Build edges ---
   const conceptEdges: SimEdge[] = graphEdges
@@ -110,18 +103,20 @@ function buildGraph(
       return { source: e.source, target: e.target, kind: "concept-concept" as const, label }
     })
 
-  const contributorEdges: SimEdge[] = simContributorNodes.flatMap((c, ci) => {
-    if (simConceptNodes.length === 0) return []
-    const target = simConceptNodes[ci % simConceptNodes.length]
-    return [{ source: c.id, target: target.id, kind: "contributor-concept" as const, label: c.branch }]
-  })
-
   const gapEdges: SimEdge[] = simGapNodes.map((g, gi) => {
     const target = simConceptNodes[gi % Math.max(simConceptNodes.length, 1)]
     return { source: g.id, target: target?.id ?? g.id, kind: "gap" as const, label: "gap · no owner" }
   })
 
-  const allEdges: SimEdge[] = [...conceptEdges, ...contributorEdges, ...gapEdges]
+  // Resource→concept edges (connect each resource to a concept if any exist)
+  const resourceEdges: SimEdge[] = simResourceNodes.flatMap((r, ri) => {
+    if (simConceptNodes.length === 0) return []
+    const target = simConceptNodes[ri % simConceptNodes.length]
+    const kind = r.subtype === "github" ? "github-concept" as const : "source-concept" as const
+    return [{ source: r.id, target: target.id, kind, label: "" }]
+  })
+
+  const allEdges: SimEdge[] = [...conceptEdges, ...gapEdges, ...resourceEdges]
 
   // --- SVG setup ---
   const svg = d3
@@ -154,10 +149,10 @@ function buildGraph(
   const simulation = d3
     .forceSimulation<SimNode>(allNodes)
     .force("link", d3.forceLink<SimNode, SimEdge>(allEdges).id((d) => d.id).distance(140).strength(0.6))
-    .force("charge", d3.forceManyBody<SimNode>().strength((d) => d.kind === "concept" ? -350 : -200))
+    .force("charge", d3.forceManyBody<SimNode>().strength((d) => d.kind === "concept" ? -350 : d.kind === "resource" ? -180 : -200))
     .force("collide", d3.forceCollide<SimNode>((d) => {
       if (d.kind === "concept") return (d as ConceptNode).radius + 22
-      if (d.kind === "contributor") return 44
+      if (d.kind === "resource") return (d as ResourceNode).subtype === "github" ? 48 : 36
       return 20
     }))
     .force("center", d3.forceCenter(W / 2, H / 2))
@@ -169,9 +164,14 @@ function buildGraph(
     .selectAll("line")
     .data(allEdges)
     .join("line")
-    .attr("stroke", (d) => d.kind === "concept-concept" ? AMBER : d.kind === "contributor-concept" ? "#3b82f6" : "#94a3b8")
+    .attr("stroke", (d) =>
+      d.kind === "concept-concept" ? AMBER :
+      d.kind === "github-concept" ? "#6366f1" :
+      d.kind === "source-concept" ? "#0d9488" :
+      "#94a3b8"
+    )
     .attr("stroke-width", (d) => d.kind === "concept-concept" ? 2 : 1.5)
-    .attr("stroke-dasharray", (d) => d.kind === "contributor-concept" ? "6,3" : d.kind === "gap" ? "3,3" : "none")
+    .attr("stroke-dasharray", (d) => d.kind === "gap" ? "3,3" : (d.kind === "github-concept" || d.kind === "source-concept") ? "4,2" : "none")
     .attr("stroke-opacity", 0.7)
     .attr("marker-end", (d) => d.kind === "concept-concept" ? "url(#arrow-amber)" : "none")
 
@@ -232,36 +232,62 @@ function buildGraph(
       .style("pointer-events", "none")
   })
 
-  // Contributor nodes — small colored circles
-  nodeEls.filter((d) => d.kind === "contributor").each(function (d) {
-    const n = d as ContributorNode
+  // GitHub repo nodes — dark rounded rect with GitHub icon color
+  nodeEls.filter((d) => d.kind === "resource" && (d as ResourceNode).subtype === "github").each(function (d) {
+    const n = d as ResourceNode
     const el = d3.select(this)
-    el.append("circle")
-      .attr("r", 22)
-      .attr("fill", "#ffffff")
-      .attr("stroke", n.color)
-      .attr("stroke-width", 2.5)
+    const w = 64; const h = 28
+    el.append("rect")
+      .attr("x", -w / 2).attr("y", -h / 2)
+      .attr("width", w).attr("height", h)
+      .attr("rx", 6).attr("ry", 6)
+      .attr("fill", "#1a1a2e")
+      .attr("stroke", "#6366f1")
+      .attr("stroke-width", 2)
+    // "GH" badge
     el.append("text")
-      .text(n.initials)
+      .text("GH")
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "middle")
-      .attr("font-size", 12)
+      .attr("y", 0)
+      .attr("font-size", 10)
       .attr("font-weight", "700")
-      .attr("fill", n.color)
+      .attr("fill", "#a5b4fc")
       .style("pointer-events", "none")
+    // Label below
     el.append("text")
-      .text(n.label.split(" ")[0])
+      .text(n.label.length > 24 ? n.label.slice(0, 22) + "…" : n.label)
       .attr("text-anchor", "middle")
-      .attr("y", 34)
+      .attr("y", h / 2 + 13)
       .attr("font-size", 10)
       .attr("fill", "#374151")
       .style("pointer-events", "none")
+  })
+
+  // Source nodes — teal rounded rect for captured sources
+  nodeEls.filter((d) => d.kind === "resource" && (d as ResourceNode).subtype === "source").each(function (d) {
+    const n = d as ResourceNode
+    const el = d3.select(this)
+    const size = 14
+    el.append("rect")
+      .attr("x", -size).attr("y", -size)
+      .attr("width", size * 2).attr("height", size * 2)
+      .attr("rx", 5).attr("ry", 5)
+      .attr("fill", "#0d948822")
+      .attr("stroke", "#0d9488")
+      .attr("stroke-width", 2)
+    // Status dot
+    const statusColor = n.status === "done" ? "#22c55e" : n.status === "failed" ? "#ef4444" : "#f97316"
+    el.append("circle")
+      .attr("r", 4).attr("cx", size - 2).attr("cy", -(size - 2))
+      .attr("fill", statusColor).attr("stroke", "#fff").attr("stroke-width", 1)
+    // Label below
     el.append("text")
-      .text(n.branch)
+      .text(n.label.length > 22 ? n.label.slice(0, 20) + "…" : n.label)
       .attr("text-anchor", "middle")
-      .attr("y", 46)
-      .attr("font-size", 9)
-      .attr("fill", "#9ca3af")
+      .attr("y", size + 14)
+      .attr("font-size", 10)
+      .attr("fill", "#374151")
       .style("pointer-events", "none")
   })
 
@@ -315,10 +341,21 @@ export default function ProjectView() {
   const [commitsOpen, setCommitsOpen] = createSignal(false)
   const [branchesOpen, setBranchesOpen] = createSignal(false)
 
-  const [projectData] = createResource(() => params.id, (id) => elApi.getProject(id))
+  const [projectData, { refetch: refetchProject }] = createResource(() => params.id, (id) => elApi.getProject(id))
   const [graphData] = createResource(() => params.id, (id) => elApi.getGraph(id))
   const [commitData] = createResource(() => params.id, (id) => elApi.listCommits(id, undefined, 100))
   const [branchData] = createResource(() => params.id, (id) => elApi.listBranches(id))
+
+  // Poll clone status while cloning/indexing
+  createEffect(() => {
+    const p = projectData()?.project
+    if (!p) return
+    const status = p.clone_status
+    if (status === "cloning" || status === "indexing") {
+      const t = setInterval(() => void refetchProject(), 3000)
+      onCleanup(() => clearInterval(t))
+    }
+  })
 
   // Sync project name into titlebar breadcrumb
   createEffect(() => {
@@ -390,7 +427,64 @@ export default function ProjectView() {
 
         {/* Code mode */}
         <Show when={projectViewMode() === "code"}>
-          <CodeView projectId={params.id} mode="code" />
+          {(() => {
+            const p = projectData()?.project
+            const cloneStatus = p?.clone_status
+            const githubUrl = (p?.context_json as any)?.github_url
+
+            // Cloning / indexing in progress
+            if (cloneStatus === "cloning" || cloneStatus === "indexing") {
+              return (
+                <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: "14px" }}>
+                  <div style={{ width: "28px", height: "28px", border: "3px solid #e5e7eb", "border-top-color": "#d68a2e", "border-radius": "50%", animation: "spin 0.8s linear infinite" }} />
+                  <span style={{ "font-size": "14px", "font-weight": "500", color: "#374151" }}>
+                    {cloneStatus === "cloning" ? "Cloning repository…" : "Indexing files…"}
+                  </span>
+                  <Show when={githubUrl}>
+                    <span style={{ "font-size": "12px", color: "#9ca3af" }}>{githubUrl}</span>
+                  </Show>
+                </div>
+              )
+            }
+
+            // Clone failed
+            if (cloneStatus === "failed") {
+              return (
+                <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: "10px" }}>
+                  <span style={{ "font-size": "14px", "font-weight": "500", color: "#ef4444" }}>Clone failed</span>
+                  <span style={{ "font-size": "12px", color: "#9ca3af", "max-width": "360px", "text-align": "center" }}>{p?.clone_error ?? "Unknown error"}</span>
+                  <button
+                    type="button"
+                    onClick={() => elApi.cloneRepo(params.id).then(() => refetchProject())}
+                    style={{ "margin-top": "8px", padding: "7px 18px", "border-radius": "6px", border: "1px solid #d68a2e", background: "transparent", color: "#d68a2e", "font-size": "12px", cursor: "pointer" }}
+                  >Retry clone</button>
+                </div>
+              )
+            }
+
+            // No repo connected
+            if (!p?.repo_local_path) {
+              return (
+                <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: "12px" }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                  </svg>
+                  <span style={{ "font-size": "14px", "font-weight": "500", color: "#6b7280" }}>No repository connected</span>
+                  <span style={{ "font-size": "12px", color: "#9ca3af" }}>Add a GitHub repo URL when creating a project</span>
+                  <Show when={githubUrl}>
+                    <button
+                      type="button"
+                      onClick={() => elApi.cloneRepo(params.id).then(() => refetchProject())}
+                      style={{ "margin-top": "4px", padding: "7px 18px", "border-radius": "6px", border: "none", background: "#d68a2e", color: "#fff", "font-size": "12px", cursor: "pointer" }}
+                    >Clone now</button>
+                  </Show>
+                </div>
+              )
+            }
+
+            // Repo ready — show file tree
+            return <CodeView projectId={params.id} mode="code" />
+          })()}
         </Show>
       </div>
 
@@ -776,10 +870,10 @@ function flattenTree(
 }
 
 function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
-  // brain mode: use indexed nodes from getNodes()
-  const [nodes] = createResource(
+  // brain mode: .supadense/ filesystem tree
+  const [supadenseTree] = createResource(
     () => props.mode === "brain" ? props.projectId : null,
-    (id) => id ? elApi.getNodes(id) : Promise.resolve([]),
+    (id) => id ? elApi.getSupadenseTree(id) : Promise.resolve({ entries: [] }),
   )
   // code mode: use real repo tree from getTree()
   const [tree] = createResource(
@@ -789,7 +883,7 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
   const [openFiles, setOpenFiles] = createSignal<string[]>([])
   const [activeFile, setActiveFile] = createSignal<string | null>(null)
   const [search, setSearch] = createSignal("")
-  // Collapsed folder paths
+  // Collapsed folder paths (shared by both brain and code modes)
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set())
 
   function toggleFolder(path: string) {
@@ -801,11 +895,12 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
     })
   }
 
-  // Collapsed brain node paths
-  const [collapsedNodes, setCollapsedNodes] = createSignal<Set<string>>(new Set())
-
   const [fileContent] = createResource(activeFile, (path) =>
-    path ? elApi.getFileContent(props.projectId, path) : Promise.resolve(null)
+    path
+      ? props.mode === "brain"
+        ? elApi.getSupadenseFileContent(props.projectId, path)
+        : elApi.getFileContent(props.projectId, path)
+      : Promise.resolve(null)
   )
 
   function openFile(path: string) {
@@ -822,25 +917,6 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
 
   function getFileName(path: string) {
     return path.split("/").pop() ?? path
-  }
-
-  function parseFilesJson(node: ProjectNode) {
-    const raw = node.files_json
-    if (!raw) return []
-    if (typeof raw === "string") {
-      try { return JSON.parse(raw) as ProjectNode["files_json"] } catch { return [] }
-    }
-    return raw
-  }
-
-  function filteredNodes() {
-    const q = search().toLowerCase()
-    const all = nodes() ?? []
-    if (!q) return all
-    return all.filter((n) =>
-      n.name.toLowerCase().includes(q) ||
-      parseFilesJson(n).some((f) => f.name.toLowerCase().includes(q))
-    )
   }
 
   return (
@@ -885,46 +961,38 @@ function CodeView(props: { projectId: string; mode: "brain" | "code" }) {
 
         {/* Tree */}
         <div style={{ flex: "1", "overflow-y": "auto" }}>
-          <Show when={nodes?.loading || tree?.loading}>
+          <Show when={supadenseTree?.loading || tree?.loading}>
             <div style={{ padding: "16px 12px", "font-size": "11px", color: "#a3a3a3", "font-family": MONO }}>Loading…</div>
           </Show>
 
-          {/* Brain mode: indexed nodes */}
+          {/* Brain mode: .supadense/ filesystem tree */}
           <Show when={props.mode === "brain"}>
-            <For each={filteredNodes()}>
-              {(node) => {
-                const indent = node.depth * 16
-                const files = parseFilesJson(node)
-                const isCollapsed = () => collapsedNodes().has(node.path)
-                return (
-                  <>
+            <For each={flattenTree(supadenseTree()?.entries ?? [], collapsed())}>
+              {(entry) => {
+                const indent = entry.depth * 16
+                const isActive = () => entry.type === "file" && activeFile() === entry.path
+                const isCollapsed = () => entry.type === "dir" && collapsed().has(entry.path)
+                if (entry.type === "dir") {
+                  return (
                     <div
-                      onClick={() => setCollapsedNodes((prev) => { const n = new Set(prev); n.has(node.path) ? n.delete(node.path) : n.add(node.path); return n })}
+                      onClick={() => toggleFolder(entry.path)}
                       style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent}px`, "font-family": MONO, "font-size": "11px", color: "#374151", cursor: "pointer" }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = "#f5f5f5" }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
                     >
-                      {/* Chevron */}
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" stroke-width="2.5" stroke-linecap="round" style={{ "flex-shrink": "0", transition: "transform 120ms", transform: isCollapsed() ? "rotate(-90deg)" : "rotate(0deg)" }}><polyline points="6 9 12 15 18 9"/></svg>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d68a2e" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{node.name}/</span>
+                      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{entry.name}</span>
                     </div>
-                    <Show when={!isCollapsed()}>
-                      <For each={files}>
-                        {(file) => {
-                          const isActive = () => activeFile() === file.path
-                          return (
-                            <div onClick={() => openFile(file.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent + 26}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
-                              onMouseEnter={(e) => { if (!isActive()) e.currentTarget.style.background = "#f5f5f5" }}
-                              onMouseLeave={(e) => { if (!isActive()) e.currentTarget.style.background = "transparent" }}>
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                              <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{file.name}</span>
-                            </div>
-                          )
-                        }}
-                      </For>
-                    </Show>
-                  </>
+                  )
+                }
+                return (
+                  <div onClick={() => openFile(entry.path)} style={{ display: "flex", "align-items": "center", gap: "6px", height: "32px", padding: `0 10px 0 ${10 + indent + 10}px`, "font-family": MONO, "font-size": "11px", color: isActive() ? "#d68a2e" : "#374151", background: isActive() ? "#fff8f0" : "transparent", "border-left": isActive() ? "2px solid #d68a2e" : "2px solid transparent", cursor: "pointer" }}
+                    onMouseEnter={(e) => { if (!isActive()) e.currentTarget.style.background = "#f5f5f5" }}
+                    onMouseLeave={(e) => { if (!isActive()) e.currentTarget.style.background = "transparent" }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style={{ "flex-shrink": "0" }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{entry.name}</span>
+                  </div>
                 )
               }}
             </For>

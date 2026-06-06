@@ -71,7 +71,17 @@ export function useWikiApi() {
   }
 
   return {
+    assetUrl: (localPath: string) => `${baseUrl()}/wiki/assets/${localPath}`,
+    proxyImageUrl: (externalUrl: string) => {
+      const dir = decode64(params.dir) ?? ""
+      const token = getAuthToken()
+      const q = new URLSearchParams({ directory: dir, url: externalUrl })
+      if (token) q.set("auth_token", token)
+      return `${baseUrl()}/wiki/proxy-image?${q.toString()}`
+    },
     home: () => get<WikiHomeData>("/wiki/home"),
+    graph: () => get<GraphDataFull>("/wiki/graph"),
+    resources: () => get<WikiResourceListItem[]>("/wiki/resources").catch(() => [] as WikiResourceListItem[]),
     page: (slug: string) => get<WikiPageData>(`/wiki/page/${slug}`),
     resource: (id: string) => get<WikiResourceData>(`/wiki/resource/${id}`),
     concepts: () => get<WikiConcept[]>("/wiki/concepts"),
@@ -79,13 +89,7 @@ export function useWikiApi() {
     pages: () => get<WikiPageSummary[]>("/wiki/pages"),
     roadmapList: () => get<{ docs: WikiRoadmapDoc[] }>("/wiki/roadmap"),
     roadmapDoc: (slug: string) => get<WikiRoadmapDocFull>(`/wiki/roadmap/${slug}`),
-    onboard: (params: {
-      template: "ml" | "software" | "custom"
-      learning_intent: string
-      goals: string[]
-      categories?: { slug: string; name: string; description?: string; icon?: string }[]
-    }) => post<{ ok: boolean; categories: string[] }>("/wiki/onboard", params),
-    dirSlug: () => params.dir,
+dirSlug: () => params.dir,
     createBlock: (slug: string, body: { content: string; parent_id?: string | null; order_index: number; block_type?: string; depth?: number }) =>
       post<{ block: PageBlock }>(`/wiki/page/${slug}/blocks`, body),
     updateBlock: (id: string, content: string, block_type?: string) =>
@@ -96,6 +100,14 @@ export function useWikiApi() {
       post<{ ok: boolean }>(`/wiki/page/blocks/${id}/move`, body),
     backlinks: (slug: string) =>
       get<{ backlinks: BacklinkResult[] }>(`/wiki/page/${slug}/backlinks`),
+    retryResource: (resourceId: string) =>
+      post<{ resource_id: string; status: string }>(`/wiki/resource/${resourceId}/retry`, {}),
+    deleteResource: (resourceId: string) =>
+      del<{ ok: boolean }>(`/wiki/resource/${resourceId}`),
+    learnQuestions: (resourceId: string) =>
+      get<{ questions: { concept: string; question: string }[] }>(`/wiki/resource/${resourceId}/learn-questions`),
+    createLearnSession: (resourceId: string, opts?: { question?: string; concept?: string }) =>
+      post<LearnSessionResult>(`/wiki/resource/${resourceId}/learn-session`, opts ?? {}),
   }
 }
 
@@ -103,13 +115,33 @@ export function useWikiApi() {
 
 export interface GraphNode {
   id: string
-  type: "category" | "subcategory" | "resource" | "group"
+  type: "category" | "subcategory" | "resource" | "group" | "project" | "directory" | "github"
   label: string
   color?: string
   slug?: string
   category_slug?: string
   url?: string
   resource_id?: string
+  status?: string
+  // directory-specific fields
+  path?: string
+  file_count?: number
+  total_file_count?: number
+  depth?: number
+  key_files?: string[]
+}
+
+export type GraphDataFull = { nodes: GraphNode[]; edges: GraphEdge[] }
+
+export interface WikiResourceListItem {
+  id: string
+  title: string | null
+  url: string | null
+  author: string | null
+  modality: string
+  status: string
+  metadata: Record<string, unknown> | null
+  time_created: number
 }
 
 export interface WikiResourceData {
@@ -122,6 +154,7 @@ export interface WikiResourceData {
   content: string | null
   metadata: Record<string, unknown> | null
   time_created: number
+  asset_map: Record<string, { localPath: string; width?: number | null; height?: number | null }>
 }
 
 export interface GraphEdge {
@@ -270,7 +303,7 @@ export interface WikiRoadmapDocFull extends WikiRoadmapDoc {
 }
 
 export interface WikiSearchResult {
-  locations: { file_path: string; abs_path: string; section_heading: string | null; summary: string; match_type: string; relevance: number }[]
+  locations: { file_path: string; abs_path: string; summary: string; match_type: string; relevance: number }[]
   concepts: WikiConcept[]
   sources: { title: string | null; url: string | null; author: string | null; modality: string }[]
 }
@@ -280,7 +313,7 @@ export interface PageBlock {
   content: string
   block_type: string
   source: "ai" | "user" | "user_edited"
-  placement_id: string | null
+  parent_id: string | null
   order_index: number
   depth: number
   properties: Record<string, unknown> | null
@@ -290,4 +323,13 @@ export interface PageBlock {
 export interface BacklinkResult {
   from_page: { slug: string; title: string }
   block: { id: string; content: string }
+}
+
+export interface LearnSessionResult {
+  session_id: string
+  resource_id: string
+  resource_title: string | null
+  question: string | null
+  concept: string | null
+  initial_context: string | null
 }

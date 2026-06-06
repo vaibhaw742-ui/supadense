@@ -15,12 +15,9 @@ import type { SessionID } from "../../session/schema"
 
 // KB curator tool names we care about tracking
 const KB_TOOLS = new Set([
-  "kb_resource_place",
   "kb_concept_upsert",
-  "kb_wiki_build",
   "kb_event_log",
   "kb_resource_create",
-  "kb_category_manage",
 ])
 
 export const KbPipelineStatusTool = Tool.define("kb_pipeline_status", {

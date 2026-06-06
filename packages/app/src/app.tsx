@@ -49,6 +49,11 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { createSizing } from "@/pages/session/helpers"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { activeSidebarView, activeGraphProjectId } from "@/context/sidebar-view"
+import { ReadPanel } from "@/pages/read-panel"
+import { WikiGraphPanel } from "@/pages/wiki/wiki-graph-panel"
+import { WikiNotesPanel } from "@/pages/wiki/wiki-notes-panel"
+import { GraphProjectsPanel } from "@/pages/wiki/graph-projects-panel"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const AdminRoute = lazy(() => import("@/pages/admin"))
@@ -75,19 +80,36 @@ function SessionRouteContent() {
     <>
       <SessionHeader />
       <div class="size-full bg-background-base relative flex min-h-0 overflow-hidden">
-        <div class="flex-1 min-w-0 min-h-0" />
-        <SessionSidePanel
-          canReview={() => false}
-          diffs={() => []}
-          diffsReady={() => true}
-          empty={() => ""}
-          hasReview={() => false}
-          reviewCount={() => 0}
-          reviewPanel={() => <></>}
-          focusReviewDiff={() => {}}
-          reviewSnap={false}
-          size={size}
-        />
+        <div class="flex-1 min-w-0 min-h-0 overflow-hidden">
+          <Show when={activeSidebarView().view === "read"}>
+            <ReadPanel />
+          </Show>
+          <Show when={activeSidebarView().view === "lib"}>
+            <Show
+              when={activeGraphProjectId()}
+              fallback={<GraphProjectsPanel />}
+            >
+              {(projectId) => <WikiGraphPanel projectId={projectId()} />}
+            </Show>
+          </Show>
+          <Show when={activeSidebarView().view === "notes"}>
+            <WikiNotesPanel />
+          </Show>
+        </div>
+        <Show when={activeSidebarView().view !== "lib" && activeSidebarView().view !== "read" && activeSidebarView().view !== "notes"}>
+          <SessionSidePanel
+            canReview={() => false}
+            diffs={() => []}
+            diffsReady={() => true}
+            empty={() => ""}
+            hasReview={() => false}
+            reviewCount={() => 0}
+            reviewPanel={() => <></>}
+            focusReviewDiff={() => {}}
+            reviewSnap={false}
+            size={size}
+          />
+        </Show>
       </div>
       <SupadenseChatOverlay />
     </>
@@ -177,14 +199,14 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const isFiles = () => /\/files(?:\/|$)/.test(location.pathname)
   const isHome = () => location.pathname === "/" || location.pathname === "/workspaces"
   const isProjects = () => /\/projects(?:\/|$)/.test(location.pathname)
-  const isStandalone = () => isWiki() || isFiles() || isHome() || isProjects()
+  const isStandalone = () => isWiki() || isFiles() || isHome()
 
   return (
     <Show
       when={!isStandalone()}
       fallback={
         <Show
-          when={isHome() || isProjects()}
+          when={isHome()}
           fallback={
             <Suspense fallback={<Loading />}>{props.children}</Suspense>
           }

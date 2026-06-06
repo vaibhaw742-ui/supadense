@@ -1,4 +1,4 @@
-import { createSignal, createResource, For, Show, Suspense } from "solid-js"
+import { createSignal, createResource, For, Show, Suspense, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
@@ -132,6 +132,22 @@ export default function FilesPage() {
   const [fileLoading, setFileLoading] = createSignal(false)
   const [fileError, setFileError] = createSignal(false)
 
+  // Resizable left panel
+  const [panelWidth, setPanelWidth] = createSignal(256)
+  let dragging = false
+  const onDividerMouseDown = (e: MouseEvent) => {
+    dragging = true
+    e.preventDefault()
+    const onMove = (e: MouseEvent) => {
+      if (!dragging) return
+      setPanelWidth(Math.max(160, Math.min(600, e.clientX)))
+    }
+    const onUp = () => { dragging = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    onCleanup(() => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) })
+  }
+
   const isMarkdown = (path: string) => path.endsWith(".md") || path.endsWith(".mdx")
 
   const handleFileClick = async (path: string) => {
@@ -150,10 +166,10 @@ export default function FilesPage() {
   }
 
   return (
-    <div class="flex h-screen w-full overflow-hidden" style={{ background: "var(--color-background-base, #fff)", "font-family": "inherit" }}>
+    <div class="flex h-screen w-full overflow-hidden" style={{ background: "var(--color-background-base)", "font-family": "inherit" }}>
       {/* Left: file tree */}
-      <div class="shrink-0 h-full border-r flex flex-col overflow-hidden" style={{ width: "256px", "border-color": "var(--color-border-weaker-base, #e5e7eb)" }}>
-        <div class="px-3 py-2 border-b shrink-0 flex items-center justify-between" style={{ "border-color": "var(--color-border-weaker-base, #e5e7eb)" }}>
+      <div class="shrink-0 h-full flex flex-col overflow-hidden" style={{ width: `${panelWidth()}px`, "border-right": "none" }}>
+        <div class="px-3 py-2 border-b shrink-0 flex items-center justify-between" style={{ "border-color": "var(--color-border-weaker-base)" }}>
           <span class="text-11-medium uppercase tracking-wider" style={{ color: "var(--color-text-weak, #6b7280)" }}>
             {directory().split("/").pop() ?? "Files"}
           </span>
@@ -183,6 +199,22 @@ export default function FilesPage() {
           </Suspense>
         </div>
       </div>
+
+      {/* Draggable divider */}
+      <div
+        onMouseDown={onDividerMouseDown}
+        style={{
+          width: "5px",
+          cursor: "col-resize",
+          "flex-shrink": "0",
+          background: "transparent",
+          "border-left": "1px solid var(--color-border-weaker-base)",
+          transition: "background 100ms",
+          "z-index": "10",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-border-weaker-base)" }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+      />
 
       {/* Right: content */}
       <div class="flex-1 min-w-0 h-full overflow-hidden flex flex-col">

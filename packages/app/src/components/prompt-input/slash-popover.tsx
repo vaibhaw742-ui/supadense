@@ -6,6 +6,8 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 export type AtOption =
   | { type: "agent"; name: string; display: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
+  | { type: "resource"; id: string; title: string; display: string }
+  | { type: "note"; slug: string; title: string; display: string }
 
 export interface SlashCommand {
   id: string
@@ -17,6 +19,8 @@ export interface SlashCommand {
   source?: "command" | "mcp" | "skill"
 }
 
+export type AtLevel = "top" | "read" | "notes"
+
 type PromptPopoverProps = {
   popover: "at" | "slash" | null
   setSlashPopoverRef: (el: HTMLDivElement) => void
@@ -25,6 +29,10 @@ type PromptPopoverProps = {
   atKey: (item: AtOption) => string
   setAtActive: (id: string) => void
   onAtSelect: (item: AtOption) => void
+  atLevel: AtLevel
+  onAtLevelChange: (level: AtLevel) => void
+  atNotes: { slug: string; title: string }[]
+  atQuery: string
   slashFlat: SlashCommand[]
   slashActive?: string
   setSlashActive: (id: string) => void
@@ -32,6 +40,11 @@ type PromptPopoverProps = {
   commandKeybind: (id: string) => string | undefined
   t: (key: string) => string
 }
+
+const TOP_CATEGORIES: { id: "read" | "notes"; label: string; description: string }[] = [
+  { id: "read",  label: "Read",  description: "Sources & resources" },
+  { id: "notes", label: "Notes", description: "Wiki pages" },
+]
 
 export const PromptPopover: Component<PromptPopoverProps> = (props) => {
   return (
@@ -47,15 +60,52 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
       >
         <Switch>
           <Match when={props.popover === "at"}>
-            <Show
-              when={props.atFlat.length > 0}
-              fallback={<div class="text-text-weak px-2 py-1">{props.t("prompt.popover.emptyResults")}</div>}
-            >
-              <For each={props.atFlat.slice(0, 10)}>
-                {(item) => {
-                  const key = props.atKey(item)
+            {/* ── back header when inside a submenu ───────────────────────── */}
+            <Show when={props.atLevel !== "top"}>
+              <button
+                class="w-full flex items-center gap-x-1.5 rounded-md px-2 py-1 mb-0.5 text-text-weak hover:text-text-base hover:bg-surface-raised-base-hover"
+                onClick={() => props.onAtLevelChange("top")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span class="text-11-medium uppercase tracking-wide">
+                  {props.atLevel === "read" ? "Read" : "Notes"}
+                </span>
+              </button>
+              <div class="h-px bg-border-weaker-base mx-1 mb-1" />
+            </Show>
 
-                  if (item.type === "agent") {
+            {/* ── top level: Read / Notes ─────────────────────────────────── */}
+            <Show when={props.atLevel === "top"}>
+              <For each={TOP_CATEGORIES}>
+                {(cat) => (
+                  <button
+                    class="w-full flex items-center justify-between gap-x-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover"
+                    onClick={() => props.onAtLevelChange(cat.id)}
+                  >
+                    <div class="flex items-center gap-x-2 min-w-0">
+                      <span class="text-14-regular text-text-strong">{cat.label}</span>
+                      <span class="text-12-regular text-text-weak truncate">{cat.description}</span>
+                    </div>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-icon-base shrink-0 opacity-50">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                )}
+              </For>
+            </Show>
+
+            {/* ── Read submenu: resources ──────────────────────────────────── */}
+            <Show when={props.atLevel === "read"}>
+              <Show
+                when={props.atFlat.filter(i => i.type === "resource").length > 0}
+                fallback={<div class="text-text-weak px-2 py-1 text-13-regular">{props.t("prompt.popover.emptyResults")}</div>}
+              >
+                <For each={props.atFlat.filter(i => i.type === "resource").slice(0, 12)}>
+                  {(item) => {
+                    if (item.type !== "resource") return null
+                    const key = props.atKey(item)
                     return (
                       <button
                         class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
@@ -63,36 +113,44 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         onClick={() => props.onAtSelect(item)}
                         onMouseEnter={() => props.setAtActive(key)}
                       >
-                        <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
-                        <span class="text-14-regular text-text-strong whitespace-nowrap">@{item.name}</span>
+                        <Icon name="book" size="small" class="text-icon-warning shrink-0" />
+                        <span class="text-14-regular text-text-strong whitespace-nowrap truncate">@{item.title}</span>
                       </button>
                     )
-                  }
+                  }}
+                </For>
+              </Show>
+            </Show>
 
-                  const isDirectory = item.path.endsWith("/")
-                  const directory = isDirectory ? item.path : getDirectory(item.path)
-                  const filename = isDirectory ? "" : getFilename(item.path)
-
-                  return (
-                    <button
-                      class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
-                      classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
-                      onClick={() => props.onAtSelect(item)}
-                      onMouseEnter={() => props.setAtActive(key)}
-                    >
-                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
-                      <div class="flex items-center text-14-regular min-w-0">
-                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{directory}</span>
-                        <Show when={!isDirectory}>
-                          <span class="text-text-strong whitespace-nowrap">{filename}</span>
-                        </Show>
-                      </div>
-                    </button>
-                  )
-                }}
-              </For>
+            {/* ── Notes submenu ────────────────────────────────────────────── */}
+            <Show when={props.atLevel === "notes"}>
+              <Show
+                when={props.atNotes.length > 0}
+                fallback={<div class="text-text-weak px-2 py-1 text-13-regular">No notes yet</div>}
+              >
+                <For each={props.atNotes.filter(n =>
+                  !props.atQuery || n.title.toLowerCase().includes(props.atQuery.toLowerCase())
+                ).slice(0, 12)}>
+                  {(note) => {
+                    const opt: AtOption = { type: "note", slug: note.slug, title: note.title, display: note.title }
+                    const key = `note:${note.slug}`
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                        onClick={() => props.onAtSelect(opt)}
+                        onMouseEnter={() => props.setAtActive(key)}
+                      >
+                        <Icon name="file" size="small" class="text-icon-base shrink-0" />
+                        <span class="text-14-regular text-text-strong whitespace-nowrap truncate">@{note.title}</span>
+                      </button>
+                    )
+                  }}
+                </For>
+              </Show>
             </Show>
           </Match>
+
           <Match when={props.popover === "slash"}>
             <Show
               when={props.slashFlat.length > 0}

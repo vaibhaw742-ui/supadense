@@ -2,7 +2,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
+import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, ResourceAttachmentPart } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
@@ -51,6 +51,7 @@ const parseCommentMentions = (comment: string) => {
 
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
+const isResourceAttachment = (part: Prompt[number]): part is ResourceAttachmentPart => part.type === "resource"
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
@@ -192,7 +193,17 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     } satisfies PromptRequestPart
   })
 
-  requestParts.push(...files, ...context, ...agents, ...images)
+  const resources = input.prompt.filter(isResourceAttachment).map((attachment) => {
+    return {
+      id: Identifier.ascending("part"),
+      type: "file",
+      mime: "text/plain",
+      url: `kb-resource:${attachment.id}`,
+      filename: attachment.title,
+    } satisfies PromptRequestPart
+  })
+
+  requestParts.push(...files, ...context, ...agents, ...resources, ...images)
 
   return {
     requestParts,

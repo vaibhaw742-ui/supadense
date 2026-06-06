@@ -30,7 +30,7 @@ import { BgProcessMonitor, BgProcessContent } from "@/components/bg-process-moni
 import { bgProcessClear, bgProcesses, serverJobs, setNotesNavRequest } from "@/context/bg-processes"
 import { KbNotificationBell } from "@/pages/session/kb-files-panel"
 import { CaptureDialog } from "@/components/capture-dialog"
-import { activeSidebarView } from "@/context/sidebar-view"
+import { activeSidebarView, sessionViewMode, setSessionViewMode } from "@/context/sidebar-view"
 
 
 const OPEN_APPS = [
@@ -723,6 +723,9 @@ export function SessionHeader() {
   const [tocOpen, setTocOpen] = createSignal(false)
   const [bgPanelOpen, setBgPanelOpen] = createSignal(false)
   const [captureOpen, setCaptureOpen] = createSignal(false)
+  // viewMode is now a shared global signal so session-side-panel can react to it
+  const viewMode = sessionViewMode
+  const setViewMode = setSessionViewMode
 
   // GitHub sync state (lifted from GitHubButton)
   const [ghModalOpen, setGhModalOpen] = createSignal(false)
@@ -843,6 +846,100 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
+              {/* View mode pill group — matches yqw.png design */}
+              <div
+                class="flex items-center rounded-lg border border-border-base bg-background-input h-6 overflow-hidden"
+                style={{ gap: "1px" }}
+              >
+                {/* Brain / Knowledge search */}
+                <Tooltip placement="bottom" value="Brain">
+                  <button
+                    type="button"
+                    class="h-full px-2 flex items-center justify-center transition-colors"
+                    classList={{
+                      "bg-[var(--color-accent-base)] text-white": viewMode() === "brain",
+                      "text-text-weak hover:text-text-strong hover:bg-surface-base-hover": viewMode() !== "brain",
+                    }}
+                    onClick={() => setViewMode("brain")}
+                    aria-label="Brain"
+                    aria-pressed={viewMode() === "brain"}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="2" y1="12" x2="22" y2="12"/>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                  </button>
+                </Tooltip>
+
+                {/* Divider */}
+                <div class="w-px h-3.5 bg-border-base flex-shrink-0" />
+
+                {/* Sources */}
+                <Tooltip placement="bottom" value="Sources">
+                  <button
+                    type="button"
+                    class="h-full px-2 flex items-center justify-center transition-colors"
+                    classList={{
+                      "bg-[var(--color-accent-base)] text-white": viewMode() === "sources",
+                      "text-text-weak hover:text-text-strong hover:bg-surface-base-hover": viewMode() !== "sources",
+                    }}
+                    onClick={() => setViewMode("sources")}
+                    aria-label="Sources"
+                    aria-pressed={viewMode() === "sources"}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="8" y1="13" x2="16" y2="13"/>
+                      <line x1="8" y1="17" x2="13" y2="17"/>
+                    </svg>
+                  </button>
+                </Tooltip>
+
+                {/* Code — active by default, shown as filled pill */}
+                <Tooltip placement="bottom" value="Code">
+                  <button
+                    type="button"
+                    class="h-full px-2.5 flex items-center gap-1.5 text-12-medium transition-colors"
+                    classList={{
+                      "bg-[var(--color-accent-base)] text-white rounded-md": viewMode() === "code",
+                      "text-text-weak hover:text-text-strong hover:bg-surface-base-hover": viewMode() !== "code",
+                    }}
+                    onClick={() => setViewMode("code")}
+                    aria-label="Code"
+                    aria-pressed={viewMode() === "code"}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="16 18 22 12 16 6"/>
+                      <polyline points="8 6 2 12 8 18"/>
+                    </svg>
+                    <span>Code</span>
+                  </button>
+                </Tooltip>
+
+                {/* Layers / L0-L1-L2 brain layers */}
+                <Tooltip placement="bottom" value="Brain Layers">
+                  <button
+                    type="button"
+                    class="h-full px-2 flex items-center justify-center transition-colors"
+                    classList={{
+                      "bg-[var(--color-accent-base)] text-white": viewMode() === "layers",
+                      "text-text-weak hover:text-text-strong hover:bg-surface-base-hover": viewMode() !== "layers",
+                    }}
+                    onClick={() => setViewMode("layers")}
+                    aria-label="Brain Layers"
+                    aria-pressed={viewMode() === "layers"}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                      <polyline points="2 17 12 22 22 17"/>
+                      <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                  </button>
+                </Tooltip>
+              </div>
+
               {/* Capture button */}
               <button
                 type="button"
@@ -1110,7 +1207,6 @@ export function SessionHeader() {
       {/* Capture dialog */}
       <Show when={captureOpen()}>
         <CaptureDialog
-          directory={projectDirectory()}
           onClose={() => setCaptureOpen(false)}
         />
       </Show>

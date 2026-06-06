@@ -17,7 +17,7 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
   description: [
     "Initialize or retrieve the knowledge base (KB) workspace for the current project.",
     "",
-    "Call this tool at the start of any KB workflow (onboarding, memorize, retrieve).",
+    "Call this tool at the start of any KB workflow (add-resource, retrieve).",
     "",
     "If kb_path is provided, the workspace will be created/updated to use that folder.",
     "If kb_path is omitted, it defaults to the current project directory.",
@@ -25,12 +25,10 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
     "On first call it creates the folder structure inside kb_path:",
     "  supadense.md",
     "  log.md",
-    "  wiki/index.md",
     "  assets/",
     "  raw/",
     "",
-    "Returns the workspace record including: id, kb_path, kb_initialized, categories, wiki pages.",
-    "If kb_initialized is false, run the onboard flow (kb_onboard_complete) before memorizing.",
+    "Returns the workspace record including: id, kb_path, kb_initialized.",
   ].join("\n"),
   parameters: z.object({
     kb_path: z
@@ -76,15 +74,10 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
       }
     }
 
-    const categories = Workspace.getCategories(workspace.id)
-    const pages = Workspace.getWikiPages(workspace.id)
-
     const summary = [
       `Workspace: ${workspace.id}`,
       `Path: ${workspace.kb_path}`,
       `Initialized: ${workspace.kb_initialized}`,
-      `Categories: ${categories.length}`,
-      `Wiki pages: ${pages.length}`,
       workspace.learning_intent ? `Intent: ${workspace.learning_intent}` : "Intent: (not set — run onboarding)",
     ].join("\n")
 
@@ -94,20 +87,6 @@ export const KbWorkspaceInitTool = Tool.define("kb_workspace_init", {
         workspace_id: workspace.id,
         kb_path: workspace.kb_path,
         kb_initialized: workspace.kb_initialized,
-        categories: categories.map((c) => ({ id: c.id, slug: c.slug, name: c.name, depth: c.depth })),
-        wiki_pages: pages
-          .filter((p) => p.page_type !== "index")
-          .map((p) => ({
-            id: p.id,
-            title: p.title,
-            file_path: p.file_path,
-            page_type: p.page_type,
-            category_slug: p.category_slug,
-            subcategory_slug: p.subcategory_slug,
-            nav_slug: p.subcategory_slug
-              ? `${p.category_slug}--${p.subcategory_slug}`
-              : (p.category_slug ?? p.slug),
-          })),
       },
       output: summary,
     }

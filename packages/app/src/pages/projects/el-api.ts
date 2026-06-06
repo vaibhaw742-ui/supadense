@@ -65,7 +65,7 @@ export interface ElResource {
 
 export interface GraphNode {
   id: string
-  type: "project" | "resource" | "concept" | "category"
+  type: "project" | "resource" | "concept" | "category" | "github" | "source"
   label: string
   url?: string
   resource_id?: string
@@ -271,8 +271,20 @@ export const elApi = {
     return res.json()
   },
 
+  async getSupadenseTree(id: string): Promise<{ entries: TreeEntry[] }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/supadense-tree`, { headers: authHeaders() })
+    if (!res.ok) return { entries: [] }
+    return res.json()
+  },
+
   async getFileContent(id: string, filePath: string): Promise<{ content: string; path: string }> {
     const res = await fetch(`${apiBase()}/el/projects/${id}/file-content?path=${encodeURIComponent(filePath)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to read file")
+    return res.json()
+  },
+
+  async getSupadenseFileContent(id: string, filePath: string): Promise<{ content: string; path: string }> {
+    const res = await fetch(`${apiBase()}/el/projects/${id}/supadense-file-content?path=${encodeURIComponent(filePath)}`, { headers: authHeaders() })
     if (!res.ok) throw new Error("Failed to read file")
     return res.json()
   },
@@ -283,6 +295,26 @@ export const elApi = {
 
   async getResourceProjects(): Promise<Array<{ url: string; project_id: string; project_name: string; join_id: string }>> {
     const res = await fetch(`${apiBase()}/el/resource-projects`, { headers: authHeaders() })
+    if (!res.ok) return []
+    return res.json()
+  },
+
+  async getResource(id: string): Promise<{
+    id: string; url: string | null; title: string | null; author: string | null
+    modality: string; status: string; content: string | null
+    metadata: Record<string, unknown>; time_created: number
+    asset_map: Record<string, { localPath: string; width?: number | null; height?: number | null }>
+  }> {
+    const res = await fetch(`${apiBase()}/el/resources/${id}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(`Failed to load resource: ${res.status}`)
+    return res.json()
+  },
+
+  async listAllResources(): Promise<Array<{
+    id: string; url: string | null; title: string | null; author: string | null
+    modality: string; status: string; metadata: Record<string, unknown>; time_created: number
+  }>> {
+    const res = await fetch(`${apiBase()}/el/resources`, { headers: authHeaders() })
     if (!res.ok) return []
     return res.json()
   },

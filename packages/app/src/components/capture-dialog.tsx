@@ -1,9 +1,10 @@
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { getAuthToken } from "@/utils/server"
 import { setActiveSidebarView } from "@/context/sidebar-view"
+import { elApi } from "@/pages/projects/el-api"
 
 function kbApiBase() {
   return import.meta.env.DEV
@@ -16,7 +17,6 @@ type Tab = "url" | "file" | "paste" | "source" | "extension"
 const SOURCE_TAGS = ["arxiv", "github", "hn", "medium", "substack", "youtube", "pdf", "any html"]
 
 interface Props {
-  directory: string
   onClose: () => void
   onCaptured?: (resourceId: string) => void
 }
@@ -27,6 +27,18 @@ export function CaptureDialog(props: Props) {
   const [pasteText, setPasteText] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [preview, setPreview] = createSignal<{ domain: string } | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = createSignal<string | null>(null)
+
+  const [projects] = createResource(() => elApi.listProjects().catch(() => []))
+
+  // Auto-select the default project once projects load
+  createEffect(() => {
+    const allProjects = projects()
+    if (allProjects && selectedProjectId() === null) {
+      const def = allProjects.find((p) => p.is_default) ?? allProjects[0]
+      if (def) setSelectedProjectId(def.id)
+    }
+  })
 
   let inputRef: HTMLInputElement | undefined
 
@@ -58,36 +70,48 @@ export function CaptureDialog(props: Props) {
     if ((!isUrl && !isText) || loading()) return
     setLoading(true)
     try {
-      const token = getAuthToken()
-      const body = isUrl ? { url: rawUrl } : { text: rawText }
-      const res = await fetch(`${kbApiBase()}/wiki/resource`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-opencode-directory": props.directory,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        let errMsg = "Capture failed"
-        try { const j = JSON.parse(text); errMsg = j.error ?? j.data?.message ?? j.message ?? (text.slice(0, 120) || errMsg) } catch {}
-        showToast({ variant: "error", title: errMsg })
+      // Determine target project: explicitly selected, or the default project, or first available
+      const allProjects = projects() ?? []
+      const pid = selectedProjectId()
+        ?? allProjects.find((p) => p.is_default)?.id
+        ?? allProjects[0]?.id
+
+      if (!pid) {
+        showToast({ variant: "error", title: "No project found — create a project first" })
         setLoading(false)
         return
       }
-      const data = await res.json().catch(() => ({})) as { resource_id?: string; duplicate?: boolean; status?: string }
-      if (data.duplicate) {
-        showToast({ variant: "success", title: "Already in your KB" })
-      } else {
+
+      if (isUrl) {
+        await elApi.addResource(pid, rawUrl, "supplementary")
         showToast({ variant: "success", title: "Capturing in background…" })
+      } else if (isText) {
+        // Text capture: post to el project resource endpoint with content
+        const token = getAuthToken()
+        const res = await fetch(`${kbApiBase()}/el/projects/${pid}/resources`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ text: rawText, role: "supplementary" }),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => "")
+          let errMsg = "Capture failed"
+          try { const j = JSON.parse(text); errMsg = j.error ?? j.data?.message ?? j.message ?? (text.slice(0, 120) || errMsg) } catch {}
+          showToast({ variant: "error", title: errMsg })
+          setLoading(false)
+          return
+        }
+        showToast({ variant: "success", title: "Captured!" })
       }
+
       setActiveSidebarView({ section: "workspace", view: "read", label: "Read" })
-      props.onCaptured?.(data.resource_id ?? "")
+      props.onCaptured?.("")
       props.onClose()
-    } catch {
-      showToast({ variant: "error", title: "Capture failed" })
+    } catch (err) {
+      showToast({ variant: "error", title: err instanceof Error ? err.message : "Capture failed" })
       setLoading(false)
     }
   }
@@ -291,6 +315,42 @@ export function CaptureDialog(props: Props) {
               </div>
             </Show>
           </div>
+
+          {/* Project selector — shown on URL and Paste tabs */}
+          <Show when={tab() === "url" || tab() === "paste"}>
+            <div style={{ padding: "10px 18px 0", display: "flex", "align-items": "center", gap: "10px" }}>
+              <span style={{ "font-size": "11px", color: "var(--color-text-weak)", "white-space": "nowrap", "flex-shrink": "0" }}>add to project:</span>
+              <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
+                <Show when={!projects.loading}>
+                  <For each={projects() ?? []}>
+                    {(project) => (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProjectId(project.id)}
+                        style={{
+                          padding: "2px 10px",
+                          "border-radius": "4px",
+                          border: selectedProjectId() === project.id ? "1px solid #d68a2e" : "1px solid var(--border-base)",
+                          background: selectedProjectId() === project.id ? "rgba(214,138,46,0.1)" : "none",
+                          color: selectedProjectId() === project.id ? "#d68a2e" : "var(--color-text-weak)",
+                          "font-size": "11px",
+                          "font-family": "inherit",
+                          cursor: "pointer",
+                          transition: "all 100ms",
+                          "max-width": "160px",
+                          overflow: "hidden",
+                          "text-overflow": "ellipsis",
+                          "white-space": "nowrap",
+                        }}
+                      >
+                        {project.name}
+                      </button>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </div>
+          </Show>
 
           {/* Footer */}
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "10px 18px 14px", "border-top": "1px solid var(--border-weak-base)" }}>

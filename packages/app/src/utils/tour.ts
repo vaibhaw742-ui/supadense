@@ -106,7 +106,7 @@ export function startTour(): void {
         popover: {
           title: "Ready to get started?",
           description:
-            "Type <strong>/onboard</strong> in the chat box and press Enter — your AI assistant will walk you through setting up your first Knowledge Base.",
+            "Ask the AI to set up your knowledge base — describe what you want to learn and it will create categories and start adding resources.",
           side: "top",
           align: "center",
         },

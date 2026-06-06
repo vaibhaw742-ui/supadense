@@ -246,12 +246,11 @@ export namespace Agent {
                   // Allow all KB tools — deny everything else
                   "*": "deny",
                   kb_workspace_init: "allow",
-                  kb_resource_place: "allow",
                   kb_concept_upsert: "allow",
                   kb_wiki_build: "allow",
                   kb_event_log: "allow",
                   kb_retrieve: "allow",
-                  read: "allow", // may need to inspect existing wiki files
+                  read: "allow",
                 }),
                 user,
               ),

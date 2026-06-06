@@ -321,24 +321,31 @@ export async function bootstrapDirectory(input: {
   const errs = errors(await runAll(fast))
   if (errs.length > 0) {
     console.error("Failed to bootstrap instance", errs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(errs[0], input.translate),
-    })
+    // Suppress toast for permission/forbidden errors (e.g. "Directory does not belong to you")
+    const msg = String(errs[0]?.message ?? errs[0] ?? "")
+    if (!msg.includes("forbidden") && !msg.includes("belong") && !msg.includes("403")) {
+      const project = getFilename(input.directory)
+      showToast({
+        variant: "error",
+        title: input.translate("toast.project.reloadFailed.title", { project }),
+        description: formatServerError(errs[0], input.translate),
+      })
+    }
   }
 
   await waitForPaint()
   const slowErrs = errors(await runAll(slow))
   if (slowErrs.length > 0) {
     console.error("Failed to finish bootstrap instance", slowErrs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(slowErrs[0], input.translate),
-    })
+    const msg = String(slowErrs[0]?.message ?? slowErrs[0] ?? "")
+    if (!msg.includes("forbidden") && !msg.includes("belong") && !msg.includes("403")) {
+      const project = getFilename(input.directory)
+      showToast({
+        variant: "error",
+        title: input.translate("toast.project.reloadFailed.title", { project }),
+        description: formatServerError(slowErrs[0], input.translate),
+      })
+    }
   }
 
   if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
@@ -354,11 +361,14 @@ export async function bootstrapDirectory(input: {
     .catch((err) => {
       if (providerRev.get(input.directory) !== rev) return
       console.error("Failed to refresh provider list", err)
-      const project = getFilename(input.directory)
-      showToast({
-        variant: "error",
-        title: input.translate("toast.project.reloadFailed.title", { project }),
-        description: formatServerError(err, input.translate),
-      })
+      const msg = String(err?.message ?? err ?? "")
+      if (!msg.includes("forbidden") && !msg.includes("belong") && !msg.includes("403")) {
+        const project = getFilename(input.directory)
+        showToast({
+          variant: "error",
+          title: input.translate("toast.project.reloadFailed.title", { project }),
+          description: formatServerError(err, input.translate),
+        })
+      }
     })
 }

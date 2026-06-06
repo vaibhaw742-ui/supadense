@@ -1,8 +1,9 @@
-import { createResource, createSignal, Show, For } from "solid-js"
+import { createResource, createSignal, createEffect, Show, For } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { elApi, type GraphNode, type GraphEdge } from "./el-api"
 import { WikiGraph } from "@/pages/wiki/wiki-graph"
 import type { GraphData } from "@/pages/wiki/wiki-api"
+import { graphRefreshTick } from "@/context/sidebar-view"
 
 // ── EL → WikiGraph adapter ────────────────────────────────────────────────────
 
@@ -37,11 +38,17 @@ export default function ProjectGraph() {
   const [selectedNode, setSelectedNode] = createSignal<GraphNode | null>(null)
 
   const [projectData] = createResource(() => params.id, (id) => elApi.getProject(id))
-  const [graphData] = createResource(() => params.id, (id) => elApi.getGraph(id))
+  const [graphData, { refetch: refetchGraph }] = createResource(() => params.id, (id) => elApi.getGraph(id))
+
+  // Refetch graph when a resource is added elsewhere (e.g. capture dialog)
+  createEffect(() => {
+    graphRefreshTick()
+    refetchGraph()
+  })
 
   const wikiGraphData = () => {
     const g = graphData()
-    if (!g) return null
+    if (!g || g.nodes.length === 0) return null
     return elGraphToWikiGraph(g.nodes, g.edges)
   }
 
@@ -64,7 +71,7 @@ export default function ProjectGraph() {
   const project = () => projectData()?.project
 
   return (
-    <div class="h-dvh w-screen flex flex-col bg-background-base overflow-hidden">
+    <div class="h-full w-full flex flex-col overflow-hidden" style={{ background: "#ffffff" }}>
       {/* Top bar */}
       <div class="h-12 flex items-center gap-3 px-4 border-b border-border-base shrink-0">
         <button
@@ -95,7 +102,7 @@ export default function ProjectGraph() {
           }>
             {(gd) => (
               <WikiGraph
-                data={gd()}
+                data={() => gd()}
                 onNavigate={handleNodeClick}
                 onNavigateResource={handleResourceClick}
               />

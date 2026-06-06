@@ -1,0 +1,18 @@
+{
+  "_comment": "Add this to your Claude Desktop or Claude Code MCP config",
+  "_claude_desktop": "~/Library/Application Support/Claude/claude_desktop_config.json",
+  "_claude_code": ".claude/settings.json in project OR ~/.claude/settings.json globally",
+  "mcpServers": {
+    "supadense-brain": {
+      "command": "bun",
+      "args": ["run", "/path/to/supadense/packages/opencode/src/brain/mcp/stdio.ts"],
+      "env": {
+        "SUPADENSE_URL":     "http://localhost:4096",
+        "SUPADENSE_TOKEN":   "YOUR_JWT_TOKEN",
+        "SUPADENSE_PROJECT": "your-project-id"
+      }
+    }
+  },
+  "_get_token": "POST http://localhost:4096/supa-auth/login",
+  "_get_project_id": "POST http://localhost:4096/local-projects to register"
+}

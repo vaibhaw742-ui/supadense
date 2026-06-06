@@ -228,12 +228,16 @@ function createGlobalSync() {
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
-        const project = getFilename(directory)
-        showToast({
-          variant: "error",
-          title: language.t("toast.session.listFailed.title", { project }),
-          description: formatServerError(err, language.t),
-        })
+        // Suppress forbidden/permission errors — not actionable for the user
+        const msg = String(err?.message ?? err ?? "")
+        if (!msg.includes("forbidden") && !msg.includes("belong") && !msg.includes("403")) {
+          const project = getFilename(directory)
+          showToast({
+            variant: "error",
+            title: language.t("toast.session.listFailed.title", { project }),
+            description: formatServerError(err, language.t),
+          })
+        }
       })
 
     sessionLoads.set(directory, promise)

@@ -16,6 +16,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
+import { getAuthToken } from "@/utils/server"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
@@ -51,6 +52,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       label: language.t("provider.connect.method.apiKey"),
     },
   ])
+
   const [auth] = createResource(
     () => props.provider,
     async () => {
@@ -68,6 +70,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
   const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
+
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
@@ -337,6 +340,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   async function complete() {
     await globalSDK.client.global.dispose()
+    void globalSync.bootstrap()
     dialog.close()
     showToast({
       variant: "success",
@@ -403,9 +407,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
 
-      const form = e.currentTarget as HTMLFormElement
-      const formData = new FormData(form)
-      const apiKey = formData.get("apiKey") as string
+      const apiKey = formStore.value
 
       if (!apiKey?.trim()) {
         setFormStore("error", language.t("provider.connect.apiKey.required"))
@@ -413,14 +415,27 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await globalSDK.client.auth.set({
-        providerID: props.provider,
-        auth: {
-          type: "api",
-          key: apiKey,
-        },
-      })
-      await complete()
+      try {
+        const token = getAuthToken()
+        const res = await fetch(`${globalSDK.url}/auth/${encodeURIComponent(props.provider)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ type: "api", key: apiKey.trim() }),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          let msg = text
+          try { msg = JSON.parse(text)?.message || text } catch { /* noop */ }
+          setFormStore("error", msg || language.t("common.requestFailed"))
+          return
+        }
+        await complete()
+      } catch (err) {
+        setFormStore("error", formatError(err, language.t("common.requestFailed")))
+      }
     }
 
     return (

@@ -38,7 +38,7 @@ export function BlockList(props: Props) {
                 onFocus={() => props.onFocus(block.id)}
                 onBlur={() => {}}
                 onNavigate={props.onNavigate}
-                onCreate={() => props.onCreate(block.id, block.placement_id ?? null, block.depth)}
+                onCreate={() => props.onCreate(block.id, block.parent_id ?? null, block.depth)}
                 onUpdate={(content, block_type) => props.onUpdate(block.id, content, block.source, block_type)}
                 onDelete={() => props.onDelete(block.id, prevBlock()?.id ?? null)}
                 onIndent={() => props.onIndent(block.id)}

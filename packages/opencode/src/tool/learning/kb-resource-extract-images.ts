@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync, existsSync } from "fs"
 import path from "path"
 import { Tool } from "../tool"
 import { Workspace } from "../../learning/workspace"
-import { Resource, MediaAsset } from "../../learning/resource"
+import { Resource } from "../../learning/resource"
 
 const TRACKING_DOMAINS = ["pixel.", "track.", "beacon.", "doubleclick.", "googlesyndication.", "analytics."]
 
@@ -185,27 +185,9 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
       if ("skip" in result) { skipped++; continue }
       if ("error" in result) { failed++; summary.push(`✗ ${url}: ${result.error}`); continue }
 
-      // DB dedup by local_path
-      const existing = MediaAsset.findByLocalPath(resource.workspace_id, result.asset.local_path)
-      if (existing) {
-        assetIds.push(existing.id)
-        skipped++
-        continue
-      }
-
-      const asset = MediaAsset.create({
-        resource_id: resource.id,
-        workspace_id: resource.workspace_id,
-        asset_type: "image",
-        source_url: url,
-        local_path: result.asset.local_path,
-        mime_type: result.asset.mime_type,
-        width: result.asset.width,
-        height: result.asset.height,
-        is_diagram: result.asset.is_diagram,
-      })
-
-      assetIds.push(asset.id)
+      // generate a local id for tracking (no DB)
+      const assetId = `asset-${createHash("sha256").update(result.asset.local_path).digest("hex").slice(0, 8)}`
+      assetIds.push(assetId)
       downloaded++
       summary.push(
         `✓ ${result.asset.local_path} (${result.asset.mime_type}, ${result.asset.width ?? "?"}x${result.asset.height ?? "?"}${result.asset.is_diagram ? ", diagram" : ""})`

@@ -32,6 +32,7 @@ import { useSDK } from "@/context/sdk"
 import { getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
 import { decode64 } from "@/utils/base64"
+import { setActiveSidebarView, setActiveReadResourceId, sessionViewMode } from "@/context/sidebar-view"
 import { BlockPageView } from "@/pages/wiki/block-page-view"
 import { renderMarkdown } from "@/pages/wiki/markdown"
 import type { WikiResourceData } from "@/pages/wiki/wiki-api"
@@ -124,7 +125,7 @@ export function SessionSidePanel(props: {
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
   const reviewTab = createMemo(() => isDesktop())
-  const graphMode = createMemo(() => fileOpen() && !layout.fileTree.allFilesOpen())
+  const graphMode = createMemo(() => false)
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen() || graphMode()) return `calc(100% - ${layout.session.width()}px)`
@@ -429,49 +430,6 @@ export function SessionSidePanel(props: {
 
   return (
     <>
-      <Show when={graphNavMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <Show when={graphMode()}>
-              <div class="flex items-center gap-1 text-13-regular px-1">
-                <button class="text-text-link hover:underline" onClick={() => setGraphNav(null)}>
-                  Home
-                </button>
-                <Show when={graphNav()?.type === "resource"}>
-                  <>
-                    <span class="text-text-weak">›</span>
-                    <button class="text-text-link hover:underline" style={{ background: "none", border: "none", cursor: "pointer", padding: "0", font: "inherit" }} onClick={() => setGraphNav({ type: "resources-list" })}>Resources</button>
-                    <span class="text-text-weak">›</span>
-                    <span class="text-text-base">{(graphNav() as { label: string }).label}</span>
-                  </>
-                </Show>
-                <Show when={graphNav()?.type === "resources-list"}>
-                  <>
-                    <span class="text-text-weak">›</span>
-                    <span class="text-text-base">Resources</span>
-                  </>
-                </Show>
-                <Show when={graphNav()?.type === "page"}>
-                  <>
-                    <Show when={(graphNav() as { type: "page"; slug: string; label: string; parent?: { slug: string; label: string } }).parent}>
-                      {(parent) => (
-                        <>
-                          <span class="text-text-weak">›</span>
-                          <button class="text-text-link hover:underline" style={{ background: "none", border: "none", cursor: "pointer", padding: "0", font: "inherit" }} onClick={() => setGraphNav({ type: "page", slug: parent().slug, label: parent().label })}>
-                            {parent().label}
-                          </button>
-                        </>
-                      )}
-                    </Show>
-                    <span class="text-text-weak">›</span>
-                    <span class="text-text-base">{(graphNav() as { label: string }).label}</span>
-                  </>
-                </Show>
-              </div>
-            </Show>
-          </Portal>
-        )}
-      </Show>
     <Show when={isDesktop()}>
       <aside
         id="review-panel"
@@ -543,16 +501,17 @@ export function SessionSidePanel(props: {
                     {(data) => (
                       <Suspense>
                         <WikiGraph
-                          data={data()}
+                          data={data}
                           notifiedNodeIds={notifiedNodeIds}
                           onNavigate={(slug, label) => {
                             const node = graphData()?.nodes.find((n) => n.slug === slug)
                             if (node) clearNotif(node.id)
                             setGraphNav({ type: "page", slug, label: label ?? slug })
                           }}
-                          onNavigateResource={(resourceId, label) => {
+                          onNavigateResource={(resourceId) => {
                             clearNotif(`res_${resourceId}`)
-                            setGraphNav({ type: "resource", resourceId, label })
+                            setActiveReadResourceId(resourceId)
+                            setActiveSidebarView({ section: "workspace", view: "read", label: "Read" })
                           }}
                         />
                       </Suspense>
@@ -935,13 +894,13 @@ export function SessionSidePanel(props: {
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
-            class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-base"
+            class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-stronger"
             classList={{
               "pointer-events-none": !reviewOpen(),
               "border-l border-border-weaker-base": fileOpen(),
             }}
           >
-            <div class="size-full min-w-0 h-full bg-background-base">
+            <div class="size-full min-w-0 h-full bg-background-stronger">
               <DragDropProvider
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
@@ -1028,7 +987,7 @@ export function SessionSidePanel(props: {
                     </Tabs.Content>
                   </Show>
 
-                  <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
+                  <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict bg-background-stronger">
                     <Show when={activeTab() === "empty"}>
                       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                         <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">

@@ -10,13 +10,7 @@ import { Skill } from "../skill"
 import { Log } from "../util/log"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
-import PROMPT_ONBOARD from "./template/onboard.txt"
-import PROMPT_MEMORIZE from "./template/memorize.txt"
-import PROMPT_ADD_CATEGORY from "./template/add-category.txt"
-import PROMPT_REMOVE_CATEGORY from "./template/remove-category.txt"
-import PROMPT_ADD_SECTION from "./template/add-section.txt"
-import PROMPT_REMOVE_SECTION from "./template/remove-section.txt"
-import PROMPT_GROUP from "./template/group.txt"
+import PROMPT_ADD_RESOURCE from "./template/add-resource.txt"
 import PROMPT_REMOVE_RESOURCE from "./template/remove-resource.txt"
 
 export namespace Command {
@@ -71,13 +65,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
-    ONBOARD: "onboard",
-    MEMORIZE: "memorize",
-    ADD_CATEGORY: "add-category",
-    REMOVE_CATEGORY: "remove-category",
-    ADD_SECTION: "add-section",
-    REMOVE_SECTION: "remove-section",
-    GROUP: "group",
+    ADD_RESOURCE: "add-resource",
     REMOVE_RESOURCE: "remove-resource",
   } as const
 
@@ -99,68 +87,14 @@ export namespace Command {
         const cfg = yield* config.get()
         const commands: Record<string, Info> = {}
 
-        commands[Default.ONBOARD] = {
-          name: Default.ONBOARD,
-          description: "set up your knowledge base — goals, categories, depth",
-          source: "command",
-          get template() {
-            return PROMPT_ONBOARD
-          },
-          hints: hints(PROMPT_ONBOARD),
-        }
-        commands[Default.MEMORIZE] = {
-          name: Default.MEMORIZE,
+commands[Default.ADD_RESOURCE] = {
+          name: Default.ADD_RESOURCE,
           description: "add a resource to your knowledge base",
           source: "command",
           get template() {
-            return PROMPT_MEMORIZE
+            return PROMPT_ADD_RESOURCE
           },
-          hints: hints(PROMPT_MEMORIZE),
-        }
-        commands[Default.ADD_CATEGORY] = {
-          name: Default.ADD_CATEGORY,
-          description: "add a new category to your knowledge base",
-          source: "command",
-          get template() {
-            return PROMPT_ADD_CATEGORY
-          },
-          hints: hints(PROMPT_ADD_CATEGORY),
-        }
-        commands[Default.REMOVE_CATEGORY] = {
-          name: Default.REMOVE_CATEGORY,
-          description: "remove a category from your knowledge base",
-          source: "command",
-          get template() {
-            return PROMPT_REMOVE_CATEGORY
-          },
-          hints: hints(PROMPT_REMOVE_CATEGORY),
-        }
-        commands[Default.ADD_SECTION] = {
-          name: Default.ADD_SECTION,
-          description: "add a section to a category or subcategory",
-          source: "command",
-          get template() {
-            return PROMPT_ADD_SECTION
-          },
-          hints: hints(PROMPT_ADD_SECTION),
-        }
-        commands[Default.REMOVE_SECTION] = {
-          name: Default.REMOVE_SECTION,
-          description: "remove a section (overview and key concepts are protected)",
-          source: "command",
-          get template() {
-            return PROMPT_REMOVE_SECTION
-          },
-          hints: hints(PROMPT_REMOVE_SECTION),
-        }
-        commands[Default.GROUP] = {
-          name: Default.GROUP,
-          description: "group and consolidate key-concepts for a category or subcategory",
-          source: "command",
-          get template() {
-            return PROMPT_GROUP
-          },
-          hints: hints(PROMPT_GROUP),
+          hints: hints(PROMPT_ADD_RESOURCE),
         }
         commands[Default.REMOVE_RESOURCE] = {
           name: Default.REMOVE_RESOURCE,

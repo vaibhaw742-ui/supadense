@@ -1,73 +1,68 @@
 /**
- * wiki-graph.tsx — Obsidian-style force-directed knowledge graph
- * Renders categories, subcategories, resources, and groups as an interactive SVG.
+ * wiki-graph.tsx — D3 force-directed graph for resources.
+ *
+ * Resource nodes: fixed amber color, status badge (✓ / ✗ / ⟳) on top-right corner.
  */
-import { onMount, onCleanup, createEffect } from "solid-js"
+import { onCleanup, createEffect } from "solid-js"
 import * as d3 from "d3"
 import type { GraphData, GraphNode } from "./wiki-api"
 
-interface Props {
-  data: GraphData
-  onNavigate: (slug: string, label?: string) => void
-  onNavigateResource?: (resourceId: string, label: string) => void
+interface WikiGraphProps {
+  data: () => GraphData
   notifiedNodeIds?: () => Set<string>
+  onNavigate: (slug: string, label?: string) => void
+  onNavigateResource: (resourceId: string, label: string, url?: string) => void
+  onNavigateDirectory?: (path: string, label: string) => void
+  onOpenCodeBrowser?: () => void
 }
 
-// ── Node sizing ───────────────────────────────────────────────────────────────
+const RESOURCE_COLOR = "#f59e0b"
+const RESOURCE_R = 8
+const DIRECTORY_COLOR = "#0a0a0a"
+const PROJECT_COLOR = "#d68a2e"
+const GITHUB_R = 24
 
-function nodeRadius(type: string): number {
-  switch (type) {
-    case "category":    return 14
-    case "subcategory": return 9
-    case "group":       return 7
-    case "resource":    return 4
-    default:            return 5
+function nodeRadius(node: GraphNode): number {
+  if (node.type === "github") return GITHUB_R
+  if (node.type === "project") return 16
+  if (node.type === "directory") {
+    const files = (node as any).total_file_count ?? 0
+    return Math.max(6, Math.min(24, 6 + Math.sqrt(files) * 1.5))
+  }
+  return RESOURCE_R
+}
+
+function statusBadge(status?: string): { color: string; type: "done" | "failed" | "processing" } | null {
+  switch (status) {
+    case "done":        return { color: "#22c55e", type: "done" }
+    case "failed":      return { color: "#ef4444", type: "failed" }
+    case "processing":
+    case "pending":     return { color: "#f97316", type: "processing" }
+    default:            return null
   }
 }
 
-function nodeColor(node: GraphNode, categoryColorMap: Map<string, string>): string {
-  switch (node.type) {
-    case "category":
-      return node.color ?? "#6366f1"
-    case "subcategory": {
-      const base = node.category_slug ? categoryColorMap.get(node.category_slug) ?? "#6366f1" : "#6366f1"
-      return blendWithWhite(base, 0.45)
-    }
-    case "group":
-      return "#cbd5e1"
-    case "resource":
-      return "#f59e0b"
-    default:
-      return "#9ca3af"
-  }
-}
-
-function blendWithWhite(hex: string, amount: number): string {
-  // amount: 0 = original, 1 = white
-  try {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    const rr = Math.round(r + (255 - r) * amount)
-    const gg = Math.round(g + (255 - g) * amount)
-    const bb = Math.round(b + (255 - b) * amount)
-    return `rgb(${rr},${gg},${bb})`
-  } catch {
-    return "#c7d2fe"
-  }
+// SVG path data for each status icon, drawn inside a ~5px-radius circle (coords centered at 0,0)
+const STATUS_PATHS: Record<string, string> = {
+  // checkmark ✓
+  done:       "M-2.2,0.1 L-0.6,2.0 L2.4,-1.8",
+  // × cross
+  failed:     "M-1.8,-1.8 L1.8,1.8 M1.8,-1.8 L-1.8,1.8",
+  // rotating dash for processing (animated via CSS)
+  processing: "M-2.0,0 L2.0,0",
 }
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "…" : s
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
-export function WikiGraph(props: Props) {
+export function WikiGraph(props: WikiGraphProps) {
   let container!: HTMLDivElement
   let fitFn: (() => void) | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let nodeSelRef: d3.Selection<SVGGElement, any, SVGGElement, unknown> | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let linkSelRef: d3.Selection<SVGLineElement, any, SVGGElement, unknown> | null = null
 
   const updateDots = () => {
     if (!nodeSelRef) return
@@ -77,81 +72,69 @@ export function WikiGraph(props: Props) {
     nodeSelRef.filter((d: GraphNode) => ids.has(d.id))
       .append("circle")
       .attr("class", "notif-dot")
-      .attr("r", 3.5)
-      .attr("cx", (d: GraphNode) => nodeRadius(d.type) - 1)
-      .attr("cy", (d: GraphNode) => -(nodeRadius(d.type) - 1))
+      .attr("r", 4)
+      .attr("cx", (d: GraphNode) => nodeRadius(d) - 1)
+      .attr("cy", (d: GraphNode) => -(nodeRadius(d) - 1))
       .attr("fill", "#22c55e")
-      .attr("stroke", "#fff")
+      .attr("stroke", "#1a1a1a")
       .attr("stroke-width", 1.5)
       .attr("pointer-events", "none")
   }
 
   createEffect(() => {
-    props.notifiedNodeIds?.() // track reactively
+    props.notifiedNodeIds?.()
     updateDots()
   })
 
-  onMount(() => {
-    const { nodes: rawNodes, edges: rawEdges } = props.data
+  createEffect(() => {
+    const { nodes: rawNodes, edges: rawEdges } = props.data()
+    // Clear previous render when data changes
+    d3.select(container).selectAll("*").remove()
+    fitFn = null
+    nodeSelRef = null
+    linkSelRef = null
     if (rawNodes.length === 0) return
 
-    // Build category color lookup for subcategory coloring
-    const categoryColorMap = new Map<string, string>()
-    for (const n of rawNodes) {
-      if (n.type === "category" && n.slug) {
-        categoryColorMap.set(n.slug, n.color ?? "#6366f1")
-      }
-    }
-
-    // D3 needs mutable copies with position fields
     type SimNode = GraphNode & d3.SimulationNodeDatum
     type SimLink = { source: string | SimNode; target: string | SimNode }
 
     const nodes: SimNode[] = rawNodes.map((n) => ({ ...n }))
     const links: SimLink[] = rawEdges.map((e) => ({ source: e.source, target: e.target }))
 
-    const width  = container.clientWidth  || 320
-    const height = container.clientHeight || 480
+    const width  = container.clientWidth  || 600
+    const height = container.clientHeight || 500
 
-    // SVG
+    // ── SVG setup ─────────────────────────────────────────────────────────────
     const svg = d3.select(container)
       .append("svg")
-      .attr("width",  "100%")
+      .attr("width", "100%")
       .attr("height", "100%")
       .attr("viewBox", `0 0 ${width} ${height}`)
       .style("cursor", "grab")
 
-    // Zoom layer
     const g = svg.append("g")
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.25, 5])
+      .scaleExtent([0.2, 6])
       .on("zoom", (event) => {
         g.attr("transform", event.transform)
-        svg.style("cursor", event.transform.k > 1 ? "grabbing" : "grab")
+        svg.style("cursor", "grabbing")
       })
+      .on("end", () => svg.style("cursor", "grab"))
 
     svg.call(zoom)
 
-    // ── Fit-to-view helper ────────────────────────────────────────────────────
     fitFn = () => {
-      // Only consider category nodes for fit bounds (avoids resource scatter)
-      const catNodes = nodes.filter((n) => n.type === "category" && n.x != null && n.y != null)
-      const fitNodes = catNodes.length > 0 ? catNodes : nodes.filter((n) => n.x != null && n.y != null)
-      if (fitNodes.length === 0) return
-
-      const pad = 40
-      const xs = fitNodes.map((n) => n.x!)
-      const ys = fitNodes.map((n) => n.y!)
-      const x0 = Math.min(...xs) - pad
-      const y0 = Math.min(...ys) - pad
-      const x1 = Math.max(...xs) + pad
-      const y1 = Math.max(...ys) + pad
-
-      const scale = Math.min(0.95, Math.min(width / (x1 - x0), height / (y1 - y0)))
+      const visibleNodes = nodes.filter((n) => n.x != null && n.y != null)
+      if (visibleNodes.length === 0) return
+      const pad = 48
+      const xs = visibleNodes.map((n) => n.x!)
+      const ys = visibleNodes.map((n) => n.y!)
+      const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad
+      const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad
+      const scale = Math.min(1, Math.min(width / (x1 - x0), height / (y1 - y0)))
       const tx = width / 2 - scale * ((x0 + x1) / 2)
       const ty = height / 2 - scale * ((y0 + y1) / 2)
-
       svg.transition().duration(400).call(
         zoom.transform,
         d3.zoomIdentity.translate(tx, ty).scale(scale),
@@ -165,32 +148,40 @@ export function WikiGraph(props: Props) {
         .distance((l) => {
           const s = l.source as SimNode
           const t = l.target as SimNode
-          if (s.type === "category" || t.type === "category")    return 90
-          if (s.type === "subcategory" || t.type === "subcategory") return 65
-          if (s.type === "group" || t.type === "group")           return 40
-          return 50
+          if (s.type === "project" || t.type === "project") return 140
+          if (s.type === "directory" || t.type === "directory") return 90
+          return 80
         })
-        .strength(0.6)
+        .strength(0.5)
       )
-      .force("charge",   d3.forceManyBody<SimNode>().strength((d) => d.type === "category" ? -220 : -80))
-      .force("center",   d3.forceCenter(width / 2, height / 2).strength(0.05))
-      .force("collision",d3.forceCollide<SimNode>().radius((d) => nodeRadius(d.type) + 5))
+      .force("charge", d3.forceManyBody<SimNode>().strength((d) => {
+        if (d.type === "github") return -500
+        if (d.type === "project") return -400
+        if (d.type === "directory") return -200
+        return -120
+      }))
+      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.06))
+      .force("collision", d3.forceCollide<SimNode>().radius((d) =>
+        nodeRadius(d) + (d.type === "project" ? 16 : 8)
+      ))
 
     // ── Edges ─────────────────────────────────────────────────────────────────
     const linkSel = g.append("g").attr("class", "g-links")
       .selectAll<SVGLineElement, SimLink>("line")
       .data(links)
       .join("line")
-      .attr("stroke", "#d3d1cb")
-      .attr("stroke-width", 1)
-      .attr("stroke-opacity", 0.9)
+      .attr("stroke", "rgba(255,255,255,0.12)")
+      .attr("stroke-width", 1.2)
+      .attr("stroke-opacity", 1)
+
+    linkSelRef = linkSel
 
     // ── Node groups ───────────────────────────────────────────────────────────
     const nodeSel = g.append("g").attr("class", "g-nodes")
       .selectAll<SVGGElement, SimNode>("g")
       .data(nodes)
       .join("g")
-      .style("cursor", (d) => d.type === "group" ? "default" : "pointer")
+      .style("cursor", "pointer")
 
     // Drag
     nodeSel.call(
@@ -200,38 +191,124 @@ export function WikiGraph(props: Props) {
           d.fx = d.x; d.fy = d.y
         })
         .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y })
-        .on("end",  (event, d) => {
+        .on("end", (event, d) => {
           if (!event.active) sim.alphaTarget(0)
           d.fx = null; d.fy = null
         })
     )
 
-    // Circles
+    // Main circle
     nodeSel.append("circle")
-      .attr("r",            (d) => nodeRadius(d.type))
-      .attr("fill",         (d) => nodeColor(d, categoryColorMap))
-      .attr("stroke",       "#f7f7f5")
-      .attr("stroke-width", 1.5)
+      .attr("r", (d) => nodeRadius(d))
+      .attr("fill", (d) => {
+        if (d.type === "github") return "rgba(10,10,10,0.92)"
+        if (d.type === "project") return "rgba(214,138,46,0.15)"
+        if (d.type === "directory") return "rgba(10,10,10,0.08)"
+        return `${RESOURCE_COLOR}33`
+      })
+      .attr("stroke", (d) => {
+        if (d.type === "github") return "#d68a2e"
+        if (d.type === "project") return "#d68a2e"
+        if (d.type === "directory") return "#737373"
+        return RESOURCE_COLOR
+      })
+      .attr("stroke-width", (d) => {
+        if (d.type === "github") return 2.5
+        if (d.type === "project") return 2
+        return 1.5
+      })
 
-    // Labels — all node types
-    nodeSel.append("text")
-      .text((d) => {
-        if (d.type === "category")    return truncate(d.label, 12)
-        if (d.type === "subcategory") return truncate(d.label, 14)
-        if (d.type === "group")       return truncate(d.label, 14)
-        return truncate(d.label, 16) // resource
-      })
-      .attr("text-anchor", "middle")
-      .attr("dy", (d) => nodeRadius(d.type) + (d.type === "resource" ? 9 : 11))
-      .attr("font-size", (d) => {
-        if (d.type === "category")    return 10
-        if (d.type === "subcategory") return 8
-        if (d.type === "group")       return 8
-        return 7 // resource
-      })
-      .attr("font-family", "'Inter', -apple-system, BlinkMacSystemFont, sans-serif")
-      .attr("fill", (d) => d.type === "group" ? "#a8a29e" : "#787774")
+    // GitHub node: outer glow ring
+    nodeSel.filter((d) => d.type === "github")
+      .append("circle")
+      .attr("r", GITHUB_R + 5)
+      .attr("fill", "none")
+      .attr("stroke", "rgba(214,138,46,0.25)")
+      .attr("stroke-width", 1.5)
       .attr("pointer-events", "none")
+
+    // GitHub node: <> code brackets inside
+    nodeSel.filter((d) => d.type === "github")
+      .append("text")
+      .text("</>")
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .attr("font-size", 11)
+      .attr("font-weight", "700")
+      .attr("font-family", "'Geist Mono', monospace")
+      .attr("fill", "#d68a2e")
+      .attr("pointer-events", "none")
+
+    // GitHub node: label below
+    nodeSel.filter((d) => d.type === "github")
+      .append("text")
+      .text((d) => truncate(d.label, 14))
+      .attr("text-anchor", "middle")
+      .attr("dy", GITHUB_R + 13)
+      .attr("font-size", 9)
+      .attr("font-weight", "600")
+      .attr("font-family", "'Geist Mono', monospace")
+      .attr("fill", "#d68a2e")
+      .attr("pointer-events", "none")
+
+    // Project: label inside
+    nodeSel.filter((d) => d.type === "project")
+      .append("text")
+      .text((d) => truncate(d.label, 12))
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .attr("font-size", 9)
+      .attr("font-weight", "700")
+      .attr("font-family", "'Geist Mono', monospace")
+      .attr("fill", "#d68a2e")
+      .attr("pointer-events", "none")
+
+    // Resource: label below
+    nodeSel.filter((d) => d.type === "resource")
+      .append("text")
+      .text((d) => truncate(d.label, 18))
+      .attr("text-anchor", "middle")
+      .attr("dy", RESOURCE_R + 10)
+      .attr("font-size", 7)
+      .attr("font-family", "'Inter', -apple-system, sans-serif")
+      .attr("fill", "rgba(255,255,255,0.45)")
+      .attr("pointer-events", "none")
+
+    // Directory: label below
+    nodeSel.filter((d) => d.type === "directory")
+      .append("text")
+      .text((d) => truncate(d.label, 14))
+      .attr("text-anchor", "middle")
+      .attr("dy", (d: GraphNode) => nodeRadius(d) + 10)
+      .attr("font-size", 8)
+      .attr("font-family", "'Geist Mono', 'JetBrains Mono', monospace")
+      .attr("fill", "rgba(10,10,10,0.6)")
+      .attr("pointer-events", "none")
+
+    // Status badge on resource nodes
+    const resourceNodes = nodeSel.filter((d) => d.type === "resource" && !!statusBadge(d.status))
+    const badgeG = resourceNodes.append("g")
+      .attr("class", "status-badge")
+      .attr("transform", `translate(${RESOURCE_R - 1},${-(RESOURCE_R - 1)})`)
+      .attr("pointer-events", "none")
+
+    badgeG.append("circle")
+      .attr("r", 5)
+      .style("fill", (d) => statusBadge(d.status)?.color ?? "transparent")
+      .style("stroke", "#1a1a1a")
+      .style("stroke-width", "1px")
+
+    badgeG.append("path")
+      .attr("d", (d) => STATUS_PATHS[statusBadge(d.status)?.type ?? ""] ?? "")
+      .style("stroke", "#ffffff")
+      .style("stroke-width", "1.8px")
+      .style("stroke-linecap", "round")
+      .style("stroke-linejoin", "round")
+      .style("fill", "none")
+      .attr("class", (d) => statusBadge(d.status)?.type === "processing" ? "badge-spin" : "")
+
+    nodeSelRef = nodeSel
+    updateDots()
 
     // ── Tooltip ───────────────────────────────────────────────────────────────
     const tooltip = d3.select(container)
@@ -239,14 +316,13 @@ export function WikiGraph(props: Props) {
       .attr("class", "wk-graph-tooltip")
       .style("opacity", "0")
 
-    // ── Hover interactions ────────────────────────────────────────────────────
+    // ── Hover ─────────────────────────────────────────────────────────────────
     nodeSel
       .on("mouseover", function (event, d) {
+        const r = (d.type === "github" || d.type === "project") ? 3.5 : 2.5
         d3.select(this).select("circle")
-          .attr("stroke", "#2d6a4f")
-          .attr("stroke-width", 2.5)
+          .attr("stroke-width", r)
 
-        // Collect connected node IDs
         const connected = new Set([d.id])
         links.forEach((l) => {
           const s = (l.source as SimNode).id
@@ -255,60 +331,50 @@ export function WikiGraph(props: Props) {
           if (t === d.id) connected.add(s)
         })
 
-        nodeSel.select("circle").attr("opacity", (n) => connected.has(n.id) ? 1 : 0.2)
+        nodeSel.select("circle").attr("opacity", (n: GraphNode) => connected.has(n.id) ? 1 : 0.2)
         linkSel
-          .attr("stroke-opacity", (l) => {
-            const s = (l.source as SimNode).id
-            const t = (l.target as SimNode).id
-            return s === d.id || t === d.id ? 1 : 0.08
-          })
           .attr("stroke", (l) => {
             const s = (l.source as SimNode).id
             const t = (l.target as SimNode).id
-            return s === d.id || t === d.id ? "#2d6a4f" : "#d3d1cb"
+            return s === d.id || t === d.id ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.06)"
           })
           .attr("stroke-width", (l) => {
             const s = (l.source as SimNode).id
             const t = (l.target as SimNode).id
-            return s === d.id || t === d.id ? 1.5 : 1
+            return s === d.id || t === d.id ? 2 : 1
           })
 
         tooltip
           .style("opacity", "1")
           .html(d.label)
-          .style("left", (event.offsetX + 12) + "px")
-          .style("top",  (event.offsetY - 8)  + "px")
+          .style("left", (event.offsetX + 14) + "px")
+          .style("top",  (event.offsetY - 10) + "px")
       })
       .on("mousemove", (event) => {
         tooltip
-          .style("left", (event.offsetX + 12) + "px")
-          .style("top",  (event.offsetY - 8)  + "px")
+          .style("left", (event.offsetX + 14) + "px")
+          .style("top",  (event.offsetY - 10) + "px")
       })
-      .on("mouseout", function () {
+      .on("mouseout", function (_event, d) {
         d3.select(this).select("circle")
-          .attr("stroke", "#f7f7f5")
-          .attr("stroke-width", 1.5)
+          .attr("stroke-width", d.type === "github" ? 2.5 : d.type === "project" ? 2 : 1.5)
         nodeSel.select("circle").attr("opacity", 1)
         linkSel
-          .attr("stroke-opacity", 0.9)
-          .attr("stroke", "#d3d1cb")
-          .attr("stroke-width", 1)
+          .attr("stroke", "rgba(255,255,255,0.12)")
+          .attr("stroke-width", 1.2)
         tooltip.style("opacity", "0")
       })
       .on("click", (_event, d) => {
-        if (d.type === "category" && d.slug)
-          props.onNavigate(d.slug, d.label)
-        else if (d.type === "subcategory" && d.category_slug && d.slug)
-          props.onNavigate(`${d.category_slug}--${d.slug}`, d.label)
-        else if (d.type === "resource" && props.onNavigateResource) {
+        if (d.type === "github") {
+          props.onOpenCodeBrowser?.()
+        } else if (d.type === "resource") {
           const resourceId = d.resource_id ?? d.id.replace(/^res_/, "")
-          if (resourceId) props.onNavigateResource(resourceId, d.label)
+          if (resourceId) props.onNavigateResource(resourceId, d.label, d.url)
+        } else if (d.type === "directory") {
+          const p = (d as any).path ?? ""
+          props.onNavigateDirectory?.(p, d.label)
         }
       })
-
-    nodeSelRef = nodeSel
-    // Draw initial notification dots after setup
-    updateDots()
 
     // ── Tick ──────────────────────────────────────────────────────────────────
     sim.on("tick", () => {
@@ -317,19 +383,24 @@ export function WikiGraph(props: Props) {
         .attr("y1", (d) => (d.source as SimNode).y ?? 0)
         .attr("x2", (d) => (d.target as SimNode).x ?? 0)
         .attr("y2", (d) => (d.target as SimNode).y ?? 0)
-      nodeSel
-        .attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
+      nodeSel.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
     })
 
-    onCleanup(() => sim.stop())
+    // Auto-fit after initial settle
+    setTimeout(() => fitFn?.(), 800)
+
+    onCleanup(() => {
+      sim.stop()
+      d3.select(container).selectAll("*").remove()
+    })
   })
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--background-base)" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={container} class="wk-graph-container" style={{ width: "100%", height: "100%" }} />
       <button
         class="wk-graph-fit-btn"
-        title="Fit all categories into view"
+        title="Fit to view"
         onClick={() => fitFn?.()}
       >
         ⊡

@@ -123,8 +123,8 @@ export function DialogCustomProvider(props: Props) {
 
       if (result.key) {
         await globalSDK.client.auth.set({
-          providerID: result.providerID,
-          auth: {
+          path: { id: result.providerID },
+          body: {
             type: "api",
             key: result.key,
           },

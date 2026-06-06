@@ -224,10 +224,10 @@ export function BlockPageView(props: Props) {
   async function handleUnindent(id: string) {
     const flat = flattenBlocks(blocks())
     const block = flat.find((b) => b.id === id)
-    if (!block || block.placement_id == null) return
-    const parent = flat.find((b) => b.id === block.placement_id)
+    if (!block || block.parent_id == null) return
+    const parent = flat.find((b) => b.id === block.parent_id)
     if (!parent) return
-    const grandparentId = (parent as PageBlock & { placement_id?: string }).placement_id ?? null
+    const grandparentId = parent.parent_id ?? null
     const grandparentChildren = grandparentId
       ? (flat.find((b) => b.id === grandparentId)?.children ?? [])
       : blocks()

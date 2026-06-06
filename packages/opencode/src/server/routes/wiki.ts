@@ -3,105 +3,22 @@
  * Served under /wiki/* in the instance router.
  */
 import { Hono } from "hono"
-import { readFileSync, existsSync, readdirSync } from "fs"
+import { readFileSync, existsSync, readdirSync, unlinkSync } from "fs"
 import path from "path"
 import { eq, desc, inArray, isNotNull, and } from "drizzle-orm"
 import { Instance } from "../../project/instance"
-import { ProjectTable } from "../../project/project.sql"
 import { Workspace } from "../../learning/workspace"
 import { Retrieval } from "../../learning/retrieval"
 import { Database } from "../../storage/db"
 import {
-  LearningKbEventTable,
   LearningResourceTable,
-  LearningConceptTable,
-  LearningKbWorkspaceTable,
-  LearningResourceWikiPlacementTable,
-  LearningMediaAssetTable,
-  LearningPageBlockTable,
 } from "../../learning/schema.sql"
-import { BlockBuilder } from "../../learning/block-builder"
-import type { BlockNode } from "../../learning/block-builder"
 import { Auth } from "../../auth"
 import { SessionStatus } from "../../session/status"
 import { SessionTable, PartTable } from "../../session/session.sql"
 import { Resource } from "../../learning/resource"
 import { Session } from "../../session"
-import { SessionPrompt } from "../../session/prompt"
-import { MessageID, SessionID } from "../../session/schema"
-import { Provider } from "../../provider/provider"
-import { Agent } from "../../agent/agent"
 import { WikiBuilder } from "../../learning/wiki-builder"
-import { createAnthropic } from "@ai-sdk/anthropic"
-import { generateText } from "ai"
-
-async function generateKbDescription(
-  type: "category" | "section",
-  name: string,
-  context?: string,
-): Promise<string> {
-  try {
-    const auth = await Auth.get("anthropic")
-    const apiKey = (auth && "key" in auth) ? auth.key : undefined
-    if (!apiKey) return ""
-
-    const anthropic = createAnthropic({ apiKey })
-    const prompt = type === "category"
-      ? `Write a 1-2 sentence description for a knowledge base category called "${name}"${context ? ` (inside "${context}")` : ""}. Be specific and technical. Return only the description, no quotes, no extra text.`
-      : `Write a 1-2 sentence description for a knowledge base section called "${name}" inside the category "${context ?? "general"}". Be specific and technical. Return only the description, no quotes, no extra text.`
-
-    const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
-      prompt,
-      maxOutputTokens: 80,
-    })
-    return text.trim()
-  } catch {
-    return ""
-  }
-}
-
-/** Resolve the KB workspace for the current request context.
- *  Tries project_id first, then falls back to kb_path = Instance.directory.
- *  Also ensures the watcher is started and existing wiki files are synced to DB.
- */
-const wikiInitializedWorkspaces = new Set<string>()
-
-function resolveWorkspace() {
-  const project = Instance.project
-  const workspace = Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
-  if (workspace && !wikiInitializedWorkspaces.has(workspace.id)) {
-    wikiInitializedWorkspaces.add(workspace.id)
-    Workspace.scaffoldFiles(workspace)
-  }
-  return workspace
-}
-
-/**
- * Returns a map of pageId → distinct resource count, computed from placements.
- * Avoids the stale denormalized resource_count column on wiki pages.
- */
-function distinctResourceCounts(pageIds: string[]): Map<string, number> {
-  if (pageIds.length === 0) return new Map()
-  const placements = Database.use((db) =>
-    db
-      .select({
-        wiki_page_id: LearningResourceWikiPlacementTable.wiki_page_id,
-        resource_id: LearningResourceWikiPlacementTable.resource_id,
-      })
-      .from(LearningResourceWikiPlacementTable)
-      .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, pageIds))
-      .all(),
-  )
-  const sets = new Map<string, Set<string>>()
-  for (const { wiki_page_id, resource_id } of placements) {
-    if (!sets.has(wiki_page_id)) sets.set(wiki_page_id, new Set())
-    sets.get(wiki_page_id)!.add(resource_id)
-  }
-  const result = new Map<string, number>()
-  for (const [pageId, ids] of sets) result.set(pageId, ids.size)
-  return result
-}
 
 function parseFrontmatter(content: string): Record<string, string> {
   const match = content.match(/^---\n([\s\S]*?)\n---/)
@@ -121,14 +38,25 @@ function stripFrontmatter(content: string): string {
   return content.replace(/^---\n[\s\S]*?\n---\n?/, "")
 }
 
+/** Resolve the KB workspace for the current request context. */
+const wikiInitializedWorkspaces = new Set<string>()
+
+function resolveWorkspace() {
+  const project = Instance.project
+  const workspace = Workspace.get(project.id) ?? Workspace.getByKbPath(Instance.directory)
+  if (workspace && !wikiInitializedWorkspaces.has(workspace.id)) {
+    wikiInitializedWorkspaces.add(workspace.id)
+    Workspace.scaffoldFiles(workspace)
+  }
+  return workspace
+}
+
 export const WikiRoutes = () => {
   const app = new Hono()
 
   // ── Home ────────────────────────────────────────────────────────────────────
-  // Returns workspace stats, all categories with their pages, and recent events.
+  // Returns workspace stats and recent events.
   app.get("/home", async (c) => {
-    // Auto-create workspace if none exists so new KBs get an empty-state 200 response
-    // instead of a 404 that hides the Get Started button in the frontend.
     let workspace = resolveWorkspace()
     if (!workspace) {
       try {
@@ -138,130 +66,53 @@ export const WikiRoutes = () => {
       } catch {
         return c.json({
           workspace: { id: "", kb_path: "", learning_intent: null, kb_initialized: false, goals: [] },
-          stats: { total_pages: 0, total_categories: 0, total_sources: 0, total_concepts: 0 },
-          categories: [],
+          stats: { total_sources: 0, total_concepts: 0 },
           recent_events: [],
-          graph_data: { nodes: [], edges: [] },
         })
       }
     }
 
-    const categories = Workspace.getCategories(workspace.id)
-    const pages = Workspace.getWikiPages(workspace.id)
-
-    const nonIndexPageIds = pages.filter((p) => p.page_type !== "index").map((p) => p.id)
-    const pageResourceCounts = distinctResourceCounts(nonIndexPageIds)
+    // Batch-heal resources stuck in "processing" that already have content
+    // (either stored in a file or inline in the DB column — both mean capture succeeded).
+    const stuckResources = Database.use((db) =>
+      db.select({
+        id: LearningResourceTable.id,
+        raw_content_path: LearningResourceTable.raw_content_path,
+        raw_content: LearningResourceTable.raw_content,
+      })
+        .from(LearningResourceTable)
+        .where(and(
+          eq(LearningResourceTable.workspace_id, workspace.id),
+          eq(LearningResourceTable.status, "processing"),
+        ))
+        .all(),
+    )
+    if (stuckResources.length > 0) {
+      const healedIds = stuckResources
+        .filter((r) => {
+          if (r.raw_content) return true // inline content
+          if (r.raw_content_path) return existsSync(path.join(workspace.kb_path, r.raw_content_path))
+          return false
+        })
+        .map((r) => r.id)
+      if (healedIds.length > 0) {
+        Database.use((db) =>
+          db.update(LearningResourceTable)
+            .set({ status: "done", time_updated: Date.now() })
+            .where(and(
+              eq(LearningResourceTable.workspace_id, workspace.id),
+              inArray(LearningResourceTable.id, healedIds),
+            ))
+            .run(),
+        )
+      }
+    }
 
     const resourceCount = Database.use((db) =>
       db.select().from(LearningResourceTable).where(eq(LearningResourceTable.workspace_id, workspace.id)).all(),
     ).length
 
-    const conceptCount = Database.use((db) =>
-      db.select().from(LearningConceptTable).where(eq(LearningConceptTable.workspace_id, workspace.id)).all(),
-    ).length
-
-    const events = Database.use((db) =>
-      db
-        .select()
-        .from(LearningKbEventTable)
-        .where(eq(LearningKbEventTable.workspace_id, workspace.id))
-        .orderBy(desc(LearningKbEventTable.time_created))
-        .limit(10)
-        .all(),
-    )
-
-    // ── Graph data ────────────────────────────────────────────────────────────
-    type GraphNode = { id: string; type: string; label: string; color?: string; slug?: string; category_slug?: string; url?: string; resource_id?: string }
-    type GraphEdge = { source: string; target: string }
-    const graphNodes: GraphNode[] = []
-    const graphEdges: GraphEdge[] = []
-    const seenEdges = new Set<string>()
-    function addEdge(source: string, target: string) {
-      const key = `${source}→${target}`
-      if (!seenEdges.has(key)) { seenEdges.add(key); graphEdges.push({ source, target }) }
-    }
-
-    // Category nodes
-    for (const cat of categories) {
-      graphNodes.push({ id: `cat_${cat.id}`, type: "category", label: cat.name, color: cat.color ?? "#6366f1", slug: cat.slug })
-    }
-
-    // Subcategory page nodes + category→page edges
-    const subPages = pages.filter((p) => p.page_type === "subcategory")
-    for (const page of subPages) {
-      const label = page.subcategory_slug?.replace(/-/g, " ") ?? page.slug
-      graphNodes.push({ id: `page_${page.id}`, type: "subcategory", label, category_slug: page.category_slug ?? undefined, slug: page.subcategory_slug ?? undefined })
-      const cat = categories.find((c) => c.slug === page.category_slug)
-      if (cat) addEdge(`cat_${cat.id}`, `page_${page.id}`)
-    }
-
-    // Resources + page→resource edges + group nodes
-    // Use ALL pages (category + subcategory) since placements can be on either
-    const resources = Database.use((db) =>
-      db.select().from(LearningResourceTable).where(eq(LearningResourceTable.workspace_id, workspace.id)).all(),
-    )
-    const allPageIds = pages.filter((p) => p.page_type !== "index").map((p) => p.id)
-
-    if (allPageIds.length > 0) {
-      const placements = Database.use((db) =>
-        db.select().from(LearningResourceWikiPlacementTable)
-          .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, allPageIds))
-          .all(),
-      )
-
-      const seenResources = new Set<string>()
-      const seenGroups = new Set<string>()
-
-      for (const placement of placements) {
-        const resource = resources.find((r) => r.id === placement.resource_id)
-        if (!resource) continue
-
-        // Resource node (deduplicated) — domain-only label
-        if (!seenResources.has(resource.id)) {
-          let label = "Source"
-          if (resource.url) {
-            try { label = new URL(resource.url).hostname.replace(/^www\./, "") } catch { label = resource.title ?? "Source" }
-          } else if (resource.title) {
-            label = resource.title.split(" ").slice(0, 2).join(" ")
-          }
-          graphNodes.push({ id: `res_${resource.id}`, type: "resource", label, url: resource.url ?? undefined, resource_id: resource.id })
-          seenResources.add(resource.id)
-        }
-
-        // Edge: page → resource (deduplicated)
-        // For category-page placements, connect directly to the category node
-        const placementPage = pages.find((p) => p.id === placement.wiki_page_id)
-        if (placementPage?.page_type === "category") {
-          const cat = categories.find((c) => c.slug === placementPage.category_slug)
-          if (cat) addEdge(`cat_${cat.id}`, `res_${resource.id}`)
-        } else {
-          addEdge(`page_${placement.wiki_page_id}`, `res_${resource.id}`)
-        }
-
-        // Group nodes from group_assignments
-        if (placement.group_assignments) {
-          try {
-            const assignments = JSON.parse(placement.group_assignments) as Array<{ group_num: number; group: string }>
-            const page = pages.find((p) => p.id === placement.wiki_page_id)
-            for (const a of assignments) {
-              const groupId = `grp_${placement.wiki_page_id}_${a.group_num}`
-              if (!seenGroups.has(groupId)) {
-                graphNodes.push({ id: groupId, type: "group", label: `[${a.group_num}] ${a.group}`, category_slug: page?.category_slug ?? undefined })
-                seenGroups.add(groupId)
-                // Connect group to its parent page (or category if on category page)
-                if (placementPage?.page_type === "category") {
-                  const cat = categories.find((c) => c.slug === placementPage.category_slug)
-                  if (cat) addEdge(`cat_${cat.id}`, groupId)
-                } else {
-                  addEdge(`page_${placement.wiki_page_id}`, groupId)
-                }
-              }
-              addEdge(`res_${resource.id}`, groupId)
-            }
-          } catch { /* malformed JSON — skip */ }
-        }
-      }
-    }
+    const conceptCount = 0
 
     return c.json({
       workspace: {
@@ -271,378 +122,17 @@ export const WikiRoutes = () => {
         kb_initialized: workspace.kb_initialized,
         goals: workspace.goals,
       },
-      graph_data: { nodes: graphNodes, edges: graphEdges },
       stats: {
-        total_pages: pages.filter((p) => p.page_type !== "index").length,
-        total_categories: categories.length,
         total_sources: resourceCount,
         total_concepts: conceptCount,
       },
-      categories: categories.map((cat) => ({
-        id: cat.id,
-        slug: cat.slug,
-        name: cat.name,
-        description: cat.description,
-        depth: cat.depth,
-        icon: cat.icon,
-        color: cat.color,
-        parent_category_id: cat.parent_category_id ?? null,
-        resource_count: (() => {
-          const ids = new Set<string>()
-          const catPageIds = pages.filter((p) => p.category_id === cat.id).map((p) => p.id)
-          // union all resource IDs across the category's pages for a true distinct count
-          const catPlacements = Database.use((db) =>
-            catPageIds.length === 0 ? [] :
-            db.select({ resource_id: LearningResourceWikiPlacementTable.resource_id })
-              .from(LearningResourceWikiPlacementTable)
-              .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, catPageIds))
-              .all()
-          )
-          for (const { resource_id } of catPlacements) ids.add(resource_id)
-          return ids.size
-        })(),
-        pages: pages
-          .filter((p) => p.category_id === cat.id)
-          .map((p) => ({
-            id: p.id,
-            slug: p.slug,
-            title: p.title,
-            page_type: p.page_type,
-            file_path: p.file_path,
-            resource_count: pageResourceCounts.get(p.id) ?? 0,
-            subcategory_slug: p.subcategory_slug,
-          })),
-      })),
-      recent_events: events.map((e) => ({
-        id: e.id,
-        event_type: e.event_type,
-        summary: e.summary,
-        time_created: e.time_created,
-      })),
+      recent_events: [],
     })
-  })
-
-  // ── Pages list ───────────────────────────────────────────────────────────────
-  app.get("/pages", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json([])
-
-    const pages = Workspace.getWikiPages(workspace.id)
-    const pageIds = pages.map((p) => p.id)
-    const counts = distinctResourceCounts(pageIds)
-    return c.json(
-      pages.map((p) => ({
-        id: p.id,
-        slug: p.slug,
-        title: p.title,
-        page_type: p.page_type,
-        file_path: p.file_path,
-        category_slug: p.category_slug,
-        subcategory_slug: p.subcategory_slug,
-        resource_count: counts.get(p.id) ?? 0,
-      })),
-    )
-  })
-
-  // ── Single page ──────────────────────────────────────────────────────────────
-  // :slug can be a category slug ("agents") or combined ("agents--key-concepts")
-  app.get("/page/:slug", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-
-    const slug = c.req.param("slug")
-    const pages = Workspace.getWikiPages(workspace.id)
-
-    const page =
-      pages.find((p) => p.slug === slug) ??
-      pages.find((p) => p.file_path === `wiki/${slug}.md`) ??
-      pages.find(
-        (p) => p.category_slug && p.subcategory_slug && `${p.category_slug}--${p.subcategory_slug}` === slug,
-      ) ??
-      pages.find((p) => p.category_slug === slug && p.type === "overview") ??
-      pages.find((p) => p.category_slug === slug && p.page_type === "category")
-
-    if (!page) return c.json({ error: "Page not found" }, 404)
-
-    const filePath = `${workspace.kb_path}/${page.file_path}`
-    const content = existsSync(filePath) ? readFileSync(filePath, "utf8") : ""
-
-    const categories = Workspace.getCategories(workspace.id)
-    const category = page.category_id ? categories.find((c) => c.id === page.category_id) : null
-    const subcategories = pages.filter((p) => p.parent_page_id === page.id)
-
-    const concepts = Database.use((db) =>
-      db.select().from(LearningConceptTable).where(eq(LearningConceptTable.workspace_id, workspace.id)).all(),
-    )
-
-    const pageCounts = distinctResourceCounts([page.id])
-    const subcatIds = subcategories.map((s) => s.id)
-    const subcatCounts = distinctResourceCounts(subcatIds)
-
-    // For overview pages, aggregate resources from all section pages in the same category folder.
-    // Overview pages have no direct placements — content lives on their sibling section pages.
-    const placementPageIds = page.type === "overview" && page.category_id
-      ? pages.filter((p) => p.category_id === page.category_id && p.type !== "overview").map((p) => p.id)
-      : [page.id]
-
-    // Fetch distinct resources for this page — sorted by placement date (latest first)
-    const placements = placementPageIds.length === 0 ? [] : Database.use((db) =>
-      db.select().from(LearningResourceWikiPlacementTable)
-        .where(inArray(LearningResourceWikiPlacementTable.wiki_page_id, placementPageIds))
-        .orderBy(desc(LearningResourceWikiPlacementTable.placed_at))
-        .all(),
-    )
-    const allResources = Database.use((db) =>
-      db.select().from(LearningResourceTable)
-        .where(eq(LearningResourceTable.workspace_id, workspace.id))
-        .all(),
-    )
-    const seenResourceIds = new Set<string>()
-    const pageResources: { id: string; title: string | null; url: string | null; modality: string; section_heading: string | null; placed_at: number }[] = []
-    for (const p of placements) {
-      if (seenResourceIds.has(p.resource_id)) continue
-      seenResourceIds.add(p.resource_id)
-      const r = allResources.find((r) => r.id === p.resource_id)
-      if (!r) continue
-      pageResources.push({
-        id: r.id,
-        title: r.title ?? null,
-        url: r.url ?? null,
-        modality: r.modality,
-        section_heading: p.section_heading ?? null,
-        placed_at: p.placed_at,
-      })
-    }
-
-    // Fetch images for all resources on this page — sorted by creation date (latest first)
-    const resourceIds = [...seenResourceIds]
-    const pageImages = resourceIds.length === 0 ? [] : Database.use((db) =>
-      db.select().from(LearningMediaAssetTable)
-        .where(inArray(LearningMediaAssetTable.resource_id, resourceIds))
-        .orderBy(desc(LearningMediaAssetTable.time_created))
-        .all(),
-    ).map((a) => ({
-      id: a.id,
-      src_path: a.local_path.replace(/^wiki\//, ""),
-      caption: a.caption ?? null,
-      description: a.description ?? null,
-      alt_text: a.alt_text ?? null,
-      asset_type: a.asset_type,
-      time_created: a.time_created,
-    }))
-
-    // All pages in the same category folder, used to build file-based tabs
-    const categoryPages = page.category_id
-      ? pages
-          .filter((p) => p.category_id === page.category_id)
-          .sort((a, b) => {
-            if (a.type === "overview") return -1
-            if (b.type === "overview") return 1
-            return a.title.localeCompare(b.title)
-          })
-      : []
-    const categoryTabs = categoryPages.map((p) => ({
-      nav_slug: p.type === "overview"
-        ? (p.category_slug ?? p.slug)
-        : `${p.category_slug}--${p.subcategory_slug}`,
-      title: p.type === "overview" ? "Overview" : p.title,
-      type: p.type as string,
-    }))
-
-    // Lazy-init block tree (populated by wiki-builder on first build after migration)
-    let blocks: BlockNode[] = BlockBuilder.getBlockTree(page.id)
-    if (blocks.length === 0 && placements.length > 0) {
-      try {
-        BlockBuilder.syncPage(page.id)
-        blocks = BlockBuilder.getBlockTree(page.id)
-      } catch { /* non-blocking */ }
-    }
-
-    return c.json({
-      page: {
-        id: page.id,
-        slug: page.slug,
-        title: page.title,
-        description: page.description,
-        type: page.type,
-        page_type: page.page_type,
-        file_path: page.file_path,
-        resource_count: pageCounts.get(page.id) ?? 0,
-        word_count: page.word_count,
-        category_slug: page.category_slug,
-        subcategory_slug: page.subcategory_slug,
-        time_updated: page.time_updated,
-      },
-      category: category
-        ? {
-            id: category.id,
-            slug: category.slug,
-            name: category.name,
-            depth: category.depth,
-            icon: category.icon,
-          }
-        : null,
-      parent_category: (() => {
-        if (!category?.parent_category_id) return null
-        const parent = categories.find((c) => c.id === category.parent_category_id)
-        return parent ? { id: parent.id, slug: parent.slug, name: parent.name } : null
-      })(),
-      content,
-      category_tabs: categoryTabs,
-      subcategories: subcategories.map((s) => ({
-        id: s.id,
-        slug: s.slug,
-        title: s.title,
-        file_path: s.file_path,
-        subcategory_slug: s.subcategory_slug,
-        resource_count: subcatCounts.get(s.id) ?? 0,
-      })),
-      concepts: concepts.slice(0, 30).map((c) => ({
-        name: c.name,
-        slug: c.slug,
-        definition: c.definition,
-        related_slugs: c.related_slugs,
-      })),
-      resources: pageResources,
-      images: pageImages,
-      blocks,
-    })
-  })
-
-  // ── KB File Tree ─────────────────────────────────────────────────────────────
-  app.get("/tree", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ tree: [], kb_path: "" })
-    return c.json({ tree: Workspace.getTree(workspace.id), kb_path: workspace.kb_path })
-  })
-
-  // ── Create Category ───────────────────────────────────────────────────────────
-  app.post("/category", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-
-    let body: { name?: string; parent_category_id?: string }
-    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
-
-    const name = body.name?.trim()
-    if (!name) return c.json({ error: "name is required" }, 400)
-
-    const parentName = body.parent_category_id
-      ? Workspace.getCategories(workspace.id).find((c) => c.id === body.parent_category_id)?.name
-      : undefined
-    const description = await generateKbDescription("category", name, parentName)
-
-    try {
-      const result = Workspace.createCategory(workspace.id, name, body.parent_category_id, description || undefined)
-      return c.json({ category: result.category, overview_page: result.overviewPage })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to create category" }, 500)
-    }
-  })
-
-  // ── Create Section ────────────────────────────────────────────────────────────
-  app.post("/section", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-
-    let body: { name?: string; category_id?: string }
-    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
-
-    const name = body.name?.trim()
-    if (!name) return c.json({ error: "name is required" }, 400)
-    if (!body.category_id) return c.json({ error: "category_id is required" }, 400)
-
-    const categoryName = Workspace.getCategories(workspace.id).find((cat) => cat.id === body.category_id)?.name
-    const description = await generateKbDescription("section", name, categoryName)
-
-    try {
-      const page = Workspace.createSection(workspace.id, name, body.category_id, description || undefined)
-      return c.json({ page })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to create section" }, 500)
-    }
-  })
-
-  // ── Delete Category ───────────────────────────────────────────────────────────
-  app.delete("/category/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    try {
-      Workspace.deleteCategory(workspace.id, c.req.param("id"))
-      return c.json({ ok: true })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to delete category" }, 500)
-    }
-  })
-
-  // ── Rename Category ───────────────────────────────────────────────────────────
-  app.patch("/category/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-
-    let body: { name?: string }
-    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
-
-    const name = body.name?.trim()
-    if (!name) return c.json({ error: "name is required" }, 400)
-
-    try {
-      Workspace.renameCategory(workspace.id, c.req.param("id"), name)
-      return c.json({ ok: true })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to rename category" }, 500)
-    }
-  })
-
-  // ── Delete Section ────────────────────────────────────────────────────────────
-  app.delete("/section/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    try {
-      Workspace.deleteSection(workspace.id, c.req.param("id"))
-      return c.json({ ok: true })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to delete section" }, 500)
-    }
-  })
-
-  // ── Rename Section ────────────────────────────────────────────────────────────
-  app.patch("/section/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-
-    let body: { name?: string }
-    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
-
-    const name = body.name?.trim()
-    if (!name) return c.json({ error: "name is required" }, 400)
-
-    try {
-      Workspace.renameSection(workspace.id, c.req.param("id"), name)
-      return c.json({ ok: true })
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : "Failed to rename section" }, 500)
-    }
   })
 
   // ── Concepts ─────────────────────────────────────────────────────────────────
   app.get("/concepts", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json([])
-
-    const concepts = Database.use((db) =>
-      db.select().from(LearningConceptTable).where(eq(LearningConceptTable.workspace_id, workspace.id)).all(),
-    )
-
-    return c.json(
-      concepts.map((c) => ({
-        name: c.name,
-        slug: c.slug,
-        definition: c.definition,
-        aliases: c.aliases,
-        related_slugs: c.related_slugs,
-      })),
-    )
+    return c.json([])
   })
 
   // ── Search ───────────────────────────────────────────────────────────────────
@@ -657,16 +147,19 @@ export const WikiRoutes = () => {
     return c.json(result)
   })
 
-  // ── Single resource ──────────────────────────────────────────────────────────
+  // ── Resources ────────────────────────────────────────────────────────────────
   app.get("/resources", async (c) => {
     const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No workspace" }, 404)
+    if (!workspace) return c.json([])
     const rows = Database.use((db) =>
       db.select({
         id: LearningResourceTable.id,
         title: LearningResourceTable.title,
         url: LearningResourceTable.url,
+        author: LearningResourceTable.author,
         modality: LearningResourceTable.modality,
+        status: LearningResourceTable.status,
+        metadata: LearningResourceTable.metadata,
         time_created: LearningResourceTable.time_created,
       })
         .from(LearningResourceTable)
@@ -682,12 +175,30 @@ export const WikiRoutes = () => {
     const workspace = resolveWorkspace()
     if (!workspace) return c.json({ error: "No workspace" }, 404)
 
-    const resource = Database.use((db) =>
+    let resource = Database.use((db) =>
       db.select().from(LearningResourceTable)
         .where(and(eq(LearningResourceTable.id, id), eq(LearningResourceTable.workspace_id, workspace.id)))
         .get(),
     )
     if (!resource) return c.json({ error: "Not found" }, 404)
+
+    // Auto-heal: if status is "processing" but content exists, mark done.
+    // Fixes resources created before the setStatus("done") call was introduced.
+    if (resource.status === "processing") {
+      const hasInline = !!resource.raw_content
+      const hasFile = resource.raw_content_path
+        ? existsSync(path.join(workspace.kb_path, resource.raw_content_path))
+        : false
+      if (hasInline || hasFile) {
+        Database.use((db) =>
+          db.update(LearningResourceTable)
+            .set({ status: "done", time_updated: Date.now() })
+            .where(eq(LearningResourceTable.id, id))
+            .run(),
+        )
+        resource = { ...resource, status: "done" }
+      }
+    }
 
     // Load raw content from file if stored on disk
     let content: string | null = resource.raw_content ?? null
@@ -697,6 +208,8 @@ export const WikiRoutes = () => {
         content = readFileSync(fullPath, "utf-8")
       }
     }
+
+    const asset_map: Record<string, { localPath: string; width?: number | null; height?: number | null }> = {}
 
     return c.json({
       id: resource.id,
@@ -708,13 +221,43 @@ export const WikiRoutes = () => {
       content,
       metadata: resource.metadata ?? null,
       time_created: resource.time_created,
+      asset_map,
     })
   })
 
-  // ── Assets ───────────────────────────────────────────────────────────────────
-  // NOTE: Browser <img> requests carry no custom headers, so we cannot use the
-  // x-opencode-directory header here. Instead: try the current instance workspace
-  // first, then scan all workspaces for a matching file.
+  // ── Create a learn session for a resource ────────────────────────────────────
+  app.post("/resource/:id/learn-session", async (c) => {
+    const resourceId = c.req.param("id")
+    const body = await c.req.json().catch(() => ({}))
+    const question = body?.question as string | undefined
+    const concept = body?.concept as string | undefined
+
+    const resource = Resource.get(resourceId)
+    if (!resource) return c.json({ error: "Resource not found" }, 404)
+
+    const ws = resolveWorkspace()
+    if (!ws) return c.json({ error: "No workspace" }, 500)
+
+    const { Session } = await import("../../session")
+    const rawContent = Resource.getRawContent(resource, ws.kb_path)
+
+    const title = `Learn: ${resource.title ?? resource.url ?? "Resource"}`
+    const sessionInfo = await Session.create({
+      title,
+      sessionType: "learn" as const,
+      learnResourceId: resourceId,
+    })
+
+    return c.json({
+      session_id: sessionInfo.id,
+      resource_id: resourceId,
+      resource_title: resource.title ?? resource.url,
+      question: question ?? null,
+      concept: concept ?? null,
+      initial_context: rawContent?.slice(0, 8000) ?? null,
+    })
+  })
+
   // ── Roadmap list ────────────────────────────────────────────────────────────
   app.get("/roadmap", async (c) => {
     const ws = resolveWorkspace()
@@ -747,12 +290,10 @@ export const WikiRoutes = () => {
     return c.json({ slug, title: fm.title ?? slug, type: fm.type ?? "roadmap", created: fm.created ?? null, content: body })
   })
 
+  // ── Assets ───────────────────────────────────────────────────────────────────
   app.get("/assets/*", async (c) => {
-    // c.req.param("*") can be undefined in some Hono versions; extract from path instead.
-    // c.req.path returns the FULL path (e.g. "/wiki/assets/01KP5MJ7/file.png") — strip up to "assets/"
     const relativePath = c.req.path.replace(/^.*\/assets\//, "")
 
-    // Helper: attempt to serve from a given kb_path
     async function tryServe(kbPath: string): Promise<Response | null> {
       const assetsRoot = path.resolve(path.join(kbPath, "assets"))
       const fullPath = path.resolve(path.join(assetsRoot, relativePath))
@@ -765,8 +306,6 @@ export const WikiRoutes = () => {
       })
     }
 
-    // 1. Try the current instance workspace (fast path — header may be present)
-    // resolveWorkspace() can throw if Instance context is not set (browser img requests)
     let current: ReturnType<typeof resolveWorkspace> = undefined
     try {
       current = resolveWorkspace()
@@ -776,214 +315,201 @@ export const WikiRoutes = () => {
       }
     } catch { /* no instance context — fall through to scan all */ }
 
-    // 2. Fall back: scan workspaces scoped to the current user (covers browser img requests)
-    // Determine current userId from Instance context if available, else null (no cross-user scan)
-    let userId: string | null = null
-    try {
-      userId = Instance.current.userId ?? null
-    } catch { /* no instance context */ }
-
-    if (userId) {
-      // Join through project to restrict to this user's KB workspaces only
-      const userWorkspaces = Database.use((db) =>
-        db
-          .select({ id: LearningKbWorkspaceTable.id, kb_path: LearningKbWorkspaceTable.kb_path })
-          .from(LearningKbWorkspaceTable)
-          .innerJoin(ProjectTable, eq(LearningKbWorkspaceTable.project_id, ProjectTable.id))
-          .where(eq(ProjectTable.user_id, userId!))
-          .all(),
-      )
-      for (const ws of userWorkspaces) {
-        if (current && ws.id === current.id) continue
-        const res = await tryServe(ws.kb_path)
-        if (res) return res
-      }
-    }
+    // Note: cross-workspace asset lookup removed (LearningKbWorkspaceTable dropped).
 
     return c.text("Not found", 404)
   })
 
-  // ── KB Onboarding (direct, no AI) ────────────────────────────────────────────
-  app.post("/onboard", async (c) => {
-    // Auto-create workspace if none exists so onboarding works for brand-new KBs
-    let workspace = resolveWorkspace()
-    if (!workspace) {
-      workspace = Workspace.ensure(Instance.project.id, Instance.directory)
-      wikiInitializedWorkspaces.add(workspace.id)
-      Workspace.scaffoldFiles(workspace)
+  app.get("/proxy-image", async (c) => {
+    const rawUrl = c.req.query("url")
+    if (!rawUrl) return c.text("Missing url param", 400)
+    const url = rawUrl.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return c.text("Invalid url", 400)
     }
-
-    let body: {
-      template?: "ml" | "software" | "custom"
-      learning_intent?: string
-      goals?: string[]
-      categories?: { slug: string; name: string; description?: string; icon?: string }[]
-    }
-    try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
-
-    const template = body?.template
-    if (!template || !["ml", "software", "custom"].includes(template)) {
-      return c.json({ error: "template must be 'ml', 'software', or 'custom'" }, 400)
-    }
-
-    const TEMPLATES: Record<string, { categories: { slug: string; name: string; description: string; depth: "deep" | "working"; icon: string }[] }> = {
-      ml: {
-        categories: [
-          { slug: "agents", name: "Agents", description: "Autonomous AI systems that reason, plan, and act using tools, memory, and environment feedback.", depth: "deep", icon: "🤖" },
-          { slug: "rag", name: "RAG", description: "Retrieval-Augmented Generation — grounding LLM outputs with external knowledge retrieval.", depth: "deep", icon: "🔍" },
-          { slug: "llm-inference", name: "LLM Inference", description: "Serving large language models efficiently — latency, throughput, quantization, and hardware trade-offs.", depth: "working", icon: "⚡" },
-          { slug: "llm-training", name: "LLM Training", description: "Pre-training, fine-tuning, RLHF, and alignment techniques.", depth: "working", icon: "🧠" },
-        ],
-      },
-      software: {
-        categories: [
-          { slug: "database", name: "Database", description: "Relational and non-relational databases — schema design, indexing, query optimization, transactions.", depth: "working", icon: "🗄️" },
-          { slug: "frontend", name: "Frontend", description: "UI engineering — component architecture, state management, rendering strategies, performance.", depth: "working", icon: "🖥️" },
-          { slug: "software-system-design", name: "Software System Design", description: "Distributed systems, scalability patterns, API design, caching, and architectural trade-offs.", depth: "deep", icon: "🏗️" },
-        ],
-      },
-    }
-
-    const resolvedCategories = template !== "custom"
-      ? TEMPLATES[template].categories
-      : (body.categories ?? [])
-
-    if (resolvedCategories.length === 0) {
-      return c.json({ error: "No categories provided" }, 400)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return c.text("Only http/https allowed", 400)
     }
 
     try {
-      const { mkdirSync } = await import("fs")
-      const path = await import("path")
-
-      Workspace.completeOnboarding(workspace.id, {
-        learning_intent: body.learning_intent ?? "",
-        goals: body.goals ?? [],
-        depth_prefs: {},
-        trusted_sources: [],
-        scout_platforms: [],
-        categories: resolvedCategories,
-        subcategories: [],
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        },
       })
+      if (!res.ok) return c.text("Upstream error", 502)
 
-      mkdirSync(path.join(workspace.kb_path, "assets"), { recursive: true })
-      mkdirSync(path.join(workspace.kb_path, "raw"), { recursive: true })
-
-      const createdCategories: string[] = []
-      for (let i = 0; i < resolvedCategories.length; i++) {
-        const cat = resolvedCategories[i]
-        Workspace.createCategory(workspace.id, cat.name, undefined, cat.description, {
-          icon: cat.icon,
-          position: i,
-        })
-        createdCategories.push(cat.name)
-      }
-
-      const updatedWorkspace = Workspace.getById(workspace.id)!
-      WikiBuilder.buildSupadenseMd(updatedWorkspace)
-      WikiBuilder.buildLogFile(updatedWorkspace)
-
-      return c.json({ ok: true, categories: createdCategories })
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+      const contentType = res.headers.get("content-type") ?? "image/jpeg"
+      const buffer = await res.arrayBuffer()
+      return new Response(buffer, {
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=86400",
+        },
+      })
+    } catch {
+      return c.text("Fetch failed", 502)
     }
   })
 
   // ── Direct resource add (bypasses AI command layer) ──────────────────────────
   app.post("/resource", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
+    let workspace: ReturnType<typeof resolveWorkspace>
+    try {
+      console.log("[capture] POST /wiki/resource hit, dir=", Instance.directory)
+      workspace = resolveWorkspace()
+      if (!workspace) {
+        workspace = Workspace.ensure(Instance.project.id, Instance.directory)
+        wikiInitializedWorkspaces.add(workspace.id)
+        Workspace.scaffoldFiles(workspace)
+      }
+      console.log("[capture] workspace resolved, id=", workspace?.id)
+    } catch (err) {
+      console.error("[capture] workspace resolution failed:", err)
+      return c.json({ error: "Could not resolve workspace" }, 500)
+    }
 
     let body: { url?: string; session_id?: string }
     try { body = await c.req.json() } catch { return c.json({ error: "Invalid JSON" }, 400) }
     const url = body?.url?.trim()
     if (!url) return c.json({ error: "url required" }, 400)
-    const parentSessionID = body?.session_id?.trim() || undefined
 
-    // Deduplication check
-    const existing = Resource.getByUrl(workspace.id, url)
-    if (existing) return c.json({ resource_id: existing.id, duplicate: true })
-
-    // Step 1: Create resource (fetch content, write to disk, download images)
-    const { KbResourceCreateTool } = await import("../../tool/learning/kb-resource-create")
-    let resourceId: string
+    let existing: ReturnType<typeof Resource.getByUrl>
     try {
-      const toolDef = await KbResourceCreateTool.init()
-      const result = await toolDef.execute(
-        { workspace_id: workspace.id, modality: "url", input: url },
-        {} as never,
-      )
-      resourceId = (result.metadata as Record<string, unknown>)?.resource_id as string
-      if (!resourceId) throw new Error("No resource_id returned")
+      existing = Resource.getByUrl(workspace.id, url)
     } catch (err) {
-      return c.json({ error: String(err instanceof Error ? err.message : err) }, 500)
+      console.error("[capture] getByUrl failed:", err)
+      existing = undefined
+    }
+    if (existing && existing.status !== "pending") {
+      return c.json({ resource_id: existing.id, duplicate: true })
     }
 
-    // Step 2: Start curator pipeline in background
-    // Mirror kb_pipeline_run.ts: use curator agent's model, set parentID, inject completion notification
-    const boundStart = Instance.bind(async () => {
+    let stub: ReturnType<typeof Resource.create>
+    try {
+      stub = existing ?? Resource.create({ workspace_id: workspace.id, modality: "url", url })
+    } catch (err) {
+      console.error("[capture] stub creation failed:", err)
+      return c.json({ error: "Failed to create resource record" }, 500)
+    }
+
+    const captureWorkspaceId = workspace.id
+    const stubId = stub.id
+
+    void (async () => {
       try {
-        const { buildCuratorPrompt } = await import("../../tool/learning/kb-pipeline-run")
-        const resource = Resource.get(resourceId)
-        const pages = Workspace.getWikiPages(workspace.id)
-        const curatorPrompt = buildCuratorPrompt(resource, workspace, pages)
-        const resourceLabel = resource?.title ?? url
-
-        // Use curator agent's configured model (same as kb_pipeline_run.ts)
-        const curatorAgent = await Agent.get("kb-curator").catch(() => null)
-        const defaultModel = await Provider.defaultModel()
-        const model = curatorAgent?.model ?? defaultModel
-
-        const childSession = await Session.create({
-          parentID: parentSessionID as SessionID | undefined,
-          title: `KB: ${resourceLabel}`,
-          permission: [
-            { permission: "bash" as const, pattern: "*" as const, action: "deny" as const },
-            { permission: "edit" as const, pattern: "*" as const, action: "deny" as const },
-            { permission: "write" as const, pattern: "*" as const, action: "deny" as const },
-            { permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const },
-            { permission: "task" as const, pattern: "*" as const, action: "deny" as const },
-          ],
-        })
-
-        const parts = await SessionPrompt.resolvePromptParts(curatorPrompt)
-        await SessionPrompt.prompt({
-          sessionID: childSession.id as any,
-          messageID: MessageID.ascending() as any,
-          model: model as any,
-          agent: "kb-curator",
-          parts,
-        })
-
-        // Fallback wiki rebuild after curator completes
-        try {
-          WikiBuilder.buildAll(workspace.id)
-          WikiBuilder.buildSupadenseMd(workspace)
-          WikiBuilder.buildLogFile(workspace)
-        } catch (e) {
-          console.error("[KB Pipeline] wiki rebuild error:", e instanceof Error ? e.message : String(e))
-        }
-
-        console.log(`[KB Pipeline] complete: ${resourceLabel}`)
+        const { KbResourceCreateTool } = await import("../../tool/learning/kb-resource-create")
+        const toolDef = await KbResourceCreateTool.init()
+        await toolDef.execute({ workspace_id: captureWorkspaceId, modality: "url", input: url }, {} as never)
       } catch (err) {
-        console.error("[KB Pipeline] curator error:", err instanceof Error ? err.message : String(err))
+        console.error("[capture:bg] Failed for", url, err)
+        try { Resource.setStatus(stubId, "failed", undefined, String(err instanceof Error ? err.message : err)) } catch {}
       }
-    })
+    })()
 
-    boundStart()
+    return c.json({ resource_id: stubId, status: "pending" })
+  })
 
-    return c.json({ resource_id: resourceId })
+  // ── Retry failed resource ────────────────────────────────────────────────────
+  app.post("/resource/:id/retry", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No workspace" }, 404)
+
+    const resourceId = c.req.param("id")
+    const resource = Resource.get(resourceId)
+    if (!resource) return c.json({ error: "Resource not found" }, 404)
+    if (resource.workspace_id !== workspace.id) return c.json({ error: "Not found" }, 404)
+
+    if (!resource.url) return c.json({ error: "Resource has no URL to retry" }, 400)
+
+    Resource.setStatus(resourceId, "pending")
+
+    void (async () => {
+      try {
+        const { KbResourceCreateTool } = await import("../../tool/learning/kb-resource-create")
+        const toolDef = await KbResourceCreateTool.init()
+        await toolDef.execute({ workspace_id: workspace.id, modality: "url", input: resource.url! }, {} as never)
+      } catch (err) {
+        console.error("[retry:bg] Failed for", resource.url, err)
+        try { Resource.setStatus(resourceId, "failed", undefined, String(err instanceof Error ? err.message : err)) } catch {}
+      }
+    })()
+
+    return c.json({ resource_id: resourceId, status: "pending" })
+  })
+
+  // ── Delete resource ──────────────────────────────────────────────────────────
+  app.delete("/resource/:id", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ error: "No workspace" }, 404)
+
+    const resourceId = c.req.param("id")
+    const resource = Resource.get(resourceId)
+    if (!resource) return c.json({ error: "Resource not found" }, 404)
+    if (resource.workspace_id !== workspace.id) return c.json({ error: "Not found" }, 404)
+
+    const assets: { local_path: string }[] = []
+
+    // Delete DB row — cascades resource_clusters
+    Database.use((db) =>
+      db.delete(LearningResourceTable)
+        .where(eq(LearningResourceTable.id, resourceId))
+        .run(),
+    )
+
+    // Clean up physical files (best-effort)
+    if (resource.raw_content_path) {
+      try { unlinkSync(path.join(workspace.kb_path, resource.raw_content_path)) } catch {}
+    }
+    for (const { local_path } of assets) {
+      try { unlinkSync(path.join(workspace.kb_path, local_path)) } catch {}
+    }
+
+    return c.json({ ok: true })
+  })
+
+  // ── Graph data ───────────────────────────────────────────────────────────────
+  app.get("/graph", async (c) => {
+    const workspace = resolveWorkspace()
+    if (!workspace) return c.json({ nodes: [], edges: [] })
+
+    const resources = Database.use((db) =>
+      db.select({
+        id: LearningResourceTable.id,
+        title: LearningResourceTable.title,
+        url: LearningResourceTable.url,
+        status: LearningResourceTable.status,
+        modality: LearningResourceTable.modality,
+      })
+        .from(LearningResourceTable)
+        .where(eq(LearningResourceTable.workspace_id, workspace.id))
+        .all(),
+    )
+
+    const nodes = resources.map((r) => ({
+      id: `res_${r.id}`,
+      type: "resource" as const,
+      label: r.title ?? r.url ?? r.id,
+      status: r.status,
+      resource_id: r.id,
+      url: r.url ?? undefined,
+    }))
+
+    return c.json({ nodes, edges: [] })
   })
 
   // ── KB background jobs (curator sessions) ────────────────────────────────────
   app.get("/jobs", async (c) => {
-    // Get all currently busy sessions
     const busyMap = await SessionStatus.list()
     if (busyMap.size === 0) return c.json({ jobs: [] })
 
     const busyIds = [...busyMap.keys()]
 
-    // Fetch DB rows for busy sessions that are child sessions with "KB:" titles
     const rows = Database.use((db) =>
       db
         .select({ id: SessionTable.id, title: SessionTable.title, parent_id: SessionTable.parent_id })
@@ -993,7 +519,6 @@ export const WikiRoutes = () => {
     ).filter((r) => busyIds.includes(r.id as any) && r.title.startsWith("KB:"))
 
     const jobs = rows.map((r) => {
-      // Fetch last 8 text parts from assistant messages in this session for log display
       const recentParts = Database.use((db) =>
         db.select({ data: PartTable.data })
           .from(PartTable)
@@ -1025,322 +550,8 @@ export const WikiRoutes = () => {
 
   // ── Activity feed ─────────────────────────────────────────────────────────────
   app.get("/activity", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ events: [] })
-
-    const rows = Database.use((db) =>
-      db.select({
-        id: LearningKbEventTable.id,
-        event_type: LearningKbEventTable.event_type,
-        summary: LearningKbEventTable.summary,
-        payload: LearningKbEventTable.payload,
-        resource_id: LearningKbEventTable.resource_id,
-        time_created: LearningKbEventTable.time_created,
-      })
-        .from(LearningKbEventTable)
-        .where(eq(LearningKbEventTable.workspace_id, workspace.id))
-        .orderBy(desc(LearningKbEventTable.time_created))
-        .limit(30)
-        .all(),
-    )
-
-    // Enrich with resource URL for "memorize" type events
-    const resourceIds = rows.map((r) => r.resource_id).filter(Boolean) as string[]
-    const resources = resourceIds.length === 0 ? [] : Database.use((db) =>
-      db.select({ id: LearningResourceTable.id, url: LearningResourceTable.url, title: LearningResourceTable.title })
-        .from(LearningResourceTable)
-        .where(inArray(LearningResourceTable.id, resourceIds))
-        .all(),
-    )
-    const resourceMap = new Map(resources.map((r) => [r.id, r]))
-
-    const events = rows.map((row) => {
-      const resource = row.resource_id ? resourceMap.get(row.resource_id) : undefined
-      const payload = row.payload as Record<string, unknown>
-      const resourceUrl = (payload?.url as string | undefined) ?? resource?.url ?? null
-      const resourceTitle = resource?.title ?? null
-
-      let label = row.summary
-      if (row.event_type === "memorize" && resourceUrl) {
-        try {
-          const domain = new URL(resourceUrl).hostname.replace(/^www\./, "")
-          label = `Resource added: ${resourceTitle ?? domain}`
-        } catch { /* keep summary */ }
-      }
-
-      // Build nav_slug so the frontend can navigate directly to the affected page
-      let nav_slug: string | null = null
-      let nav_resource_id: string | null = null
-
-      if (row.event_type === "memorize" && row.resource_id) {
-        nav_resource_id = row.resource_id
-      } else if (row.event_type === "category_added" || row.event_type === "category_removed") {
-        nav_slug = (payload?.slug as string | undefined) ?? null
-      } else if (row.event_type === "subcategory_added" || row.event_type === "subcategory_removed") {
-        const catSlug = payload?.category_slug as string | undefined
-        const subSlug = payload?.subcategory_slug as string | undefined
-        if (catSlug && subSlug) nav_slug = `${catSlug}--${subSlug}`
-        else if (catSlug) nav_slug = catSlug
-      } else if (row.event_type === "section_added" || row.event_type === "section_removed" || row.event_type === "section_updated") {
-        // section_slug is stored as e.g. "agents--key-concepts"
-        const sectionSlug = payload?.section_slug as string | undefined
-        if (sectionSlug) nav_slug = sectionSlug
-      }
-
-      return {
-        id: row.id,
-        event_type: row.event_type,
-        label,
-        nav_slug,
-        nav_resource_id,
-        time_created: row.time_created,
-      }
-    })
-
-    return c.json({ events })
-  })
-
-  // ── Block CRUD ────────────────────────────────────────────────────────────────
-
-  app.post("/page/:slug/blocks", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    const slug = c.req.param("slug")
-    const pages = Workspace.getWikiPages(workspace.id)
-    const page = pages.find((p) => p.slug === slug)
-      ?? pages.find((p) => p.category_slug === slug && p.page_type === "category")
-    if (!page) return c.json({ error: "Page not found" }, 404)
-
-    const body = await c.req.json() as {
-      content: string
-      parent_id?: string | null
-      order_index: number
-      block_type?: string
-      depth?: number
-    }
-
-    const now = Date.now()
-    const parentIdVal = body.parent_id ?? null
-
-    // Open gap at insert position
-    const allBlocks = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(eq(LearningPageBlockTable.wiki_page_id, page.id))
-        .all()
-    )
-    const siblings = allBlocks.filter(
-      (b) => b.parent_id === parentIdVal && b.order_index >= body.order_index
-    )
-    for (const sib of siblings) {
-      Database.use((db) =>
-        db.update(LearningPageBlockTable)
-          .set({ order_index: sib.order_index + 1, time_updated: now })
-          .where(eq(LearningPageBlockTable.id, sib.id))
-          .run()
-      )
-    }
-
-    const newBlock = {
-      id: crypto.randomUUID(),
-      workspace_id: workspace.id,
-      wiki_page_id: page.id,
-      parent_id: parentIdVal,
-      content: body.content,
-      block_type: body.block_type ?? "paragraph",
-      source: "user" as const,
-      placement_id: null,
-      order_index: body.order_index,
-      depth: body.depth ?? 0,
-      properties: null,
-      time_created: now,
-      time_updated: now,
-    }
-
-    Database.use((db) => db.insert(LearningPageBlockTable).values(newBlock).run())
-    try { BlockBuilder.rebuildMdFromBlocks(page.id) } catch { /* non-blocking */ }
-
-    return c.json({ block: newBlock })
-  })
-
-  app.put("/page/blocks/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    const id = c.req.param("id")
-    const body = await c.req.json() as { content: string; block_type?: string }
-    const { content } = body
-    const newBlockType = body.block_type
-
-    const block = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(and(
-          eq(LearningPageBlockTable.id, id),
-          eq(LearningPageBlockTable.workspace_id, workspace.id)
-        ))
-        .get()
-    )
-    if (!block) return c.json({ error: "Block not found" }, 404)
-
-    const newSource = block.source === "ai" ? "user_edited" : block.source
-    Database.use((db) =>
-      db.update(LearningPageBlockTable)
-        .set({
-          content,
-          source: newSource,
-          time_updated: Date.now(),
-          ...(newBlockType ? { block_type: newBlockType } : {}),
-        })
-        .where(eq(LearningPageBlockTable.id, id))
-        .run()
-    )
-    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
-
-    return c.json({ ok: true })
-  })
-
-  app.delete("/page/blocks/:id", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    const id = c.req.param("id")
-
-    const block = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(and(
-          eq(LearningPageBlockTable.id, id),
-          eq(LearningPageBlockTable.workspace_id, workspace.id)
-        ))
-        .get()
-    )
-    if (!block) return c.json({ error: "Block not found" }, 404)
-
-    const allPageBlocks = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(eq(LearningPageBlockTable.wiki_page_id, block.wiki_page_id))
-        .all()
-    )
-
-    function collectDescendants(parentId: string): string[] {
-      const children = allPageBlocks.filter((b) => b.parent_id === parentId)
-      return [parentId, ...children.flatMap((ch) => collectDescendants(ch.id))]
-    }
-
-    const toDelete = collectDescendants(id)
-    Database.use((db) =>
-      db.delete(LearningPageBlockTable)
-        .where(inArray(LearningPageBlockTable.id, toDelete))
-        .run()
-    )
-
-    // Close gap
-    const now = Date.now()
-    const remainingSiblings = allPageBlocks.filter(
-      (b) => !toDelete.includes(b.id) && b.parent_id === block.parent_id && b.order_index > block.order_index
-    )
-    for (const sib of remainingSiblings) {
-      Database.use((db) =>
-        db.update(LearningPageBlockTable)
-          .set({ order_index: sib.order_index - 1, time_updated: now })
-          .where(eq(LearningPageBlockTable.id, sib.id))
-          .run()
-      )
-    }
-
-    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
-    return c.json({ ok: true })
-  })
-
-  app.post("/page/blocks/:id/move", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    const id = c.req.param("id")
-    const { new_parent_id, new_order_index } = await c.req.json() as {
-      new_parent_id: string | null
-      new_order_index: number
-    }
-
-    const block = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(and(
-          eq(LearningPageBlockTable.id, id),
-          eq(LearningPageBlockTable.workspace_id, workspace.id)
-        ))
-        .get()
-    )
-    if (!block) return c.json({ error: "Block not found" }, 404)
-
-    const allPageBlocks = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(eq(LearningPageBlockTable.wiki_page_id, block.wiki_page_id))
-        .all()
-    )
-    const now = Date.now()
-
-    // Close gap at old position
-    for (const sib of allPageBlocks.filter(
-      (b) => b.id !== id && b.parent_id === block.parent_id && b.order_index > block.order_index
-    )) {
-      Database.use((db) =>
-        db.update(LearningPageBlockTable)
-          .set({ order_index: sib.order_index - 1, time_updated: now })
-          .where(eq(LearningPageBlockTable.id, sib.id))
-          .run()
-      )
-    }
-
-    // Open gap at new position
-    for (const sib of allPageBlocks.filter(
-      (b) => b.id !== id && b.parent_id === (new_parent_id ?? null) && b.order_index >= new_order_index
-    )) {
-      Database.use((db) =>
-        db.update(LearningPageBlockTable)
-          .set({ order_index: sib.order_index + 1, time_updated: now })
-          .where(eq(LearningPageBlockTable.id, sib.id))
-          .run()
-      )
-    }
-
-    const newParent = new_parent_id ? allPageBlocks.find((b) => b.id === new_parent_id) : null
-    const newDepth = newParent ? newParent.depth + 1 : 0
-
-    Database.use((db) =>
-      db.update(LearningPageBlockTable)
-        .set({ parent_id: new_parent_id ?? null, order_index: new_order_index, depth: newDepth, time_updated: now })
-        .where(eq(LearningPageBlockTable.id, id))
-        .run()
-    )
-
-    try { BlockBuilder.rebuildMdFromBlocks(block.wiki_page_id) } catch { /* non-blocking */ }
-    return c.json({ ok: true })
-  })
-
-  app.get("/page/:slug/backlinks", async (c) => {
-    const workspace = resolveWorkspace()
-    if (!workspace) return c.json({ error: "No KB workspace found" }, 404)
-    const slug = c.req.param("slug")
-    const pages = Workspace.getWikiPages(workspace.id)
-    const page = pages.find((p) => p.slug === slug)
-      ?? pages.find((p) => p.category_slug === slug && p.page_type === "category")
-    if (!page) return c.json({ error: "Page not found" }, 404)
-
-    const searchTerms = [`[[${page.title}]]`, `[[${slug}]]`]
-    const allBlocks = Database.use((db) =>
-      db.select().from(LearningPageBlockTable)
-        .where(eq(LearningPageBlockTable.workspace_id, workspace.id))
-        .all()
-    )
-
-    const matchingBlocks = allBlocks.filter(
-      (b) => b.wiki_page_id !== page.id && searchTerms.some((t) => b.content.includes(t))
-    )
-
-    const backlinks = matchingBlocks.map((b) => {
-      const fromPage = pages.find((p) => p.id === b.wiki_page_id)
-      return {
-        from_page: fromPage ? { slug: fromPage.slug ?? "", title: fromPage.title } : { slug: "", title: "Unknown" },
-        block: { id: b.id, content: b.content },
-      }
-    })
-
-    return c.json({ backlinks })
+    // LearningKbEventTable has been dropped — return empty activity feed.
+    return c.json({ events: [] })
   })
 
   return app

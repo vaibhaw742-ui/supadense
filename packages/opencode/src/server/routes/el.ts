@@ -11,18 +11,44 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { eq, and, inArray, desc } from "drizzle-orm"
 import { ulid } from "ulid"
-import { mkdirSync, existsSync, writeFileSync } from "node:fs"
+import { mkdirSync, existsSync, writeFileSync, readFileSync, symlinkSync, unlinkSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
+
+// ── Load deployment/.env if AIRTOP_API_KEY not already set ───────────────────
+;(function loadDeploymentEnv() {
+  if (process.env.AIRTOP_API_KEY) return
+  // Walk up from this file's dir until we find deployment/.env
+  let dir = path.dirname(import.meta.filename ?? __filename)
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, "deployment", ".env")
+    try {
+      const lines = readFileSync(candidate, "utf-8").split("\n")
+      for (const line of lines) {
+        const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim()
+      }
+      console.log(`[EL] Loaded env from ${candidate}`)
+      return
+    } catch { /* try parent */ }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+})()
+
+// Kick off reprocess once DB is ready (6s after module load)
+setTimeout(startupReprocess, 6000)
+import { userWorkspaceDir } from "../../util/workspace-provision"
 import { lazy }                 from "../../util/lazy"
-import { initElProjectDirs }   from "../../experiential/project-structure"
+import { initElProjectDirs, elProjectSourcesDir } from "../../experiential/project-structure"
 import { initialSync }         from "../../brain/watcher"
 import { startBrainWatcher }   from "../../brain/watcher"
 import { Database } from "../../storage/db"
 import { ElProjectTable, ElProjectResourceTable, ElProjectNodeTable } from "../../experiential/schema.sql"
 import { RepoIndexer } from "../../experiential/repo-indexer"
 import { getStoredGitHubToken } from "./el-github"
-import { LearningKbWorkspaceTable, LearningResourceTable } from "../../learning/schema.sql"
+import { LearningResourceTable } from "../../learning/schema.sql"
 import { SessionTable } from "../../session/session.sql"
 import { Resource } from "../../learning/resource"
 import { Retrieval } from "../../learning/retrieval"
@@ -241,38 +267,164 @@ async function analyzeArxivResource(resourceId: string, url: string): Promise<vo
   }
 }
 
-/**
- * Create (or reuse) the virtual learning_kb_workspaces row for an EL project.
- * This gives EL resources a valid workspace_id so the retrieval system works.
- */
-function ensureVirtualWorkspace(projectId: string): string {
-  const virtualProjectId = `el-${projectId}`
-  const existing = Database.use((db) =>
-    db.select().from(LearningKbWorkspaceTable)
-      .where(eq(LearningKbWorkspaceTable.project_id, virtualProjectId))
-      .get(),
-  )
-  if (existing) return existing.id
+const AIRTOP_AGENT_WEBHOOK =
+  "https://api.airtop.ai/api/hooks/agents/e0103755-2146-43d3-bd25-5410d00b3654/webhooks/984d5de3-2807-43c8-af8a-f441652a11f4"
 
-  const now = Date.now()
-  const id = ulid()
-  Database.use((db) =>
-    db.insert(LearningKbWorkspaceTable).values({
-      id,
-      project_id: virtualProjectId,
-      kb_path: `/el-virtual/${projectId}`,
-      kb_initialized: false,
-      goals: [],
-      gaps: [],
-      depth_prefs: {},
-      trusted_sources: [],
-      scout_platforms: [],
-      extra_folders: [],
-      time_created: now,
-      time_updated: now,
-    }).run(),
-  )
-  return id
+async function fetchWithAirtop(url: string, apiKey: string): Promise<{ content: string; title?: string }> {
+  // 1. Trigger
+  const triggerRes = await fetch(AIRTOP_AGENT_WEBHOOK, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ configVars: { url } }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!triggerRes.ok) {
+    const body = await triggerRes.text().catch(() => "")
+    throw new Error(`Airtop trigger failed: HTTP ${triggerRes.status} — ${body.slice(0, 200)}`)
+  }
+  const triggerBody = (await triggerRes.json()) as { invocationId?: string }
+  console.log(`[Airtop] trigger response:`, JSON.stringify(triggerBody))
+  const { invocationId } = triggerBody
+  if (!invocationId) throw new Error("Airtop did not return an invocationId")
+
+  // 2. Poll until completed (Airtop takes ~60-100s minimum)
+  const pollUrl = `https://api.airtop.ai/api/hooks/agents/e0103755-2146-43d3-bd25-5410d00b3654/invocations/${invocationId}/result`
+  await new Promise((r) => setTimeout(r, 60_000))
+  let elapsed = 60_000
+  const MAX_WAIT_MS = 5 * 60 * 1000
+
+  while (elapsed < MAX_WAIT_MS) {
+    await new Promise((r) => setTimeout(r, 2_000))
+    elapsed += 2_000
+
+    const res = await fetch(pollUrl, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) continue
+
+    const data = (await res.json()) as { status?: string; output?: unknown; error?: string }
+    const statusLower = data.status?.toLowerCase() ?? ""
+    if (statusLower === "failed") throw new Error(`Airtop failed: ${data.error ?? "unknown"}`)
+
+    const outputObj = data.output as Record<string, unknown> | undefined
+    const isDone = statusLower === "completed" || outputObj?.success === true
+    if (isDone && data.output != null) {
+      const markdown = typeof data.output === "string"
+        ? data.output
+        : (outputObj?.text_md ?? outputObj?.markdown ?? outputObj?.content ?? outputObj?.text ?? JSON.stringify(data.output)) as string
+      const title = (outputObj?.title as string | undefined) ?? markdown.match(/^#\s+(.+)$/m)?.[1]?.trim()
+      return { content: markdown.slice(0, 40_000), title }
+    }
+  }
+  throw new Error("Airtop extraction timed out after 5 minutes")
+}
+
+/**
+ * Fetch and extract readable content from a generic URL using Airtop.
+ * Falls back to simple HTML fetch if AIRTOP_API_KEY is not set.
+ */
+async function analyzeGenericUrl(resourceId: string, url: string): Promise<void> {
+  try {
+    const apiKey = process.env.AIRTOP_API_KEY
+    console.log(`[EL] analyzeGenericUrl: resourceId=${resourceId} url=${url} hasKey=${!!apiKey}`)
+    let content = ""
+    let title: string | undefined
+    let metaDesc = ""
+
+    if (apiKey) {
+      // Use Airtop for full JS-rendered content
+      const result = await fetchWithAirtop(url, apiKey)
+      content = result.content
+      title = result.title
+    } else {
+      // Fallback: plain HTTP fetch + HTML strip
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Supadense/1.0)", Accept: "text/html,*/*" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!res.ok) {
+        Database.use((db) =>
+          db.update(LearningResourceTable)
+            .set({ status: "failed", error: `HTTP ${res.status}`, time_updated: Date.now() })
+            .where(eq(LearningResourceTable.id, resourceId))
+            .run(),
+        )
+        return
+      }
+      const html = await res.text()
+      title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim().replace(/\s+/g, " ")
+      metaDesc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? ""
+      content = html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+        .replace(/<header[\s\S]*?<\/header>/gi, " ")
+        .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/\s{2,}/g, " ").trim()
+        .slice(0, 20_000)
+    }
+
+    // Save markdown to data/workspaces/<userId>/sources/<resourceId>.md
+    const joinRow = Database.use((db) =>
+      db.select({ project_id: ElProjectResourceTable.project_id })
+        .from(ElProjectResourceTable)
+        .where(eq(ElProjectResourceTable.resource_id, resourceId))
+        .get(),
+    )
+    let contentPath: string | null = null
+    if (joinRow) {
+      const project = Database.use((db) =>
+        db.select({ user_id: ElProjectTable.user_id })
+          .from(ElProjectTable)
+          .where(eq(ElProjectTable.id, joinRow.project_id))
+          .get(),
+      )
+      if (project?.user_id) {
+        // 1. Save actual file to data/workspaces/<userId>/sources/<resourceId>.md
+        const sourcesDir = path.join(userWorkspaceDir(project.user_id), "sources")
+        mkdirSync(sourcesDir, { recursive: true })
+        const filePath = path.join(sourcesDir, `${resourceId}.md`)
+        writeFileSync(filePath, content, "utf-8")
+        contentPath = filePath
+        console.log(`[EL] saved markdown to ${filePath}`)
+
+        // 2. Symlink into project's .supadense/sources/<resourceId>.md
+        const projSourcesDir = elProjectSourcesDir(project.user_id, joinRow.project_id)
+        mkdirSync(projSourcesDir, { recursive: true })
+        const linkPath = path.join(projSourcesDir, `${resourceId}.md`)
+        try { unlinkSync(linkPath) } catch {}
+        symlinkSync(filePath, linkPath)
+        console.log(`[EL] symlinked ${linkPath} -> ${filePath}`)
+      }
+    }
+
+    Database.use((db) =>
+      db.update(LearningResourceTable)
+        .set({
+          title: title ?? new URL(url).hostname,
+          summary: metaDesc.slice(0, 500),
+          raw_content: contentPath ?? content,
+          metadata: { type: "url" },
+          status: "done",
+          time_updated: Date.now(),
+        })
+        .where(eq(LearningResourceTable.id, resourceId))
+        .run(),
+    )
+
+    if (joinRow) refreshClaudeMd(joinRow.project_id)
+  } catch (err) {
+    Database.use((db) =>
+      db.update(LearningResourceTable)
+        .set({ status: "failed", error: String(err), time_updated: Date.now() })
+        .where(eq(LearningResourceTable.id, resourceId))
+        .run(),
+    )
+  }
 }
 
 /**
@@ -303,12 +455,11 @@ function ensureDefaultProject(userId: string): string {
     }).run(),
   )
   // Create the folder structure
-  const dir = path.join("/workspaces", userId, "el-projects", projectId)
+  const dir = path.join(userWorkspaceDir(userId), "el-projects", projectId)
   mkdirSync(path.join(dir, ".supadense", "brain", "L0"), { recursive: true })
   mkdirSync(path.join(dir, ".supadense", "brain", "L1"), { recursive: true })
   mkdirSync(path.join(dir, ".supadense", "brain", "L2"), { recursive: true })
   mkdirSync(path.join(dir, ".supadense", "sources"), { recursive: true })
-  ensureVirtualWorkspace(projectId)
   return projectId
 }
 
@@ -317,12 +468,10 @@ function ensureDefaultProject(userId: string): string {
  * kicks off background analysis.
  */
 function addResourceToProject(projectId: string, url: string, role: "primary" | "supplementary" = "primary", githubPat?: string) {
-  const workspaceId = ensureVirtualWorkspace(projectId)
   const { modality } = classifyUrl(url)
   const resourceType = detectResourceType(url)
 
   const resource = Resource.create({
-    workspace_id: workspaceId,
     modality,
     url,
     metadata: { type: resourceType },
@@ -354,14 +503,8 @@ function addResourceToProject(projectId: string, url: string, role: "primary" | 
   } else if (resourceType === "arxiv") {
     void analyzeArxivResource(resource.id, url)
   } else {
-    // Generic URL — mark done immediately, then refresh
-    Database.use((db) =>
-      db.update(LearningResourceTable)
-        .set({ status: "done", time_updated: Date.now() })
-        .where(eq(LearningResourceTable.id, resource.id))
-        .run(),
-    )
-    refreshClaudeMd(projectId)
+    // Generic URL — scrape and extract content asynchronously
+    void analyzeGenericUrl(resource.id, url)
   }
 
   // Write initial CLAUDE.md immediately (resource may still be processing, but good to have)
@@ -376,6 +519,21 @@ function buildProjectGraph(projectId: string, _projectName: string) {
   const nodes: Array<{ id: string; type: string; label: string; url?: string; resource_id?: string; status?: string }> = []
   const edges: Array<{ source: string; target: string }> = []
 
+  // Always add GitHub node from context_json.github_url if present
+  const project = Database.use((db) =>
+    db.select({ context_json: ElProjectTable.context_json }).from(ElProjectTable).where(eq(ElProjectTable.id, projectId)).get(),
+  )
+  const githubUrl = project?.context_json?.github_url
+  if (githubUrl) {
+    let label = "Repo"
+    try {
+      const u = new URL(githubUrl)
+      const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/")
+      label = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : u.pathname.replace(/^\//, "") || "github"
+    } catch {}
+    nodes.push({ id: `github_${projectId}`, type: "github", label, url: githubUrl })
+  }
+
   const joinRows = Database.use((db) =>
     db.select().from(ElProjectResourceTable)
       .where(eq(ElProjectResourceTable.project_id, projectId))
@@ -383,6 +541,9 @@ function buildProjectGraph(projectId: string, _projectName: string) {
   )
 
   if (joinRows.length === 0) return { nodes, edges }
+
+  // Build a role map: resource_id → role (skip github — handled above via context_json)
+  const roleMap = new Map(joinRows.map((r) => [r.resource_id, r.role]))
 
   const resourceIds = joinRows.map((r) => r.resource_id)
   const resources = Database.use((db) =>
@@ -392,7 +553,12 @@ function buildProjectGraph(projectId: string, _projectName: string) {
   )
 
   for (const res of resources) {
-    let label = "Source"
+    const role = roleMap.get(res.id) ?? "supplementary"
+    // primary + github URL → "github" node; everything else → "source"
+    const isGitHub = !!res.url && res.url.includes("github.com")
+    const nodeType = role === "primary" && isGitHub ? "github" : "source"
+
+    let label = nodeType === "source" ? "Source" : "Repo"
     if (res.url) {
       try {
         const u = new URL(res.url)
@@ -408,7 +574,7 @@ function buildProjectGraph(projectId: string, _projectName: string) {
     } else if (res.title) {
       label = res.title.split(" ").slice(0, 4).join(" ")
     }
-    nodes.push({ id: `res_${res.id}`, type: "resource", label, url: res.url ?? undefined, resource_id: res.id, status: res.status })
+    nodes.push({ id: `res_${res.id}`, type: nodeType, label, url: res.url ?? undefined, resource_id: res.id, status: res.status })
   }
 
   return { nodes, edges }
@@ -498,13 +664,9 @@ function refreshClaudeMd(projectId: string): void {
     )
     if (!project) return
 
-    const virtualWs = Database.use((db) =>
-      db.select().from(LearningKbWorkspaceTable)
-        .where(eq(LearningKbWorkspaceTable.project_id, `el-${projectId}`))
-        .get(),
-    )
-    const dir = virtualWs?.kb_path
-    if (!dir || dir.startsWith("/el-virtual/") || !existsSync(dir)) return
+    // Use the project's actual directory (no workspace lookup needed)
+    const dir = project.repo_local_path ?? null
+    if (!dir || !existsSync(dir)) return
 
     const joinRows = Database.use((db) =>
       db.select().from(ElProjectResourceTable)
@@ -551,6 +713,36 @@ const ResourceOut = z.object({
 })
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+
+let didStartupReprocess = false
+function startupReprocess() {
+  if (didStartupReprocess) return
+  didStartupReprocess = true
+  console.log("[EL] startupReprocess running, AIRTOP_API_KEY set:", !!process.env.AIRTOP_API_KEY)
+  try {
+    const stuck = Database.use((db) =>
+      db.select().from(LearningResourceTable)
+        .where(eq(LearningResourceTable.status, "processing"))
+        .all(),
+    )
+    const doneEmpty = Database.use((db) =>
+      db.select().from(LearningResourceTable).all(),
+    ).filter((r) => r.status === "done" && !r.raw_content && !!r.url && detectResourceType(r.url) === "url")
+
+    const toReprocess = [...stuck, ...doneEmpty]
+    console.log(`[EL] stuck=${stuck.length} doneEmpty=${doneEmpty.length} total=${toReprocess.length}`)
+    for (const r of toReprocess) {
+      if (!r.url) continue
+      console.log(`[EL] Reprocessing: ${r.url}`)
+      Database.use((db) => db.update(LearningResourceTable).set({ status: "processing", time_updated: Date.now() }).where(eq(LearningResourceTable.id, r.id)).run())
+      const type = detectResourceType(r.url)
+      if (type === "github") void analyzeGitHubResource(r.id, r.url)
+      else if (type === "arxiv") void analyzeArxivResource(r.id, r.url)
+      else void analyzeGenericUrl(r.id, r.url)
+    }
+    if (toReprocess.length > 0) console.log(`[EL] Reprocessing ${toReprocess.length} stuck resources`)
+  } catch (e) { console.error("[EL] Startup reprocess error", e) }
+}
 
 export const ELRoutes = lazy(() =>
   new Hono()
@@ -629,7 +821,7 @@ export const ELRoutes = lazy(() =>
         )
 
         // Add initial resources if provided
-        if (github_url) addResourceToProject(projectId, github_url, "primary", github_pat)
+        // GitHub URL is stored in context_json — not added as a source in learning_resources
         if (arxiv_url) addResourceToProject(projectId, arxiv_url, "primary")
 
         // Initialise brain/ + sources/ dirs for this project (async, non-blocking)
@@ -756,6 +948,121 @@ export const ELRoutes = lazy(() =>
       },
     )
 
+    // ── List all resources across all user projects ───────────────────────────
+    .get(
+      "/resources",
+      describeRoute({
+        summary: "List all resources across all user's projects",
+        operationId: "el.resources.list",
+        responses: { 200: { description: "All resources", content: { "application/json": { schema: resolver(z.array(z.any())) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json([])
+
+        const projects = Database.use((db) =>
+          db.select({ id: ElProjectTable.id }).from(ElProjectTable)
+            .where(eq(ElProjectTable.user_id, userId))
+            .all(),
+        )
+        if (projects.length === 0) return c.json([])
+
+        const projectIds = projects.map((p) => p.id)
+        const joins = Database.use((db) =>
+          db.select().from(ElProjectResourceTable)
+            .where(inArray(ElProjectResourceTable.project_id, projectIds))
+            .orderBy(desc(ElProjectResourceTable.time_created))
+            .all(),
+        )
+        if (joins.length === 0) return c.json([])
+
+        const resourceIds = [...new Set(joins.map((j) => j.resource_id))]
+        const resources = Database.use((db) =>
+          db.select().from(LearningResourceTable)
+            .where(inArray(LearningResourceTable.id, resourceIds))
+            .all(),
+        )
+        const resourceMap = new Map(resources.map((r) => [r.id, r]))
+
+        // Deduplicate by resource_id (a resource may be in multiple projects)
+        const seen = new Set<string>()
+        const result = []
+        for (const j of joins) {
+          if (seen.has(j.resource_id)) continue
+          seen.add(j.resource_id)
+          const r = resourceMap.get(j.resource_id)
+          if (!r) continue
+          result.push({
+            id: r.id,
+            url: r.url ?? null,
+            title: r.title ?? null,
+            author: r.author ?? null,
+            modality: r.modality,
+            status: r.status,
+            metadata: r.metadata ?? {},
+            time_created: r.time_created,
+          })
+        }
+        return c.json(result)
+      },
+    )
+
+    // ── Get single resource by id ─────────────────────────────────────────────
+    .get(
+      "/resources/:id",
+      describeRoute({
+        summary: "Get a single resource by id",
+        operationId: "el.resources.get",
+        responses: { 200: { description: "Resource", content: { "application/json": { schema: resolver(z.any()) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const resource = Database.use((db) =>
+          db.select().from(LearningResourceTable)
+            .where(eq(LearningResourceTable.id, c.req.param("id")))
+            .get(),
+        )
+        if (!resource) return c.json({ error: "Not found" }, 404)
+
+        // Auto-kick reprocessing for stuck resources
+        const resourceType = detectResourceType(resource.url ?? "")
+        const isStuck = resource.status === "processing" || (resource.status === "done" && !resource.raw_content && resourceType === "url")
+        if (isStuck && resource.url) {
+          // Reset to processing and re-analyze
+          Database.use((db) =>
+            db.update(LearningResourceTable)
+              .set({ status: "processing", time_updated: Date.now() })
+              .where(eq(LearningResourceTable.id, resource.id))
+              .run(),
+          )
+          if (resourceType === "github") void analyzeGitHubResource(resource.id, resource.url)
+          else if (resourceType === "arxiv") void analyzeArxivResource(resource.id, resource.url)
+          else void analyzeGenericUrl(resource.id, resource.url)
+        }
+
+        // raw_content may be a file path (starts with /) — read it if so
+        let content: string | null = resource.raw_content ?? null
+        if (content && content.startsWith("/") && content.endsWith(".md")) {
+          try { content = readFileSync(content, "utf-8") } catch { content = null }
+        }
+
+        return c.json({
+          id: resource.id,
+          url: resource.url ?? null,
+          title: resource.title ?? null,
+          author: resource.author ?? null,
+          modality: resource.modality,
+          status: isStuck ? "processing" : resource.status,
+          content,
+          metadata: resource.metadata ?? {},
+          time_created: resource.time_created,
+          asset_map: {},
+        })
+      },
+    )
+
     // ── Delete project ────────────────────────────────────────────────────────
     .delete(
       "/projects/:id",
@@ -874,6 +1181,58 @@ export const ELRoutes = lazy(() =>
       },
     )
 
+    // ── List resources ─────────────────────────────────────────────────────────
+    .get(
+      "/projects/:id/resources",
+      describeRoute({
+        summary: "List resources for a project",
+        operationId: "el.projects.resources.list",
+        responses: { 200: { description: "Resource list", content: { "application/json": { schema: resolver(z.array(ResourceOut)) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const joins = Database.use((db) =>
+          db.select().from(ElProjectResourceTable)
+            .where(eq(ElProjectResourceTable.project_id, project.id))
+            .orderBy(desc(ElProjectResourceTable.time_created))
+            .all(),
+        )
+        if (joins.length === 0) return c.json([])
+
+        const resourceIds = joins.map((j) => j.resource_id)
+        const resources = Database.use((db) =>
+          db.select().from(LearningResourceTable)
+            .where(inArray(LearningResourceTable.id, resourceIds))
+            .all(),
+        )
+        const resourceMap = new Map(resources.map((r) => [r.id, r]))
+
+        return c.json(joins.map((j) => {
+          const r = resourceMap.get(j.resource_id)
+          return {
+            join_id: j.id,
+            resource_id: j.resource_id,
+            role: j.role,
+            url: r?.url ?? null,
+            title: r?.title ?? null,
+            status: r?.status ?? "pending",
+            resource_type: detectResourceType(r?.url ?? ""),
+            metadata: r?.metadata ?? {},
+            time_created: j.time_created,
+          }
+        }))
+      },
+    )
+
     // ── Remove resource ────────────────────────────────────────────────────────
     .delete(
       "/projects/:id/resources/:rid",
@@ -893,6 +1252,17 @@ export const ELRoutes = lazy(() =>
         )
         if (!project) return c.json({ error: "Not found" }, 404)
 
+        // Get resource_id before deleting so we can clean up files
+        const joinRow = Database.use((db) =>
+          db.select({ resource_id: ElProjectResourceTable.resource_id })
+            .from(ElProjectResourceTable)
+            .where(and(
+              eq(ElProjectResourceTable.project_id, project.id),
+              eq(ElProjectResourceTable.id, c.req.param("rid")),
+            ))
+            .get(),
+        )
+
         Database.use((db) =>
           db.delete(ElProjectResourceTable)
             .where(and(
@@ -901,6 +1271,13 @@ export const ELRoutes = lazy(() =>
             ))
             .run(),
         )
+
+        // Remove symlink from project's .supadense/sources/
+        if (joinRow) {
+          const linkPath = path.join(elProjectSourcesDir(userId, project.id), `${joinRow.resource_id}.md`)
+          try { unlinkSync(linkPath) } catch {}
+
+        }
 
         refreshClaudeMd(project.id)
 
@@ -1013,14 +1390,7 @@ export const ELRoutes = lazy(() =>
           )
           if (!project) return c.json({ error: "Not found" }, 404)
 
-          const virtualWs = Database.use((db) =>
-            db.select().from(LearningKbWorkspaceTable)
-              .where(eq(LearningKbWorkspaceTable.project_id, `el-${project_id}`))
-              .get(),
-          )
-          if (!virtualWs) return c.json({ locations: [], concepts: [], sources: [], uncategorized_count: 0 })
-
-          // Count uncategorized resources (status != "done" in retrieval terms = no placements)
+          // Count uncategorized resources
           const joinRows = Database.use((db) =>
             db.select().from(ElProjectResourceTable)
               .where(eq(ElProjectResourceTable.project_id, project_id))
@@ -1031,39 +1401,42 @@ export const ELRoutes = lazy(() =>
               .where(inArray(LearningResourceTable.id, joinRows.map((r) => r.resource_id)))
               .all(),
           )
-          // Apply type filter
           const filteredResources = filters?.type
             ? allResources.filter((r) => (r.metadata as any)?.type === filters.type)
             : allResources
-
           const uncategorized_count = filteredResources.filter((r) => r.status !== "done").length
 
-          const results = Retrieval.searchWithContext(virtualWs.id, q, 10)
-          return c.json({ ...results, uncategorized_count })
+          // Simple title/url search across project resources (no workspace needed)
+          const matched = q ? filteredResources.filter((r) =>
+            r.title?.toLowerCase().includes(q.toLowerCase()) ||
+            r.url?.toLowerCase().includes(q.toLowerCase())
+          ) : filteredResources
+          const sources = matched.map((r) => ({ id: r.id, url: r.url, title: r.title, status: r.status }))
+          return c.json({ locations: [], concepts: [], sources, uncategorized_count })
         }
 
-        // Global search: search across all user's EL virtual workspaces
+        // Global search across all user's projects
         const userProjects = Database.use((db) =>
-          db.select().from(ElProjectTable)
-            .where(eq(ElProjectTable.user_id, userId))
-            .all(),
+          db.select().from(ElProjectTable).where(eq(ElProjectTable.user_id, userId)).all(),
         )
-
-        const allResults: any[] = []
+        const allSources: any[] = []
         for (const project of userProjects) {
-          const virtualWs = Database.use((db) =>
-            db.select().from(LearningKbWorkspaceTable)
-              .where(eq(LearningKbWorkspaceTable.project_id, `el-${project.id}`))
-              .get(),
+          const joinRows = Database.use((db) =>
+            db.select().from(ElProjectResourceTable).where(eq(ElProjectResourceTable.project_id, project.id)).all(),
           )
-          if (!virtualWs) continue
-          const results = Retrieval.searchWithContext(virtualWs.id, q, 5)
-          allResults.push(...results.locations.map((l: any) => ({ ...l, project_id: project.id, project_name: project.name })))
+          if (joinRows.length === 0) continue
+          const resources = Database.use((db) =>
+            db.select().from(LearningResourceTable)
+              .where(inArray(LearningResourceTable.id, joinRows.map((r) => r.resource_id)))
+              .all(),
+          )
+          const matched = q ? resources.filter((r) =>
+            r.title?.toLowerCase().includes(q.toLowerCase()) ||
+            r.url?.toLowerCase().includes(q.toLowerCase())
+          ) : resources
+          allSources.push(...matched.map((r) => ({ id: r.id, url: r.url, title: r.title, status: r.status, project_id: project.id, project_name: project.name })))
         }
-
-        // Sort by relevance and cap
-        allResults.sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
-        return c.json({ locations: allResults.slice(0, 15), concepts: [], sources: [], uncategorized_count: 0 })
+        return c.json({ locations: [], concepts: [], sources: allSources.slice(0, 15), uncategorized_count: 0 })
       },
     )
 
@@ -1092,7 +1465,7 @@ export const ELRoutes = lazy(() =>
 
         // PAT from project context takes priority; fall back to user's stored GitHub OAuth token
         const pat = project.context_json?.github_pat ?? getStoredGitHubToken(userId) ?? undefined
-        const localPath = path.join("/workspaces", userId, "el-projects", project.id, "repo")
+        const localPath = path.join(userWorkspaceDir(userId), "el-projects", project.id, "repo")
         const { branch: bodyBranch } = c.req.valid("json")
 
         // Set status to cloning immediately
@@ -1482,6 +1855,93 @@ export const ELRoutes = lazy(() =>
       },
     )
 
+    // ── .supadense/ folder tree ──────────────────────────────────────────────
+    .get(
+      "/projects/:id/supadense-tree",
+      describeRoute({
+        summary: "Get .supadense folder tree",
+        operationId: "el.projects.supadense-tree",
+        responses: { 200: { description: "Tree", content: { "application/json": { schema: resolver(z.any()) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const { join, relative } = require("node:path") as typeof import("node:path")
+        const { readdirSync, statSync, existsSync } = require("node:fs") as typeof import("node:fs")
+
+        const supadenseDir = path.join(userWorkspaceDir(userId), "el-projects", project.id, ".supadense")
+        if (!existsSync(supadenseDir)) return c.json({ entries: [] })
+
+        type TreeEntry = { name: string; path: string; type: "file" | "dir"; children?: TreeEntry[] }
+
+        function walk(dir: string, depth: number): TreeEntry[] {
+          if (depth > 5) return []
+          let entries: TreeEntry[] = []
+          let items: string[]
+          try { items = readdirSync(dir) } catch { return [] }
+          for (const name of items.sort()) {
+            if (name.startsWith(".")) continue
+            const full = join(dir, name)
+            let stat
+            try { stat = statSync(full) } catch { continue }
+            const relPath = relative(supadenseDir, full)
+            if (stat.isDirectory()) {
+              entries.push({ name, path: relPath, type: "dir", children: walk(full, depth + 1) })
+            } else {
+              entries.push({ name, path: relPath, type: "file" })
+            }
+          }
+          return entries
+        }
+
+        return c.json({ entries: walk(supadenseDir, 0) })
+      },
+    )
+
+    // ── Read a file from the .supadense/ folder ───────────────────────────────
+    .get(
+      "/projects/:id/supadense-file-content",
+      describeRoute({
+        summary: "Read file content from .supadense folder",
+        operationId: "el.projects.supadenseFileContent",
+        responses: { 200: { description: "File content", content: { "application/json": { schema: resolver(z.object({ content: z.string(), path: z.string() })) } } } },
+      }),
+      (c) => {
+        const userId = getUserId(c)
+        if (!userId) return c.json({ error: "Not authenticated" }, 401)
+        const project = Database.use((db) =>
+          db.select().from(ElProjectTable)
+            .where(and(eq(ElProjectTable.id, c.req.param("id")), eq(ElProjectTable.user_id, userId)))
+            .get(),
+        )
+        if (!project) return c.json({ error: "Not found" }, 404)
+
+        const filePath = c.req.query("path")
+        if (!filePath) return c.json({ error: "Missing path" }, 400)
+
+        const { join, resolve } = require("node:path") as typeof import("node:path")
+        const { readFileSync, existsSync } = require("node:fs") as typeof import("node:fs")
+        const supadenseDir = path.join(userWorkspaceDir(userId), "el-projects", project.id, ".supadense")
+        const full = resolve(join(supadenseDir, filePath))
+        if (!full.startsWith(supadenseDir)) return c.json({ error: "Forbidden" }, 403)
+        if (!existsSync(full)) return c.json({ error: "File not found" }, 404)
+
+        try {
+          const content = readFileSync(full, "utf-8")
+          return c.json({ content, path: filePath })
+        } catch {
+          return c.json({ error: "Failed to read file" }, 500)
+        }
+      },
+    )
+
     // ── Read a file from the cloned repo ──────────────────────────────────────
     .get(
       "/projects/:id/file-content",
@@ -1588,16 +2048,8 @@ export const ELRoutes = lazy(() =>
         )
         if (!project) return c.json({ error: "Not found" }, 404)
 
-        const directory = path.join("/workspaces", userId, "el-projects", project.id)
+        const directory = path.join(userWorkspaceDir(userId), "el-projects", project.id)
         if (!existsSync(directory)) mkdirSync(directory, { recursive: true })
-
-        // Update virtual workspace kb_path to the real directory
-        Database.use((db) =>
-          db.update(LearningKbWorkspaceTable)
-            .set({ kb_path: directory, time_updated: Date.now() })
-            .where(eq(LearningKbWorkspaceTable.project_id, `el-${project.id}`))
-            .run(),
-        )
 
         // Write (or refresh) CLAUDE.md with current project + resource metadata
         refreshClaudeMd(project.id)
