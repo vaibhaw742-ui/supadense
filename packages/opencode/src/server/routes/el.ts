@@ -1820,6 +1820,7 @@ export const ELRoutes = lazy(() =>
         )
         if (!project) return c.json({ error: "Not found" }, 404)
         if (!project.repo_local_path) return c.json({ entries: [] })
+        const repoPath = project.repo_local_path
 
         const { join, relative } = require("node:path") as typeof import("node:path")
         const { readdirSync, statSync, existsSync } = require("node:fs") as typeof import("node:fs")
@@ -1840,7 +1841,7 @@ export const ELRoutes = lazy(() =>
             const full = join(dir, name)
             let stat
             try { stat = statSync(full) } catch { continue }
-            const relPath = relative(project.repo_local_path!, full)
+            const relPath = relative(repoPath, full)
             if (stat.isDirectory()) {
               entries.push({ name, path: relPath, type: "dir", children: walk(full, depth + 1) })
             } else {

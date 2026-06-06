@@ -160,55 +160,12 @@ export const KbResourceExtractImagesTool = Tool.define("kb_resource_extract_imag
     image_urls: z.array(z.string()).max(10).describe("Candidate image URLs from kb_resource_create metadata.image_candidates"),
   }),
   async execute(params) {
-    const resource = Resource.get(params.resource_id)
-    if (!resource) throw new Error(`Resource ${params.resource_id} not found`)
-
-    const workspace = Workspace.getById(resource.workspace_id)
-    if (!workspace) throw new Error(`Workspace not found for resource`)
-
     // assets are no longer stored on disk — return empty result immediately
-    return { asset_ids: [], downloaded: 0, skipped: params.image_urls.length, failed: 0, summary: [] }
-
-    const nsPrefix = resource.workspace_id.slice(0, 8)
-    const assetsDir = path.join(workspace.kb_path, ".supadense", "assets", nsPrefix)
-    mkdirSync(assetsDir, { recursive: true })
-
-    const assetIds: string[] = []
-    let downloaded = 0
-    let skipped = 0
-    let failed = 0
-    const summary: string[] = []
-
-    for (const url of params.image_urls) {
-      const result = await downloadImage(url, resource.workspace_id, resource.id, assetsDir, nsPrefix)
-
-      if ("skip" in result) { skipped++; continue }
-      if ("error" in result) { failed++; summary.push(`✗ ${url}: ${result.error}`); continue }
-
-      // generate a local id for tracking (no DB)
-      const assetId = `asset-${createHash("sha256").update(result.asset.local_path).digest("hex").slice(0, 8)}`
-      assetIds.push(assetId)
-      downloaded++
-      summary.push(
-        `✓ ${result.asset.local_path} (${result.asset.mime_type}, ${result.asset.width ?? "?"}x${result.asset.height ?? "?"}${result.asset.is_diagram ? ", diagram" : ""})`
-      )
-    }
-
+    const skipped = params.image_urls.length
     return {
-      title: `Extracted ${downloaded} image${downloaded !== 1 ? "s" : ""}`,
-      metadata: { asset_ids: assetIds, downloaded, skipped, failed },
-      output: [
-        `downloaded: ${downloaded}`,
-        `skipped: ${skipped}`,
-        `failed: ${failed}`,
-        `asset_ids: [${assetIds.join(", ")}]`,
-        "",
-        ...summary,
-        "",
-        assetIds.length > 0
-          ? "Images stored in assets/."
-          : "No usable images found on this page.",
-      ].join("\n"),
+      title: "Image extraction skipped",
+      metadata: { asset_ids: [] as string[], downloaded: 0, skipped, failed: 0 },
+      output: `skipped: ${skipped}\nNo images extracted.`,
     }
   },
 })

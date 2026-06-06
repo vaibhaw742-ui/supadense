@@ -975,7 +975,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 text: `KB Resource not found: ${resourceId}`,
               }]
             }
-            const workspace = WorkspaceStore.getById(resource.workspace_id)
+            const workspace = resource.workspace_id ? WorkspaceStore.getById(resource.workspace_id) : undefined
             const content = workspace
               ? Resource.getRawContent(resource, workspace.kb_path)
               : (resource.raw_content ?? "")
@@ -1360,10 +1360,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const sid = input.sessionID
             const rid = session.learnResourceId
             Database.effect(() => {
-              void import("@/learning/gaps").then(({ updateGapsAndGoals }) =>
-                updateGapsAndGoals(sid, rid).catch((e) =>
-                  Log.create({ service: "learn" }).error("gaps update failed", { error: e }),
-                ),
+              void Promise.resolve().then(() =>
+                Log.create({ service: "learn" }).info("gaps update skipped (module removed)"),
               )
             })
           }
@@ -1561,9 +1559,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (session.sessionType === "learn" && session.learnResourceId) {
                 const learnResource = Resource.get(session.learnResourceId)
                 const learnTitle = learnResource?.title ?? learnResource?.url ?? "this resource"
-                system.push({
-                  type: "text" as const,
-                  text: [
+                system.push([
                     `You are helping the user learn about: "${learnTitle}".`,
                     "Your role in this session:",
                     "- Answer questions clearly and explain concepts from the resource",
@@ -1572,8 +1568,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     "- At the end of each substantive exchange, briefly note what the user understood well and any gap that became apparent",
                     "- Do NOT use tools unless the user explicitly asks you to search or read files",
                     "Stay focused on the resource content and the user's learning.",
-                  ].join("\n"),
-                })
+                  ].join("\n"))
               }
               const format = lastUser.format ?? { type: "text" as const }
               if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
