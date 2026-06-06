@@ -158,6 +158,31 @@ async function interceptSave(params: Record<string, unknown>, result: unknown): 
   }
 }
 
+// ── Intercept capture_source / el_add_resource to write .md on host ──────────
+
+async function interceptWriteFile(result: unknown): Promise<void> {
+  // The tool result is { jsonrpc, id, result: { content: [{ type, text }] } }
+  // text is JSON with _write_file: { path, content }
+  try {
+    const outer = result as { result?: { content?: Array<{ type: string; text: string }> } }
+    const text = outer?.result?.content?.[0]?.text
+    if (!text) return
+    const parsed = JSON.parse(text) as { _write_file?: { path: string; content: string } }
+    const wf = parsed._write_file
+    if (!wf || typeof wf.path !== "string" || typeof wf.content !== "string") return
+
+    // Resolve relative to the project dir (or cwd if no project)
+    const base = _brainDir ? dirname(dirname(_brainDir)) : process.cwd()  // .supadense/ parent
+    const supadenseDir = _brainDir ? dirname(_brainDir) : join(base, ".supadense")
+    const destPath = join(supadenseDir, wf.path)
+    mkdirSync(dirname(destPath), { recursive: true })
+    writeFileSync(destPath, wf.content, "utf8")
+    process.stderr.write(`[supadense-mcp] wrote source: ${destPath}\n`)
+  } catch (err) {
+    process.stderr.write(`[supadense-mcp] _write_file error: ${err}\n`)
+  }
+}
+
 // ── I/O ───────────────────────────────────────────────────────────────────────
 
 function send(obj: unknown): void {
@@ -197,6 +222,12 @@ async function readLines(): Promise<void> {
         // After save_to_brain, also write .md file on host (container can't write to Mac paths)
         if (msg.method === "tools/call" && msg.params?.name === "save_to_brain" && msg.params?.arguments) {
           await interceptSave(msg.params.arguments, result)
+        }
+
+        // After capture_source or el_add_resource, write the source .md on host
+        if (msg.method === "tools/call" &&
+            (msg.params?.name === "capture_source" || msg.params?.name === "el_add_resource")) {
+          await interceptWriteFile(result)
         }
 
         send(result)

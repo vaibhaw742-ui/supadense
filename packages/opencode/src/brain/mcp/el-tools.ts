@@ -119,19 +119,44 @@ export const ElTools = {
   },
 
   el_add_resource: {
-    description: "Capture a URL as a source and add it to an EL project. Triggers Airtop processing asynchronously.",
+    description: "Capture a URL as a source and add it to an EL project. Scrapes with Airtop and returns markdown content.",
     parameters: z.object({
       project_id: z.string().describe("EL project ID to add the resource to"),
       url: z.string().url().describe("URL to capture and process"),
     }),
     async execute({ project_id, url }: { project_id: string; url: string }) {
-      // Delegate to the HTTP server's add-resource endpoint
-      // (avoid duplicating the full addResourceToProject logic here)
+      const { scrapeUrl } = await import("./capture")
+      const { title, content, slug } = await scrapeUrl(url)
       return {
-        message: "Use POST /el/projects/:id/resources to add a resource via the HTTP API. This ensures Airtop processing is triggered correctly.",
+        ok: true,
         project_id,
         url,
-        hint: "POST /el/projects/{project_id}/add-resource with body { url }",
+        title,
+        slug,
+        content,
+        _write_file: { path: slug, content },   // stdio bridge picks this up
+      }
+    },
+  },
+
+  capture_source: {
+    description: "Capture any URL as a markdown source. Scrapes with Airtop (JS-rendered), saves to .supadense/sources/ and adds to brain. Use this when working in a local project with Claude Code.",
+    parameters: z.object({
+      url: z.string().url().describe("URL to capture"),
+      project_id: z.string().optional().describe("Local project ID (from SUPADENSE_PROJECT env). If omitted, saves to brain only."),
+      title: z.string().optional().describe("Optional title override"),
+    }),
+    async execute({ url, project_id, title: titleOverride }: { url: string; project_id?: string; title?: string }) {
+      const { scrapeUrl } = await import("./capture")
+      const { title, content, slug } = await scrapeUrl(url, titleOverride)
+      return {
+        ok: true,
+        url,
+        title,
+        slug,
+        content,
+        project_id: project_id ?? null,
+        _write_file: { path: `sources/${slug}`, content },  // stdio bridge writes to .supadense/sources/
       }
     },
   },
@@ -270,6 +295,7 @@ export const EL_TOOL_SCOPES: Record<string, "read" | "write" | "admin"> = {
   el_get_graph:           "read",
   el_get_project_file:    "read",
   el_get_brain_files:     "read",
+  capture_source:         "write",
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
