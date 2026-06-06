@@ -374,12 +374,12 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
       if (!sid) {
         const created = await client.session.create().then((x: any) => x.data)
         if (!created?.id) throw new Error("Failed to create session")
-        sid = created.id
+        sid = created.id as string
         setChatSessionId(sid)
       }
       const messageID = Identifier.ascending("message")
       await client.session.command({
-        sessionID: sid,
+        sessionID: sid as string,
         command: commandName,
         arguments: args,
         model: `${model.providerID}/${model.modelID}`,
@@ -451,19 +451,19 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
       if (!sid) {
         const created = await client.session.create().then((x: any) => x.data)
         if (!created?.id) throw new Error("Failed to create session")
-        sid = created.id
+        sid = created.id as string
         setChatSessionId(sid)
         void sync?.session.sync(sid)
       }
       const messageID = Identifier.ascending("message")
       await client.session.promptAsync({
-        sessionID: sid,
+        sessionID: sid as string,
         agent: "build",
         model,
         messageID,
         parts: [{ id: Identifier.ascending("part"), type: "text" as const, text }],
       })
-      void sync?.session.sync(sid)
+      void sync?.session.sync(sid as string)
     } catch (err: any) {
       showToast({ variant: "error", title: "Send failed", description: err?.message ?? "Unknown error" })
       setInputVal(text)

@@ -1608,7 +1608,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover text-left"
                               onMouseDown={(e) => { e.preventDefault(); pickKbItem(r.id, r.title!) }}
                             >
-                              <Icon name="book" size="small" class="text-icon-warning shrink-0" />
+                              <Icon name="open-file" size="small" class="text-icon-warning shrink-0" />
                               <span class="text-[13px] text-text-strong truncate">{r.title}</span>
                             </button>
                           )}

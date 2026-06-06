@@ -122,7 +122,7 @@ export function DialogCustomProvider(props: Props) {
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
       if (result.key) {
-        await globalSDK.client.auth.set({
+        await (globalSDK.client.auth.set as any)({
           path: { id: result.providerID },
           body: {
             type: "api",

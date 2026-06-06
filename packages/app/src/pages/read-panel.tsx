@@ -723,10 +723,10 @@ function ResourceReader(props: {
       content = content.replaceAll(src, api.assetUrl(info.localPath))
     }
 
-    void marked.parse(content).then((html) => {
+    void Promise.resolve(marked.parse(content)).then((html: string) => {
       const currentEl = proseEl()
       if (!currentEl) return // component unmounted before promise resolved
-      const patched = html.replace(/<img([^>]*?)src="([^"]*)"([^>]*?)>/g, (_m, pre, src, post) => {
+      const patched = html.replace(/<img([^>]*?)src="([^"]*)"([^>]*?)>/g, (_m: string, pre: string, src: string, post: string) => {
         // marked HTML-encodes & as &amp; inside attribute values — decode before use
         const decodedSrc = src.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
         const info = assetUrlToInfo[decodedSrc]
@@ -1119,7 +1119,7 @@ export function ReadPanel() {
   // Build a lookup map: url → project assignments
   const projectsByUrl = () => {
     const rows = resourceProjects() ?? []
-    const map = new Map<string, Array<{ project_id: string; project_name: string }>>()
+    const map = new Map<string, Array<{ project_id: string; project_name: string; join_id: string }>>()
     for (const row of rows) {
       const existing = map.get(row.url) ?? []
       existing.push({ project_id: row.project_id, project_name: row.project_name, join_id: row.join_id })

@@ -98,6 +98,7 @@ function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
   if (part.type === "image") return { ...part }
   if (part.type === "agent") return { ...part }
+  if (part.type === "resource") return { ...part }
   return {
     ...part,
     selection: cloneSelection(part.selection),

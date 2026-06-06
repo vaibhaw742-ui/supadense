@@ -113,7 +113,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         onClick={() => props.onAtSelect(item)}
                         onMouseEnter={() => props.setAtActive(key)}
                       >
-                        <Icon name="book" size="small" class="text-icon-warning shrink-0" />
+                        <Icon name="open-file" size="small" class="text-icon-warning shrink-0" />
                         <span class="text-14-regular text-text-strong whitespace-nowrap truncate">@{item.title}</span>
                       </button>
                     )
@@ -141,7 +141,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         onClick={() => props.onAtSelect(opt)}
                         onMouseEnter={() => props.setAtActive(key)}
                       >
-                        <Icon name="file" size="small" class="text-icon-base shrink-0" />
+                        <Icon name="open-file" size="small" class="text-icon-base shrink-0" />
                         <span class="text-14-regular text-text-strong whitespace-nowrap truncate">@{note.title}</span>
                       </button>
                     )
