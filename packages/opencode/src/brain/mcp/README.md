@@ -1,9 +1,9 @@
-# Supadense Brain MCP Server
+# Supadense MCP Server
 
-Exposes the supadense knowledge brain as an MCP server so external coding agents
-(Claude Desktop, Cursor, custom agents) can search, read, and write brain knowledge.
+Exposes the supadense knowledge brain **and** Experiential Learning (EL) projects as an MCP server
+so external coding agents (Claude Code, Claude Desktop, Cursor) can search, read, and write knowledge.
 
-## Available Tools
+## Brain Tools
 
 | Tool | Scope | Description |
 |------|-------|-------------|
@@ -16,6 +16,19 @@ Exposes the supadense knowledge brain as an MCP server so external coding agents
 | `save_to_brain` | write | Save knowledge — writes .md file + Postgres |
 | `delete_brain_node` | write | Delete node (requires confirm=true) |
 | `delete_brain_edge` | write | Remove relationship between nodes |
+
+## EL Project Tools
+
+| Tool | Scope | Description |
+|------|-------|-------------|
+| `el_list_projects` | read | List all EL projects for a user |
+| `el_get_project` | read | Get project details (name, status, GitHub URL, context) |
+| `el_list_resources` | read | List all captured sources for a project |
+| `el_get_resource_content` | read | Get full markdown content of a captured source |
+| `el_add_resource` | write | Capture a URL and add it to a project (triggers Airtop) |
+| `el_get_graph` | read | Get knowledge graph nodes (GitHub repo + source nodes) |
+| `el_get_project_file` | read | Read a file from the project's cloned GitHub repo |
+| `el_get_brain_files` | read | List brain `.md` files (L0/L1/L2) for a project |
 
 ## Usage
 

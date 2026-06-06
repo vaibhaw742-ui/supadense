@@ -2,8 +2,9 @@
   "_comment": "Add this to your Claude Desktop or Claude Code MCP config",
   "_claude_desktop": "~/Library/Application Support/Claude/claude_desktop_config.json",
   "_claude_code": ".claude/settings.json in project OR ~/.claude/settings.json globally",
+  "_tools_available": "Brain: search_brain, get_brain_node, get_brain_context, list_brain_nodes, find_brain_experts, find_brain_connections, save_to_brain, delete_brain_node, delete_brain_edge | EL Projects: el_list_projects, el_get_project, el_list_resources, el_get_resource_content, el_add_resource, el_get_graph, el_get_project_file, el_get_brain_files",
   "mcpServers": {
-    "supadense-brain": {
+    "supadense": {
       "command": "bun",
       "args": ["run", "/path/to/supadense/packages/opencode/src/brain/mcp/stdio.ts"],
       "env": {
@@ -14,5 +15,5 @@
     }
   },
   "_get_token": "POST http://localhost:4096/supa-auth/login",
-  "_get_project_id": "POST http://localhost:4096/local-projects to register"
+  "_get_project_id": "POST http://localhost:4096/local-projects to register your local project"
 }

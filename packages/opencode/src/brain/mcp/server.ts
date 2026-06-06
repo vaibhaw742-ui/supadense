@@ -4,6 +4,7 @@
 import { Hono }                    from "hono"
 import { getMcpToolDefs }          from "./schema"
 import { dispatchBrainTool }       from "./dispatch"
+import { dispatchElTool, getElToolDefs, EL_TOOL_SCOPES } from "./el-tools"
 import type { McpScope }           from "./dispatch"
 
 interface JsonRpcRequest {
@@ -69,28 +70,31 @@ McpRoutes.post("/", async (c) => {
     }))
   }
 
-  // tools/list — return all brain tool schemas (filtered by scope)
+  // tools/list — return all brain + EL tool schemas (filtered by scope)
   if (req.method === "tools/list") {
-    const all    = getMcpToolDefs()
-    const SCOPES: Record<string, McpScope> = {
+    const BRAIN_SCOPES: Record<string, McpScope> = {
       save_to_brain: "write", delete_brain_node: "write", delete_brain_edge: "write",
       ingest_meeting: "write", analyze_repo: "admin", capture_git_events: "admin",
     }
-    const tools = all.filter(t => {
-      const required = SCOPES[t.name] ?? "read"
-      return scopes.some(s =>
-        (s === "admin") ||
-        (s === "write" && required !== "admin") ||
-        (s === "read"  && required === "read")
-      )
-    })
-    return c.json(ok(id, { tools }))
+    const scopeLevel = (s: McpScope) => s === "read" ? 0 : s === "write" ? 1 : 2
+    const hasScope = (required: McpScope) => scopes.some(s => scopeLevel(s) >= scopeLevel(required))
+
+    const brainTools = getMcpToolDefs().filter(t => hasScope(BRAIN_SCOPES[t.name] ?? "read"))
+    const elTools    = getElToolDefs().filter(t => hasScope((EL_TOOL_SCOPES[t.name] ?? "read") as McpScope))
+
+    return c.json(ok(id, { tools: [...brainTools, ...elTools] }))
   }
 
-  // tools/call — dispatch to brain handler
+  // tools/call — dispatch to brain or EL handler
   if (req.method === "tools/call") {
     const { name, arguments: args } = (req.params ?? {}) as { name?: string; arguments?: Record<string, unknown> }
     if (!name) return c.json(err(id, -32602, "Missing tool name"))
+
+    // Route EL tools separately
+    if (name.startsWith("el_")) {
+      const result = await dispatchElTool(name, args ?? {}, scopes)
+      return c.json(ok(id, result))
+    }
 
     const result = await dispatchBrainTool(name, args ?? {}, scopes, true /* remote=true */)
     return c.json(ok(id, result))
