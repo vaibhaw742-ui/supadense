@@ -3,12 +3,13 @@
 // EL projects, sources, and the knowledge graph.
 
 import z from "zod"
-import { Database }              from "../../database/index"
+import { Database }              from "../../storage/db"
 import { ElProjectTable, ElProjectResourceTable } from "../../experiential/schema.sql"
 import { LearningResourceTable } from "../../learning/schema.sql"
-import { eq, and }               from "drizzle-orm"
+import { eq, inArray }           from "drizzle-orm"
 import { existsSync, readFileSync } from "node:fs"
 import type { DispatchResult }   from "./dispatch"
+type TxOrDb = Parameters<Parameters<typeof Database.use>[0]>[0]
 
 // ── Tool definitions ─────────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ export const ElTools = {
       user_id: z.string().describe("The user ID to list projects for"),
     }),
     async execute({ user_id }: { user_id: string }) {
-      const rows = Database.use((db) =>
+      const rows = Database.use((db: TxOrDb) =>
         db.select({
           id: ElProjectTable.id,
           name: ElProjectTable.name,
@@ -43,7 +44,7 @@ export const ElTools = {
       project_id: z.string().describe("EL project ID"),
     }),
     async execute({ project_id }: { project_id: string }) {
-      const project = Database.use((db) =>
+      const project = Database.use((db: TxOrDb) =>
         db.select().from(ElProjectTable).where(eq(ElProjectTable.id, project_id)).get(),
       )
       if (!project) return { error: "Project not found" }
@@ -57,7 +58,7 @@ export const ElTools = {
       project_id: z.string().describe("EL project ID"),
     }),
     async execute({ project_id }: { project_id: string }) {
-      const joinRows = Database.use((db) =>
+      const joinRows = Database.use((db: TxOrDb) =>
         db.select().from(ElProjectResourceTable)
           .where(eq(ElProjectResourceTable.project_id, project_id))
           .all(),
@@ -65,7 +66,7 @@ export const ElTools = {
       if (joinRows.length === 0) return { resources: [] }
 
       const resourceIds = joinRows.map((r) => r.resource_id)
-      const resources = Database.use((db) =>
+      const resources = Database.use((db: TxOrDb) =>
         db.select({
           id: LearningResourceTable.id,
           url: LearningResourceTable.url,
@@ -76,7 +77,7 @@ export const ElTools = {
           time_created: LearningResourceTable.time_created,
         })
           .from(LearningResourceTable)
-          .where(eq(LearningResourceTable.id, resourceIds[0]))
+          .where(inArray(LearningResourceTable.id, resourceIds))
           .all(),
       )
 
@@ -94,7 +95,7 @@ export const ElTools = {
       resource_id: z.string().describe("Resource ID"),
     }),
     async execute({ resource_id }: { resource_id: string }) {
-      const resource = Database.use((db) =>
+      const resource = Database.use((db: TxOrDb) =>
         db.select().from(LearningResourceTable)
           .where(eq(LearningResourceTable.id, resource_id))
           .get(),
@@ -141,13 +142,13 @@ export const ElTools = {
       project_id: z.string().describe("EL project ID"),
     }),
     async execute({ project_id }: { project_id: string }) {
-      const project = Database.use((db) =>
+      const project = Database.use((db: TxOrDb) =>
         db.select({ context_json: ElProjectTable.context_json })
           .from(ElProjectTable)
           .where(eq(ElProjectTable.id, project_id))
           .get(),
       )
-      const joinRows = Database.use((db) =>
+      const joinRows = Database.use((db: TxOrDb) =>
         db.select().from(ElProjectResourceTable)
           .where(eq(ElProjectResourceTable.project_id, project_id))
           .all(),
@@ -169,7 +170,7 @@ export const ElTools = {
 
       // Source nodes
       for (const row of joinRows) {
-        const res = Database.use((db) =>
+        const res = Database.use((db: TxOrDb) =>
           db.select({ id: LearningResourceTable.id, url: LearningResourceTable.url, title: LearningResourceTable.title, status: LearningResourceTable.status })
             .from(LearningResourceTable)
             .where(eq(LearningResourceTable.id, row.resource_id))
@@ -191,7 +192,7 @@ export const ElTools = {
       file_path: z.string().describe("Relative file path within the repo (e.g. src/index.ts)"),
     }),
     async execute({ project_id, file_path }: { project_id: string; file_path: string }) {
-      const project = Database.use((db) =>
+      const project = Database.use((db: TxOrDb) =>
         db.select({ repo_local_path: ElProjectTable.repo_local_path })
           .from(ElProjectTable)
           .where(eq(ElProjectTable.id, project_id))
@@ -222,7 +223,7 @@ export const ElTools = {
       layer: z.enum(["L0", "L1", "L2", "all"]).default("all").describe("Which knowledge layer to list"),
     }),
     async execute({ project_id, layer }: { project_id: string; layer: string }) {
-      const project = Database.use((db) =>
+      const project = Database.use((db: TxOrDb) =>
         db.select({ user_id: ElProjectTable.user_id })
           .from(ElProjectTable)
           .where(eq(ElProjectTable.id, project_id))
