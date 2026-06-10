@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>supadense · build engineering second brain for proactive learning</title>
-<meta name="theme-color" content="#ffffff">
+<title>supadense · engineering intelligence for teams</title>
+<meta name="theme-color" content="#131010">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="GitHub commits your code. Supadense commits your engineering. The unified memory and context layer for engineering teams.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet">
@@ -15,9 +16,9 @@
 :root {
   --sd-ground-000: #f4f4f5;
   --sd-ground-050: #ffffff;
-  --sd-ground-100: #ffffff;
-  --sd-ground-150: #fafafa;
-  --sd-ground-200: #ffffff;
+  --sd-ground-100: #f8f8f8;
+  --sd-ground-150: #f2f2f2;
+  --sd-ground-200: #ebebeb;
   --sd-ground-300: #e5e5e5;
   --sd-ground-400: #d4d4d4;
   --sd-ground-500: #a3a3a3;
@@ -82,13 +83,10 @@ a { color: inherit; text-decoration: none; }
 ::selection { background: var(--sd-amber-300); color: var(--sd-ground-050); }
 button { font-family: inherit; cursor: pointer; }
 input, textarea, select { font-family: inherit; }
-em, i { font-style: normal; font-family: inherit; font-weight: 600; color: var(--sd-amber-300); }
 
 /* ============================================================
    SHARED CHROME
    ============================================================ */
-
-/* --- Mark --- */
 .sd-mark {
   display: inline-grid;
   grid-template-columns: repeat(4, 1fr);
@@ -99,33 +97,11 @@ em, i { font-style: normal; font-family: inherit; font-weight: 600; color: var(-
 }
 .sd-mark i { display: block; background: var(--sd-ink-100); font-style: normal; }
 .sd-mark i.amber { background: var(--sd-amber-300); }
-
-/* --- Wordmark --- */
 .sd-wordmark {
   display: inline-flex; align-items: center; gap: 10px;
   font-weight: 500; letter-spacing: -0.02em; font-size: 16px;
   color: var(--sd-ink-100);
 }
-
-/* --- Top Nav --- */
-.sd-topnav {
-  position: sticky; top: 0; z-index: 50;
-  background: rgba(255,255,255,0.85);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--sd-ground-300);
-}
-.sd-topnav-inner {
-  max-width: 1200px; margin: 0 auto; padding: 16px 32px;
-  display: flex; justify-content: space-between; align-items: center;
-}
-.sd-topnav .links {
-  display: flex; gap: 28px;
-  font-family: var(--sd-font-mono); font-size: 11px;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--sd-ink-300);
-}
-.sd-topnav .links a:hover { color: var(--sd-amber-300); }
-
-/* --- Buttons --- */
 .sd-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 16px; border-radius: var(--sd-radius-sm);
@@ -145,8 +121,6 @@ em, i { font-style: normal; font-family: inherit; font-weight: 600; color: var(-
 .sd-btn--ghost:hover { background: var(--sd-ground-100); border-color: var(--sd-ground-300); }
 .sd-btn--sm { padding: 6px 12px; font-size: 12px; }
 .sd-btn--lg { padding: 14px 22px; font-size: 15px; }
-
-/* --- Eyebrow --- */
 .sd-eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--sd-font-mono); font-size: 11px;
@@ -155,630 +129,884 @@ em, i { font-style: normal; font-family: inherit; font-weight: 600; color: var(-
 .sd-eyebrow::before {
   content: ""; width: 6px; height: 6px; background: var(--sd-amber-300); display: inline-block;
 }
-
-/* --- Section Shell --- */
-section.shell { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
-
-/* --- sd-h-2 --- */
 .sd-h-2 {
   font-size: 40px; line-height: 1.05; letter-spacing: -0.025em;
   font-weight: 500; color: var(--sd-ink-100); margin: 0;
 }
-
-/* --- Icons --- */
 .sd-icon { width: 18px; height: 18px; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; stroke: currentColor; flex-shrink: 0; }
 .sd-icon--lg { width: 22px; height: 22px; }
 
 /* ============================================================
-   LANDER-SPECIFIC
+   PAGE-SPECIFIC OVERRIDES
    ============================================================ */
-
-em.serif { font-style: normal; font-family: inherit; color: var(--sd-amber-300); font-weight: 400; }
-
-.hero-bg {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(to right, var(--sd-ground-200) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--sd-ground-200) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at center top, black 0%, transparent 70%);
-  -webkit-mask-image: radial-gradient(ellipse at center top, black 0%, transparent 70%);
-  opacity: 0.45; pointer-events: none;
-}
-.hero-glow {
-  position: absolute; width: 380px; height: 380px;
-  background: radial-gradient(circle, var(--sd-amber-glow) 0%, transparent 65%);
-  pointer-events: none;
-}
-
+:root { --sd-font-sans:"Courier New",Courier,monospace; --sd-font-mono:"Courier New",Courier,monospace; --sd-font-serif:"Courier New",Courier,monospace; }
+*,*::before,*::after{font-style:normal!important}
+em,em.sd-em,em.serif{font-style:normal;font-family:inherit}
+.shell{max-width:1200px;margin:0 auto;padding:0 40px}
+.bg-grid{position:absolute;inset:0;background-image:linear-gradient(to right,var(--sd-ground-300) 1px,transparent 1px),linear-gradient(to bottom,var(--sd-ground-300) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,black 0%,transparent 100%);-webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,black 0%,transparent 100%);opacity:.25;pointer-events:none}
+.bg-glow{position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(214,138,46,.12) 0%,transparent 65%);pointer-events:none}
+/* NAV */
+.sd-topnav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--sd-ground-300)}
+.sd-topnav-inner{max-width:1200px;margin:0 auto;padding:14px 40px;display:flex;justify-content:space-between;align-items:center}
+.sd-topnav .sd-wordmark{color:var(--sd-ink-100)}
+.sd-topnav .sd-wordmark .sd-mark i{background:var(--sd-ink-100)}
+.sd-topnav .sd-wordmark .sd-mark i.amber{background:var(--sd-amber-300)}
+.sd-topnav .links{display:flex;gap:28px;font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--sd-ink-400)}
+.sd-topnav .links a:hover{color:var(--sd-amber-300)}
+.nav-right{display:flex;gap:8px;align-items:center}
+.nav-btn-ghost{font-family:var(--sd-font-mono);font-size:11px;letter-spacing:.06em;color:var(--sd-ink-300);background:transparent;border:none;padding:6px 12px;cursor:pointer;text-decoration:none;transition:color 140ms}
+.nav-btn-ghost:hover{color:var(--sd-ink-100)}
+.nav-btn-primary{font-family:var(--sd-font-mono);font-size:11px;letter-spacing:.06em;background:var(--sd-amber-300);color:#fff;border:none;padding:7px 14px;border-radius:var(--sd-radius-xs);cursor:pointer;text-decoration:none;font-weight:600;transition:background 140ms}
+.nav-btn-primary:hover{background:var(--sd-amber-200)}
 /* HERO */
-.hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--sd-ground-300); }
-.hero-inner {
-  max-width: 1200px; margin: 0 auto;
-  padding: 88px 32px 64px; position: relative; z-index: 1;
-}
-.hero h1 {
-  font-size: 88px; line-height: 0.95; letter-spacing: -0.04em;
-  font-weight: 500; margin: 28px 0 0; max-width: 14ch;
-}
-.hero h1 em { color: var(--sd-amber-300); font-weight: 600; }
-.hero .lede-stack { margin-top: 28px; display: flex; flex-direction: column; gap: 18px; max-width: 52ch; }
-.hero .lede-bullets {
-  list-style: none; padding: 0; margin: 8px 0 0;
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--sd-ground-300); border-top: 2px solid var(--sd-amber-300);
-  border-radius: var(--sd-radius-sm); overflow: hidden;
-  background: var(--sd-ground-100); max-width: 720px;
-}
-.hero .lede-bullets li {
-  padding: 18px 22px 20px; border-right: 1px solid var(--sd-ground-300);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.hero .lede-bullets li:last-child { border-right: 0; }
-.hero .lede-bullets li strong {
-  font-family: var(--sd-font-sans); font-size: 17px; font-weight: 600;
-  letter-spacing: -0.01em; color: var(--sd-amber-300); line-height: 1.2;
-}
-.hero .lede-bullets li .b-body {
-  font-family: var(--sd-font-mono); font-size: 13px; line-height: 1.45;
-  color: var(--sd-ink-300); letter-spacing: -0.005em;
-}
-.hero .cta-row { margin-top: 36px; display: flex; gap: 12px; align-items: center; }
-.hero .meta-strip {
-  display: flex; gap: 28px; margin-top: 56px; padding-top: 24px;
-  border-top: 1px solid var(--sd-ground-300); flex-wrap: wrap;
-}
-.meta-strip .item { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
-.meta-strip .item .num {
-  font-size: 28px; font-weight: 500; letter-spacing: -0.025em;
-  color: var(--sd-ink-100); font-feature-settings: "ss01";
-}
-.meta-strip .item .num em { color: var(--sd-amber-300); font-weight: 500; }
-.meta-strip .item .lbl {
-  font-family: var(--sd-font-mono); font-size: 10px;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--sd-ink-400);
-}
-
-/* DEMO */
-.demo { padding: 96px 0; background: var(--sd-ground-000); border-bottom: 1px solid var(--sd-ground-300); }
-.demo .frame {
-  max-width: 1140px; margin: 0 auto;
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-md);
-  overflow: hidden; box-shadow: var(--sd-shadow-modal); background: var(--sd-ground-050);
-}
-.demo .frame-bar {
-  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-  border-bottom: 1px solid var(--sd-ground-300); background: var(--sd-ground-100);
-}
-.demo .frame-bar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sd-ground-400); }
-.demo .frame-bar .dot.amber { background: var(--sd-amber-300); }
-.demo .frame-bar .url { margin-left: 12px; font-family: var(--sd-font-mono); font-size: 11px; color: var(--sd-ink-400); letter-spacing: 0.04em; }
-.demo .frame-stage { position: relative; height: 600px; overflow: hidden; background: var(--sd-ground-050); }
-.demo .frame-stage iframe {
-  width: 1440px; height: 900px; border: 0;
-  transform-origin: top left; transform: scale(0.792); display: block;
-}
-.demo .frame-stage .peek-cta {
-  position: absolute; right: 22px; bottom: 22px;
-  width: 48px; height: 48px; border-radius: 50%;
-  background: var(--sd-ground-100); border: 1px solid var(--sd-ground-300);
-  color: var(--sd-ink-100); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; z-index: 3;
-  box-shadow: 0 6px 20px -6px rgba(0,0,0,0.18), 0 2px 4px -2px rgba(0,0,0,0.08);
-  transition: transform 140ms cubic-bezier(0.22,1,0.36,1), border-color 140ms, box-shadow 140ms;
-}
-.demo .frame-stage .peek-cta:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 28px -8px rgba(214,138,46,0.30), 0 2px 4px -2px rgba(0,0,0,0.10);
-  border-color: var(--sd-amber-400);
-}
-.demo .frame-stage .peek-cta .glyph {
-  width: 22px; height: 22px; display: grid;
-  grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); gap: 2px;
-}
-.demo .frame-stage .peek-cta .glyph span { background: var(--sd-ink-100); border-radius: 1px; }
-.demo .frame-stage .peek-cta .glyph span.amber { background: var(--sd-amber-300); }
-.demo .frame-stage .peek-tag {
-  position: absolute; left: 18px; top: 18px;
-  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
-  background: rgba(255,255,255,0.9); backdrop-filter: blur(6px);
-  border: 1px solid var(--sd-amber-300); border-radius: 999px;
-  color: var(--sd-amber-400); font-family: var(--sd-font-mono);
-  font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; z-index: 2;
-}
-.demo .frame-stage .peek-tag .pulse {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--sd-amber-300);
-  animation: lander-pulse 2s var(--sd-ease-out) infinite;
-}
-@keyframes lander-pulse {
-  0%,100% { box-shadow: 0 0 0 3px var(--sd-amber-glow); }
-  50%     { box-shadow: 0 0 0 6px rgba(214,138,46,0.06); }
-}
-
+.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--sd-ground-300);padding:96px 0 0;background:var(--sd-ground-050);text-align:center}
+.hero-inner{max-width:900px;margin:0 auto;padding:0 40px;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+.hero-lhs{display:flex;flex-direction:column;align-items:center;width:100%}
+.announce-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 16px 6px 6px;border:1px solid var(--sd-ground-300);border-radius:999px;background:var(--sd-ground-000);font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.06em;color:var(--sd-ink-400);text-decoration:none;margin-bottom:32px;width:fit-content;transition:border-color 140ms}
+.announce-pill:hover{border-color:var(--sd-amber-300);color:var(--sd-ink-200)}
+.announce-pill .pill-badge{background:rgba(214,138,46,.12);color:var(--sd-amber-300);padding:2px 10px;border-radius:999px;font-size:9px;letter-spacing:.08em;border:1px solid rgba(214,138,46,.25)}
+.announce-pill .pill-arrow{color:var(--sd-ink-400);margin-left:4px}
+.hero h1{font-size:88px;line-height:.97;letter-spacing:-.05em;font-weight:600;margin:0;color:var(--sd-ink-100);text-align:center}
+.hero h1 em{color:var(--sd-amber-300)}
+.hero .tagline{margin-top:28px;font-size:19px;line-height:1.55;letter-spacing:-.01em;color:var(--sd-ink-300);max-width:52ch;font-weight:400;text-align:center}
+.hero-trust{margin-top:16px;font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.06em;color:var(--sd-ink-400);display:flex;gap:16px;align-items:center}
+.hero-trust span{display:flex;align-items:center;gap:5px}
+.hero-trust .sep{color:var(--sd-ground-400)}
+/* HERO PREVIEW */
+.hero-preview{width:100%;max-width:1200px;margin:56px auto 0;padding:0 24px;position:relative;z-index:1;perspective:1400px}
+.hero-preview-frame{background:#fff;border:1px solid var(--sd-ground-300);border-radius:10px 10px 0 0;overflow:hidden;box-shadow:0 32px 80px -12px rgba(0,0,0,.18),0 8px 24px rgba(0,0,0,.08);transform:rotateX(28deg) rotateY(-8deg) rotateZ(2deg);transform-origin:center top;will-change:transform}
+.hpf-bar{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--sd-ground-300);background:var(--sd-ground-050)}
+.hpf-dots{display:flex;gap:6px}
+.hpf-dot{width:10px;height:10px;border-radius:50%;background:var(--sd-ground-300)}
+.hpf-title{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.06em;color:var(--sd-ink-400);margin-left:4px}
+.hpf-title em{color:var(--sd-amber-300)}
+.hpf-graph{background:var(--sd-ground-050);position:relative}
+.hpf-graph svg{display:block;width:100%}
+.hpf-fade{position:absolute;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to bottom,transparent 0%,var(--sd-ground-050) 80%,var(--sd-ground-100) 100%)}
+/* SECTION COMMON */
+section{position:relative}
+.sec-head{margin-bottom:56px}
+.sec-eyebrow{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.sec-eyebrow::before{content:"";width:5px;height:5px;background:var(--sd-amber-300);display:inline-block}
+.sec-h2{font-size:44px;font-weight:500;letter-spacing:-.03em;line-height:1.05;color:var(--sd-ink-100);margin:0}
+.sec-h2 em{color:var(--sd-amber-300)}
+.sec-desc{margin-top:16px;font-size:16px;line-height:1.65;color:var(--sd-ink-300);max-width:52ch}
+/* SECTION NUMBER BAR */
+.sec-num-bar{display:flex;align-items:center;justify-content:space-between;padding-bottom:24px;border-bottom:1px solid var(--sd-ground-300);margin-bottom:56px}
+.sec-num-bar .snb-tag{font-family:var(--sd-font-mono);font-size:16px;letter-spacing:.10em;text-transform:uppercase;color:var(--sd-amber-300);display:flex;align-items:center;gap:10px}
+.sec-num-bar .snb-num{font-family:var(--sd-font-mono);font-size:16px;letter-spacing:.08em;color:var(--sd-ink-400)}
+/* PRODUCT CATALOG */
+.product-catalog{padding:104px 0;border-bottom:1px solid var(--sd-ground-300);background:var(--sd-ground-050)}
+.pc-items{display:flex;flex-direction:column;gap:0}
+.pc-item{display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:start;padding:64px 0;border-bottom:1px solid var(--sd-ground-300)}
+.pc-item:first-child{padding-top:0}
+.pc-item:last-child{border-bottom:0;padding-bottom:0}
+.pc-item.flip .pc-text{order:2}.pc-item.flip .pc-vis{order:1}
+.pc-num{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:6px}
+.pc-cat{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--sd-ink-400);margin-bottom:10px}
+.pc-title{font-size:32px;font-weight:500;letter-spacing:-.025em;line-height:1.1;color:var(--sd-ink-100);margin:0 0 16px}
+.pc-title em{color:var(--sd-amber-300)}
+.pc-body{font-size:15px;line-height:1.7;color:var(--sd-ink-300);max-width:44ch}
+.pc-body em{color:var(--sd-amber-300)}
+.pc-vis{background:#fff;border:1px solid var(--sd-ground-300);border-radius:var(--sd-radius-md);overflow:hidden;box-shadow:0 8px 32px -8px rgba(0,0,0,.08)}
+.pc-vis-pad{padding:22px}
+/* COMPARE */
+.compare-sec{padding:104px 0;border-bottom:1px solid var(--sd-ground-300);background:var(--sd-ground-000)}
 /* HOW IT WORKS */
-.how { padding: 96px 0; border-bottom: 1px solid var(--sd-ground-300); }
-.how-head { display: grid; grid-template-columns: 1.4fr 1fr; gap: 64px; align-items: end; margin-bottom: 64px; }
-.how-head .desc { font-size: 16px; color: var(--sd-ink-300); line-height: 1.55; padding-bottom: 6px; }
-.how-grid {
-  display: grid; grid-template-columns: repeat(4,1fr); gap: 0;
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-sm); overflow: hidden;
-}
-.how-step {
-  padding: 32px 28px; border-right: 1px solid var(--sd-ground-300);
-  display: flex; flex-direction: column; gap: 16px; background: var(--sd-ground-100);
-}
-.how-step:last-child { border-right: none; }
-.how-step .num { font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sd-amber-300); }
-.how-step h4 { font-size: 22px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 500; margin: 0; }
-.how-step h4 em { color: var(--sd-amber-300); font-weight: 400; }
-.how-step p { font-size: 14px; color: var(--sd-ink-300); line-height: 1.55; margin: 0; }
-.how-step .verb-icon {
-  width: 44px; height: 44px; border: 1px solid var(--sd-ground-400);
-  border-radius: var(--sd-radius-xs); display: flex; align-items: center;
-  justify-content: center; color: var(--sd-amber-300); margin-bottom: 8px;
-}
-
-/* GRAPH */
-.graph-sec { padding: 96px 0; border-bottom: 1px solid var(--sd-ground-300); position: relative; overflow: hidden; }
-.graph-sec::before {
-  content: ""; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
-  width: 900px; height: 900px;
-  background: radial-gradient(circle, var(--sd-amber-glow) 0%, transparent 60%);
-  pointer-events: none; opacity: 0.6;
-}
-.graph-head { position: relative; display: grid; grid-template-columns: 1.3fr 1fr; gap: 64px; align-items: end; margin-bottom: 48px; }
-.graph-head .desc { font-size: 16px; color: var(--sd-ink-300); line-height: 1.55; padding-bottom: 6px; }
-.graph-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; position: relative; }
-.graph-filters .pill {
-  padding: 7px 14px; background: var(--sd-ground-100); border: 1px solid var(--sd-ground-300);
-  border-radius: var(--sd-radius-xs); font-family: var(--sd-font-mono); font-size: 11px;
-  letter-spacing: 0.06em; color: var(--sd-ink-300); cursor: pointer; transition: all var(--sd-dur-fast);
-}
-.graph-filters .pill.act { background: var(--sd-amber-300); color: var(--sd-ground-050); border-color: var(--sd-amber-300); font-weight: 600; }
-.graph-filters .pill:hover:not(.act) { border-color: var(--sd-ground-400); color: var(--sd-ink-100); }
-.graph-filters .meta { margin-left: auto; font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--sd-ink-400); }
-.graph-filters .meta span { color: var(--sd-amber-300); }
-.graph-stage {
-  position: relative; border: 1px solid var(--sd-ground-300);
-  border-radius: var(--sd-radius-md); background: var(--sd-ground-000);
-  overflow: hidden; aspect-ratio: 1200/620;
-  box-shadow: var(--sd-inner-glow), var(--sd-shadow-modal);
-}
-.graph-stage svg { display: block; width: 100%; height: 100%; }
-@keyframes draw-edge { from { stroke-dashoffset: 200; opacity: 0; } to { stroke-dashoffset: 0; opacity: 0.7; } }
-@keyframes draw-edge-amber { from { stroke-dashoffset: 200; opacity: 0; } to { stroke-dashoffset: 0; opacity: 0.9; } }
-@keyframes node-fade { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
-.graph-stage .edges line, .graph-stage .edges path { stroke-dasharray: 200; animation: draw-edge 2.4s var(--sd-ease-out) forwards; }
-.graph-stage .edges.amber line, .graph-stage .edges.amber path { animation: draw-edge-amber 2.8s var(--sd-ease-out) forwards; }
-.graph-stage .node { opacity: 0; animation: node-fade 0.8s var(--sd-ease-out) forwards; transform-origin: center; }
-.graph-stage .float-chip {
-  position: absolute; padding: 10px 14px;
-  background: rgba(26,22,20,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-sm);
-  box-shadow: var(--sd-shadow-pop); font-size: 12px; color: var(--sd-ink-100);
-  line-height: 1.4; max-width: 230px; pointer-events: none;
-}
-.graph-stage .float-chip .k { font-family: var(--sd-font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sd-amber-300); margin-bottom: 6px; }
-.graph-stage .float-chip em { color: var(--sd-amber-200); }
-.graph-stage .float-chip .meta { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--sd-ground-400); font-family: var(--sd-font-mono); font-size: 10px; color: var(--sd-ink-400); letter-spacing: 0.04em; }
-.graph-stage .corner {
-  position: absolute; bottom: 16px; right: 16px; display: flex; gap: 14px;
-  background: rgba(12,10,9,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-xs); padding: 10px 14px;
-}
-.graph-stage .corner .stat { display: flex; align-items: baseline; gap: 6px; }
-.graph-stage .corner .stat .num { font-family: var(--sd-font-mono); font-size: 15px; color: var(--sd-ink-100); }
-.graph-stage .corner .stat .num em { color: var(--sd-amber-300); font-weight: 400; }
-.graph-stage .corner .stat .lbl { font-family: var(--sd-font-mono); font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--sd-ink-400); }
-.graph-stage .legend {
-  position: absolute; top: 16px; left: 16px;
-  background: rgba(12,10,9,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-xs);
-  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
-}
-.graph-stage .legend .row { display: flex; align-items: center; gap: 8px; font-family: var(--sd-font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--sd-ink-300); }
-.graph-stage .legend .sw { width: 8px; height: 8px; border-radius: 50%; background: var(--sd-ground-400); }
-.graph-stage .legend .sw.amber { background: var(--sd-amber-300); box-shadow: 0 0 6px var(--sd-amber-300); }
-.graph-stage .legend .sw.cyan { background: var(--sd-cyan-300); }
-
-/* CTA BAND */
-.cta-band { padding: 96px 0 120px; }
-.cta-band .inner {
-  max-width: 920px; margin: 0 auto;
-  border: 1px solid var(--sd-ground-300); border-radius: var(--sd-radius-md);
-  padding: 56px 48px;
-  background: linear-gradient(180deg, var(--sd-ground-100) 0%, var(--sd-ground-050) 100%);
-  box-shadow: var(--sd-inner-glow); position: relative; overflow: hidden;
-}
-.cta-band .inner::before {
-  content: ""; position: absolute; top: -100px; right: -100px;
-  width: 300px; height: 300px;
-  background: radial-gradient(circle, var(--sd-amber-glow), transparent 70%);
-  pointer-events: none;
-}
-.cta-band h2 { font-size: 56px; line-height: 0.98; letter-spacing: -0.03em; font-weight: 500; margin: 0 0 16px; position: relative; }
-.cta-band h2 em { color: var(--sd-amber-300); font-weight: 400; }
-.cta-band p { color: var(--sd-ink-200); font-size: 17px; margin: 0 0 36px; max-width: 58ch; line-height: 1.5; position: relative; }
-.waitlist-form { display: flex; flex-direction: column; gap: 10px; max-width: 520px; position: relative; }
-.waitlist-form .row { display: flex; gap: 10px; }
-.waitlist-form input[type="email"] {
-  flex: 1; padding: 14px 16px; background: var(--sd-ground-000);
-  border: 1px solid var(--sd-ground-300); color: var(--sd-ink-100);
-  font-size: 14px; border-radius: var(--sd-radius-sm); outline: none;
-}
-.waitlist-form input[type="email"]::placeholder { color: var(--sd-ink-400); }
-.waitlist-form input[type="email"]:focus { border-color: var(--sd-amber-300); }
-.waitlist-form select {
-  flex: 1; padding: 14px 12px; background: var(--sd-ground-000);
-  border: 1px solid var(--sd-ground-300); color: var(--sd-ink-100);
-  font-size: 13px; font-family: var(--sd-font-mono);
-  border-radius: var(--sd-radius-sm); outline: none; cursor: pointer;
-}
-.waitlist-form select:focus { border-color: var(--sd-amber-300); }
-.cta-band .stamp {
-  margin-top: 28px; font-family: var(--sd-font-mono); font-size: 11px;
-  letter-spacing: 0.08em; color: var(--sd-ink-400);
-  display: flex; gap: 20px; flex-wrap: wrap; position: relative;
-}
-.cta-band .stamp span { color: var(--sd-ink-200); }
-
-/* FOOTER */
-footer { border-top: 1px solid var(--sd-ground-300); padding: 40px 32px; }
-footer .inner { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
-footer .lockup .tag { font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--sd-ink-400); text-transform: uppercase; margin-top: 4px; }
-footer .links { display: flex; gap: 24px; font-family: var(--sd-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sd-ink-400); }
-footer .links a:hover { color: var(--sd-amber-300); }
-
-/* RESPONSIVE */
-@media (max-width: 900px) {
-  .hero h1 { font-size: 56px; }
-  .graph-head { grid-template-columns: 1fr; gap: 16px; }
-  .graph-stage .float-chip { display: none; }
-  .graph-stage .legend { display: none; }
-  .how-grid { grid-template-columns: 1fr; }
-  .how-step { border-right: none; border-bottom: 1px solid var(--sd-ground-300); }
-  .cta-band h2 { font-size: 36px; }
-  .how-head { grid-template-columns: 1fr; gap: 24px; }
-  .waitlist-form .row { flex-direction: column; }
-  .sd-topnav-inner { padding: 12px 20px; }
-  .sd-topnav .links { display: none; }
-}
+.how-sec{padding:104px 0;border-bottom:1px solid var(--sd-ground-300);background:var(--sd-ground-050)}
+/* FOOTER CTA (dark) */
+.footer-cta{padding:104px 0;background:var(--sd-ink-100);position:relative;overflow:hidden}
+.footer-cta .bg-glow{background:radial-gradient(circle,rgba(214,138,46,.18) 0%,transparent 65%)}
+.ftcta-inner{max-width:760px;margin:0 auto;padding:0 40px;text-align:center;position:relative;z-index:1}
+.ftcta-inner h2{font-size:56px;font-weight:500;letter-spacing:-.04em;line-height:1.04;color:#fff;margin:0 0 16px}
+.ftcta-inner h2 em{color:var(--sd-amber-300)}
+.ftcta-inner .ftcta-sub{font-family:var(--sd-font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:40px}
+.ftcta-btns{display:flex;gap:12px;justify-content:center}
+.ftcta-btn-p{padding:13px 24px;border-radius:var(--sd-radius-sm);background:var(--sd-amber-300);color:#fff;font-family:var(--sd-font-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;font-weight:600;transition:background 140ms}
+.ftcta-btn-p:hover{background:var(--sd-amber-400)}
+.ftcta-btn-g{padding:13px 24px;border-radius:var(--sd-radius-sm);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);font-family:var(--sd-font-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;background:transparent;transition:all 140ms}
+.ftcta-btn-g:hover{border-color:rgba(255,255,255,.4);color:#fff}
+.ftcta-counter{margin-top:56px;padding-top:56px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:center;gap:56px}
+.ftcta-stat{display:flex;flex-direction:column;align-items:center;gap:6px}
+.ftcta-stat .stn{font-size:28px;font-weight:500;letter-spacing:-.03em;color:#fff;line-height:1}
+.ftcta-stat .stn em{color:var(--sd-amber-300)}
+.ftcta-stat .stl{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3)}
+/* DARK FOOTER */
+.dark-footer{background:var(--sd-ink-100)}
+.footer-cols{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;padding:48px 40px;max-width:1200px;margin:0 auto;border-bottom:1px solid rgba(255,255,255,.08)}
+.fc-tagline{font-size:13px;color:rgba(255,255,255,.35);line-height:1.6;margin-top:12px;max-width:28ch}
+.fc-col-title{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:16px}
+.fc-links{display:flex;flex-direction:column;gap:10px}
+.fc-links a{font-size:13px;color:rgba(255,255,255,.35);text-decoration:none;transition:color 140ms}
+.fc-links a:hover{color:rgba(255,255,255,.75)}
+.footer-bottom{max-width:1200px;margin:0 auto;padding:20px 40px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.footer-bottom .fb-copy{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.25)}
+.footer-bottom .fb-links{display:flex;gap:24px}
+.footer-bottom .fb-links a{font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.25);text-decoration:none;transition:color 140ms}
+.footer-bottom .fb-links a:hover{color:var(--sd-amber-300)}
+/* WORDMARK dark variant */
+.sd-wordmark-dark{color:rgba(255,255,255,.6)}
+.sd-wordmark-dark .sd-mark i{background:rgba(255,255,255,.25)}
+.sd-wordmark-dark .sd-mark i.amber{background:var(--sd-amber-300)}
+/* WAITLIST FORM (dark bg) */
+.wl-form{display:flex;flex-direction:column;gap:10px;width:100%;max-width:520px;margin:0 auto}
+.wl-form input[type="email"],.wl-form input[type="text"],.wl-form select{width:100%;padding:13px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:var(--sd-radius-sm);font-family:var(--sd-font-sans);font-size:14px;color:#fff;outline:none;transition:border-color 140ms;box-sizing:border-box}
+.wl-form input::placeholder{color:rgba(255,255,255,.3)}
+.wl-form select option{background:var(--sd-ink-100);color:#fff}
+.wl-form input:focus,.wl-form select:focus{border-color:var(--sd-amber-300);box-shadow:0 0 0 3px rgba(214,138,46,.12)}
+.wl-row{display:flex;gap:10px;align-items:stretch}
+.wl-row select{flex:1}
+.wl-form button{padding:13px 22px;border:none;border-radius:var(--sd-radius-sm);background:var(--sd-amber-300);color:#fff;font-family:var(--sd-font-sans);font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 140ms}
+.wl-form button:hover{background:var(--sd-amber-400)}
+.wl-stamps{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;font-family:var(--sd-font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.25)}
+.wl-stamps span::before{content:"·  ";color:rgba(255,255,255,.15)}
+.wl-stamps span:first-child::before{content:none}
+/* KEYFRAMES */
+@keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(214,138,46,.4)}50%{box-shadow:0 0 0 4px rgba(214,138,46,0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.ic{display:block;width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
 <body>
-
-<!-- ============ TOP NAV ============ -->
+<!-- NAV -->
 <nav class="sd-topnav">
   <div class="sd-topnav-inner">
     <a class="sd-wordmark" href="/">
-      <span class="sd-mark">
-        <i></i><i></i><i></i><i></i>
-        <i></i><i class="amber"></i><i></i><i></i>
-        <i></i><i></i><i></i><i></i>
-        <i></i><i></i><i></i><i></i>
-      </span>
+      <span class="sd-mark"><i></i><i></i><i></i><i></i><i></i><i class="amber"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
       <span>supadense</span>
     </a>
     <div class="links">
+      <a href="#problem">the problem</a>
+      <a href="#catalog">product</a>
       <a href="#how">how it works</a>
-      <a href="#graph">the graph</a>
-      <a href="#waitlist">waitlist</a>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <a class="sd-btn sd-btn--ghost sd-btn--sm" href="/signin">sign in</a>
-      <a class="sd-btn sd-btn--primary sd-btn--sm" href="#waitlist">join waitlist →</a>
+    <div class="nav-right">
+      <a class="nav-btn-ghost" href="/signin">sign in</a>
+      <a class="nav-btn-primary" href="#waitlist">book a demo →</a>
     </div>
   </div>
 </nav>
 
-<!-- ============ HERO ============ -->
+<!-- HERO -->
 <section class="hero">
-  <div class="hero-bg"></div>
-  <div class="hero-glow" style="top:-120px;right:-80px;"></div>
-  <div class="hero-glow" style="bottom:-140px;left:10%;"></div>
+  <div class="bg-grid"></div>
   <div class="hero-inner">
-    <div class="sd-eyebrow">private alpha · 100+ engineers</div>
-    <h1>Build Engineering<br>Second Brain<br>for <em>proactive learning</em>.</h1>
-    <div class="lede-stack">
-      <ul class="lede-bullets">
-        <li><strong>Surfaces</strong><span class="b-body">your learning goals.</span></li>
-        <li><strong>Closes</strong><span class="b-body">the gaps you don't see.</span></li>
-        <li><strong>Compounds</strong><span class="b-body">what you know.</span></li>
-      </ul>
+    <div class="hero-lhs">
+      <a href="#waitlist" class="announce-pill">
+        <span class="pill-badge">private beta</span>
+        Engineering intelligence for teams · 100+ engineers
+        <span class="pill-arrow">›</span>
+      </a>
+      <h1>Git commits code.<br>Now commit<br><em>engineering.</em></h1>
+      <p class="tagline">Supadense captures every architecture decision, experiment, and tradeoff your team makes — and makes it queryable by everyone, forever.</p>
+      <div class="hero-trust">
+        <span>private beta · invite only</span>
+        <span class="sep">·</span>
+        <span>no credit card required</span>
+        <span class="sep">·</span>
+        <span>free to start</span>
+      </div>
     </div>
-    <div class="cta-row">
-      <a class="sd-btn sd-btn--primary sd-btn--lg" href="#waitlist">join the waitlist →</a>
-    </div>
-    <div class="meta-strip">
-      <div class="item"><div class="num">100<em>+</em></div><div class="lbl">engineers in private alpha</div></div>
-      <div class="item"><div class="num">1.2<em>M</em></div><div class="lbl">graph edges drawn</div></div>
-      <div class="item"><div class="num"><em>10</em>%</div><div class="lbl">avg retention without supadense</div></div>
+  </div>
+
+  <!-- browser preview frame -->
+  <div class="hero-preview">
+    <div class="hero-preview-frame">
+      <div class="hpf-bar">
+        <div class="hpf-dots"><span class="hpf-dot"></span><span class="hpf-dot"></span><span class="hpf-dot"></span></div>
+        <span class="hpf-title">supadense / <em>team · engineering brain</em></span>
+      </div>
+      <div class="hpf-graph" style="height:520px;position:relative;overflow:hidden;background:#fafafa;">
+        <canvas id="hero-brain-canvas" style="display:block;width:100%;height:520px;"></canvas>
+        <div class="hpf-fade" style="height:180px;"></div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ============ DEMO ============ -->
-<section class="demo" id="demo">
-  <section class="shell" style="margin-bottom:48px;">
-    <div class="sd-eyebrow">a peek inside</div>
-    <h2 class="sd-h-2" style="margin-top:16px;max-width:24ch;">A peek inside <em class="serif">the platform.</em></h2>
-  </section>
-  <div class="frame">
-    <div class="frame-bar">
-      <span class="dot amber"></span><span class="dot"></span><span class="dot"></span>
-      <span class="url">supadense.com/app</span>
+<!-- WHY ENGINEERING BREAKS [1/3] -->
+<section class="product-catalog" id="catalog">
+  <div class="shell">
+    <div class="sec-num-bar">
+      <div class="snb-tag"><span style="color:var(--sd-amber-300);">〉</span>&nbsp;WHY ENGINEERING BREAKS</div>
+      <div class="snb-num">[1/3]</div>
     </div>
-    <div class="frame-stage">
-      <span class="peek-tag"><span class="pulse"></span>live preview</span>
-      <button class="peek-cta" id="peek-ask" type="button" aria-label="Ask supadense">
-        <span class="glyph" aria-hidden="true">
-          <span></span><span></span><span></span>
-          <span></span><span class="amber"></span><span></span>
-          <span></span><span></span><span></span>
-        </span>
-      </button>
-      <iframe id="peek-frame" src="app.html?peek=1&v=2" title="supadense platform — live view"></iframe>
-    </div>
-  </div>
-</section>
+    <h2 class="sec-h2">Four ways your team's<br>engineering <em>leaks every sprint.</em></h2>
+    <p class="sec-desc" style="margin-top:16px;">Not process failures. Infrastructure failures. Engineering context has no version control — yet.</p>
 
-<!-- ============ HOW IT WORKS ============ -->
-<section class="how" id="how">
-  <section class="shell">
-    <div class="how-head">
-      <div>
-        <div class="sd-eyebrow">not storage. intelligence.</div>
-        <h2 class="sd-h-2" style="margin-top:16px;">Four verbs.<br>One <em class="serif">compounding loop.</em></h2>
-      </div>
-      <div class="desc">Most tools store. Supadense thinks alongside you — personalising what you read, threading it into your graph, surfacing what you almost forgot, and getting denser every day you use it.</div>
-    </div>
-    <div class="how-grid">
-      <div class="how-step">
-        <div class="verb-icon"><svg class="sd-icon sd-icon--lg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-        <div class="num">01 · capture</div>
-        <h4>Personalised.<br><em>Proactive.</em></h4>
-        <p>Drop a paper, paste a thread, hit ⌘+shift+S on any tab. Supadense pulls claims, code, and citations — biased by what you already keep.</p>
-      </div>
-      <div class="how-step">
-        <div class="verb-icon"><svg class="sd-icon sd-icon--lg" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="8" y1="8" x2="11" y2="15"/><line x1="16" y1="8" x2="13" y2="15"/></svg></div>
-        <div class="num">02 · connect</div>
-        <h4>It threads into<br>what you <em>already know.</em></h4>
-        <p>Every fragment auto-links to prior reading — papers, half-thoughts, code you've shipped. No tagging. The graph compounds on every capture.</p>
-      </div>
-      <div class="how-step">
-        <div class="verb-icon"><svg class="sd-icon sd-icon--lg" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 9 9 9 9 0 0 1-9 9"/><path d="M3 12h9"/><path d="M9 6l-6 6 6 6"/></svg></div>
-        <div class="num">03 · surface</div>
-        <h4>Notes that<br>make you <em>learn back.</em></h4>
-        <p>Spaced reviews. Gap calls. "you wondered about this in June" nudges. Quiet, on cadence — not another inbox.</p>
-      </div>
-      <div class="how-step">
-        <div class="verb-icon"><svg class="sd-icon sd-icon--lg" viewBox="0 0 24 24"><path d="M12 2v6"/><path d="M12 16v6"/><path d="M5 12H2"/><path d="M22 12h-3"/><path d="M19.07 4.93l-2.12 2.12"/><path d="M7.05 16.95l-2.12 2.12"/><path d="M4.93 4.93l2.12 2.12"/><path d="M16.95 16.95l2.12 2.12"/><circle cx="12" cy="12" r="3"/></svg></div>
-        <div class="num">04 · compound</div>
-        <h4>Dense knowledge<br>that <em>compounds.</em></h4>
-        <p>Each session makes the next denser. Can't be cloned by feature parity — only by years of your own data.</p>
-      </div>
-    </div>
-  </section>
-</section>
+    <div class="pc-items" style="margin-top:64px;">
 
-<!-- ============ GRAPH ============ -->
-<section class="graph-sec" id="graph">
-  <section class="shell">
-    <div class="graph-head">
-      <div>
-        <div class="sd-eyebrow">your knowledge · alive</div>
-        <h2 class="sd-h-2" style="margin-top:16px;">Dense knowledge,<br><em class="serif">drawn into a graph.</em></h2>
-      </div>
-      <div class="desc">Every fragment you capture connects to every other fragment you already keep. Not a list, not a folder — a living surface that gets denser, faster, and more personal the longer you use it.</div>
-    </div>
-    <div class="graph-filters">
-      <button class="pill act">all · 847</button>
-      <button class="pill">active · 24</button>
-      <button class="pill">stale · 12</button>
-      <button class="pill">gaps · 7</button>
-      <button class="pill">recent · 28</button>
-      <div class="meta">2,184 edges · <span>drawn auto</span></div>
-    </div>
-    <div class="graph-stage">
-      <svg viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <defs>
-          <radialGradient id="hub-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#d68a2e" stop-opacity="0.42"/>
-            <stop offset="60%" stop-color="#d68a2e" stop-opacity="0.12"/>
-            <stop offset="100%" stop-color="#d68a2e" stop-opacity="0"/>
-          </radialGradient>
-          <pattern id="dot-grid" width="32" height="32" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="1" fill="rgba(74,64,59,0.5)"/>
-          </pattern>
-        </defs>
-        <rect width="1200" height="620" fill="url(#dot-grid)"/>
-        <circle cx="600" cy="310" r="260" fill="url(#hub-glow)"/>
-        <g class="edges" stroke="#e5e5e5" stroke-width="1" fill="none" opacity="0.65">
-          <path d="M600 310 Q500 250 240 180"/><path d="M600 310 Q500 260 320 130"/>
-          <path d="M600 310 Q700 240 820 180"/><path d="M600 310 Q740 250 940 180"/>
-          <path d="M600 310 Q820 380 1020 380"/><path d="M600 310 Q780 460 880 540"/>
-          <path d="M600 310 Q540 460 420 540"/><path d="M600 310 Q380 360 180 360"/>
-          <line x1="240" y1="180" x2="160" y2="100"/><line x1="240" y1="180" x2="320" y2="130"/>
-          <line x1="320" y1="130" x2="380" y2="80"/><line x1="940" y1="180" x2="880" y2="110"/>
-          <line x1="940" y1="180" x2="1000" y2="110"/><line x1="1020" y1="380" x2="1090" y2="330"/>
-          <line x1="1020" y1="380" x2="1100" y2="420"/><line x1="880" y1="540" x2="820" y2="500"/>
-          <line x1="880" y1="540" x2="950" y2="510"/><line x1="420" y1="540" x2="360" y2="500"/>
-          <line x1="420" y1="540" x2="480" y2="500"/><line x1="180" y1="360" x2="100" y2="320"/>
-          <line x1="180" y1="360" x2="120" y2="410"/><line x1="220" y1="480" x2="160" y2="480"/>
-          <path d="M880 540 Q700 540 420 540" opacity="0.4" stroke-dasharray="3 4"/>
-        </g>
-        <g class="edges amber" stroke="#d68a2e" stroke-width="1.6" fill="none" opacity="0.85" stroke-linecap="round">
-          <path d="M600 310 Q500 250 240 180"/><path d="M600 310 Q740 250 940 180"/>
-          <path d="M600 310 Q780 460 880 540"/><path d="M940 180 Q900 280 1020 380"/>
-        </g>
-        <g font-family="Geist, sans-serif" font-size="20" font-weight="500" fill="#525252" letter-spacing="-0.01em">
-          <text x="240" y="50">retrieval</text><text x="930" y="45">embeddings</text>
-          <text x="1075" y="275">long-context</text><text x="865" y="485">agentic loops</text>
-          <text x="345" y="485">postgres internals</text><text x="40" y="260">rust async</text>
-        </g>
-        <g class="nodes" fill="#ffffff" stroke="#d4d4d4" stroke-width="1.2">
-          <circle class="node" cx="160" cy="100" r="7" style="animation-delay:.2s"/>
-          <circle class="node" cx="320" cy="130" r="8" style="animation-delay:.3s"/>
-          <circle class="node" cx="380" cy="80" r="5" style="animation-delay:.5s"/>
-          <circle class="node" cx="880" cy="110" r="7" style="animation-delay:.3s"/>
-          <circle class="node" cx="1000" cy="110" r="6" style="animation-delay:.4s"/>
-          <circle class="node" cx="1090" cy="330" r="6" style="animation-delay:.4s"/>
-          <circle class="node" cx="1100" cy="420" r="5" style="animation-delay:.5s"/>
-          <circle class="node" cx="820" cy="500" r="6" style="animation-delay:.5s"/>
-          <circle class="node" cx="950" cy="510" r="5" style="animation-delay:.6s"/>
-          <circle class="node" cx="360" cy="500" r="6" style="animation-delay:.5s"/>
-          <circle class="node" cx="480" cy="500" r="7" style="animation-delay:.6s"/>
-          <circle class="node" cx="100" cy="320" r="5" style="animation-delay:.5s"/>
-          <circle class="node" cx="120" cy="410" r="5" style="animation-delay:.6s"/>
-        </g>
-        <g class="nodes amber" fill="#d68a2e" stroke="#ffffff" stroke-width="2">
-          <circle class="node" cx="240" cy="180" r="12" style="animation-delay:.6s"/>
-          <circle class="node" cx="940" cy="180" r="12" style="animation-delay:.7s"/>
-          <circle class="node" cx="1020" cy="380" r="11" style="animation-delay:.8s"/>
-          <circle class="node" cx="880" cy="540" r="11" style="animation-delay:.9s"/>
-          <circle class="node" cx="420" cy="540" r="12" style="animation-delay:1s"/>
-          <circle class="node" cx="180" cy="360" r="10" style="animation-delay:1.1s"/>
-        </g>
-        <g class="nodes stale" fill="#155e75" stroke="#0e7490" stroke-width="1.5">
-          <circle class="node" cx="220" cy="480" r="8" style="animation-delay:1.2s"/>
-          <circle class="node" cx="160" cy="480" r="5" style="animation-delay:1.3s"/>
-        </g>
-        <text x="195" y="498" font-family="Geist Mono, monospace" font-size="12" fill="#0e7490" opacity="0.7" letter-spacing="0.02em">io_uring · stale</text>
-        <g>
-          <circle cx="600" cy="310" r="50" fill="none" stroke="#d68a2e" stroke-width="1" opacity="0.4">
-            <animate attributeName="r" values="40;72;40" dur="3.2s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.5;0;0.5" dur="3.2s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="600" cy="310" r="36" fill="#d68a2e" stroke="#ffffff" stroke-width="3"/>
-          <text x="600" y="307" text-anchor="middle" font-family="Geist, sans-serif" font-size="12" font-weight="600" fill="#ffffff">RAG memory</text>
-          <text x="600" y="322" text-anchor="middle" font-family="Geist Mono, monospace" font-size="9" fill="#ffffff" opacity="0.7" letter-spacing="0.06em">42 FRAGMENTS</text>
-        </g>
-      </svg>
-      <div class="float-chip" style="top:22%;left:38%;">
-        <div class="k">surfacing · tue 09:14</div>
-        <div>Past-you wondered about <em>RAG memory</em> three times this month.</div>
-        <div class="meta">4 fragments · arxiv 2509.11240</div>
-      </div>
-      <div class="float-chip" style="top:55%;right:12%;">
-        <div class="k">field moved</div>
-        <div>Your long-context note is <em>outdated</em> — deepseek-r2 just landed.</div>
-        <div class="meta">stale · 7 days since cap</div>
-      </div>
-      <div class="legend">
-        <div class="row"><span class="sw amber"></span>active · last 7 days</div>
-        <div class="row"><span class="sw"></span>retained</div>
-        <div class="row"><span class="sw cyan"></span>stale · field moved</div>
-        <div class="row"><span class="sw" style="background:transparent;border:1px dashed var(--sd-danger);"></span>gap · unanswered</div>
-      </div>
-      <div class="corner">
-        <div class="stat"><span class="num">847</span><span class="lbl">fragments</span></div>
-        <div class="stat"><span class="num">2.1<em>k</em></span><span class="lbl">edges</span></div>
-        <div class="stat"><span class="num">6</span><span class="lbl">clusters</span></div>
-        <div class="stat"><span class="num">82<em>%</em></span><span class="lbl">retention</span></div>
-      </div>
-    </div>
-    <div style="margin-top:20px;display:flex;gap:24px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
-      <div style="font-family:var(--sd-font-mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sd-ink-400);">
-        → a real fragment graph after <span style="color:var(--sd-amber-300);">90 days</span> of alpha use
-      </div>
-      <div style="display:flex;gap:8px;">
-        <a class="sd-btn sd-btn--sm" href="app.html">explore the graph ↗</a>
-        <a class="sd-btn sd-btn--primary sd-btn--sm" href="#waitlist">build yours →</a>
-      </div>
-    </div>
-  </section>
-</section>
-
-<!-- ============ CTA ============ -->
-<section class="cta-band" id="waitlist">
-  <section class="shell">
-    <div class="inner">
-      <div class="sd-eyebrow">waitlist · open</div>
-      <h2 style="margin-top:16px;">Build your engineering second brain<br>for <em>proactive learning.</em></h2>
-      <form class="waitlist-form" onsubmit="handleWaitlist(event)">
-        <input type="email" name="email" required placeholder="you@where-you-build.com" />
-        <div class="row">
-          <select name="years_experience">
-            <option value="" disabled selected>years of experience</option>
-            <option value="0-1">0–1 years</option>
-            <option value="1-3">1–3 years</option>
-            <option value="3-5">3–5 years</option>
-            <option value="5-10">5–10 years</option>
-            <option value="10+">10+ years</option>
-          </select>
-          <button type="submit" class="sd-btn sd-btn--primary sd-btn--lg" id="waitlist-btn">join →</button>
+      <!-- 01 Knowledge Drain -->
+      <div class="pc-item">
+        <div class="pc-text">
+          <div class="pc-num">01</div>
+          <div class="pc-cat">Knowledge Drain</div>
+          <h3 class="pc-title">Context in engineers' heads.<br><em>Nowhere else.</em></h3>
+          <p class="pc-body">The real cost isn't the lost document — it's the lost reasoning. That context is the new data asset. And it's currently unstructured, uncaptured, and unowned.</p>
         </div>
-      </form>
-      <div class="stamp">
-        <span>0 sales emails ever.</span>
-        <span>1 update / month, max.</span>
-        <span>Unsubscribe with one click.</span>
+        <div class="pc-vis">
+          <div class="pc-vis-pad">
+            <div style="font-family:var(--sd-font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-bottom:12px;">where engineering context lives today</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:11px 14px;background:rgba(220,38,38,.04);border:1px solid rgba(220,38,38,.15);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:12px;color:var(--sd-ink-200);">Sarah's head</div>
+                <div style="font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-danger);">auth decisions · unwritten</div>
+              </div>
+              <div style="padding:11px 14px;background:rgba(220,38,38,.04);border:1px solid rgba(220,38,38,.15);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:12px;color:var(--sd-ink-200);">Slack thread, 6 weeks ago</div>
+                <div style="font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-danger);">payment tradeoff · buried</div>
+              </div>
+              <div style="padding:11px 14px;background:rgba(220,38,38,.04);border:1px solid rgba(220,38,38,.15);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:12px;color:var(--sd-ink-200);">Notion doc, never updated</div>
+                <div style="font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-danger);">arch design · stale</div>
+              </div>
+              <div style="padding:11px 14px;background:rgba(214,138,46,.05);border:1px solid rgba(214,138,46,.25);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:12px;color:var(--sd-ink-200);">Supadense eng commit</div>
+                <div style="font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-amber-300);">✓ owned · searchable · current</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- 02 No Compounding -->
+      <div class="pc-item flip">
+        <div class="pc-text">
+          <div class="pc-num">02</div>
+          <div class="pc-cat">No Compounding</div>
+          <h3 class="pc-title">Teams redo experiments.<br>Waste <em>builds up.</em></h3>
+          <p class="pc-body">No memory of what was tried. Teams run the same spikes, hit the same dead ends, every quarter. Engineering resets instead of compounds.</p>
+        </div>
+        <div class="pc-vis" style="background:var(--sd-ground-050);">
+          <div class="pc-vis-pad">
+            <div style="font-family:var(--sd-font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-bottom:14px;">Q3 experiment · search ranking</div>
+            <div style="border-left:2px solid var(--sd-danger);padding:10px 14px;background:rgba(220,38,38,.03);border-radius:0 4px 4px 0;margin-bottom:8px;">
+              <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-danger);margin-bottom:4px;">Q1 — dense recall spike · no commit</div>
+              <div style="font-size:12px;color:var(--sd-ink-300);">BM25 vs dense retrieval — tested. No record of outcome or reasoning.</div>
+            </div>
+            <div style="border-left:2px solid var(--sd-danger);padding:10px 14px;background:rgba(220,38,38,.03);border-radius:0 4px 4px 0;margin-bottom:8px;">
+              <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-danger);margin-bottom:4px;">Q2 — same spike. different name.</div>
+              <div style="font-size:12px;color:var(--sd-ink-300);">New engineer. No prior art visible. Same 3 weeks, same conclusion.</div>
+            </div>
+            <div style="border-left:2px solid var(--sd-amber-300);padding:10px 14px;background:rgba(214,138,46,.04);border-radius:0 4px 4px 0;">
+              <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-amber-300);margin-bottom:4px;">Q3 — with supadense · 3 hours</div>
+              <div style="font-size:12px;color:var(--sd-ink-200);">Prior art surfaced. Decision committed. Build on top, not from scratch.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 Engineer Exit -->
+      <div class="pc-item">
+        <div class="pc-text">
+          <div class="pc-num">03</div>
+          <div class="pc-cat">Engineer Exit Cost</div>
+          <h3 class="pc-title">When engineers leave,<br>the company <em>loses data.</em></h3>
+          <p class="pc-body">When a senior engineer exits, they take years of decisions with them. That's not an HR problem — it's a data loss event. Now solvable.</p>
+        </div>
+        <div class="pc-vis">
+          <div class="pc-vis-pad" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-family:var(--sd-font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-bottom:4px;">senior engineer · 3yr tenure · exits</div>
+            <div style="padding:12px 14px;border:1px solid var(--sd-ground-300);border-radius:4px;">
+              <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-ink-400);margin-bottom:6px;">without supadense</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="font-size:12px;color:var(--sd-danger);">✗ auth architecture decisions · gone</div>
+                <div style="font-size:12px;color:var(--sd-danger);">✗ 12 failed experiments · gone</div>
+                <div style="font-size:12px;color:var(--sd-danger);">✗ payment edge cases · gone</div>
+                <div style="font-size:12px;color:var(--sd-danger);">✗ 3yr of tradeoffs · gone</div>
+              </div>
+            </div>
+            <div style="padding:12px 14px;border:1px solid rgba(214,138,46,.3);border-radius:4px;background:rgba(214,138,46,.04);">
+              <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-amber-300);margin-bottom:6px;">with supadense</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="font-size:12px;color:var(--sd-ink-200);">✓ all decisions · committed to graph</div>
+                <div style="font-size:12px;color:var(--sd-ink-200);">✓ experiments · searchable with outcome</div>
+                <div style="font-size:12px;color:var(--sd-ink-200);">✓ ownership transferred · no gap</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 Onboarding -->
+      <div class="pc-item flip">
+        <div class="pc-text">
+          <div class="pc-num">04</div>
+          <div class="pc-cat">Onboarding</div>
+          <h3 class="pc-title">2 months reading docs<br>that are <em>already wrong.</em></h3>
+          <p class="pc-body">New engineers spend 8 weeks reading docs that no longer reflect reality. With the brain, they onboard from current state. 2 months becomes 2 hours.</p>
+        </div>
+        <div class="pc-vis" style="background:var(--sd-ground-050);">
+          <div class="pc-vis-pad">
+            <div style="font-family:var(--sd-font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-bottom:14px;">new engineer · day one</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div>
+                <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-ink-400);margin-bottom:5px;">Q: why is auth stateless?</div>
+                <div style="padding:10px 13px;border-left:2px solid var(--sd-amber-300);background:rgba(214,138,46,.05);font-size:12px;color:var(--sd-ink-200);line-height:1.55;border-radius:0 3px 3px 0;">"Stateless JWT — eliminates Redis dep, enables horizontal scaling. Decision by Sarah, #auth-012, Q4 2024."</div>
+              </div>
+              <div>
+                <div style="font-family:var(--sd-font-mono);font-size:9px;color:var(--sd-ink-400);margin-bottom:5px;">Q: what's owned by who?</div>
+                <div style="padding:10px 13px;border-left:2px solid var(--sd-amber-300);background:rgba(214,138,46,.05);font-size:12px;color:var(--sd-ink-200);line-height:1.55;border-radius:0 3px 3px 0;">Full component ownership graph — auth (Sarah), payments (Alex), search (Priya). All decisions linked.</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;text-align:center;font-family:var(--sd-font-mono);font-size:10px;color:var(--sd-amber-300);">onboarded in 2 hours · not 2 months</div>
+          </div>
+        </div>
+      </div>
+
     </div>
-  </section>
+  </div>
 </section>
 
-<!-- ============ FOOTER ============ -->
-<footer>
-  <div class="inner">
-    <div class="lockup">
-      <a class="sd-wordmark" href="/">
-        <span class="sd-mark">
-          <i></i><i></i><i></i><i></i>
-          <i></i><i class="amber"></i><i></i><i></i>
-          <i></i><i></i><i></i><i></i>
-          <i></i><i></i><i></i><i></i>
-        </span>
+<!-- HOW IT WORKS [2/3] -->
+<section class="how-sec" id="how">
+  <div class="shell">
+    <div class="sec-num-bar">
+      <div class="snb-tag"><span style="color:var(--sd-amber-300);">〉</span>&nbsp;HOW IT WORKS</div>
+      <div class="snb-num">[2/3]</div>
+    </div>
+    <h2 class="sec-h2">From first commit to<br><em>compounding brain.</em></h2>
+    <p class="sec-desc" style="margin-top:16px;">Five steps. Fully automatic after setup. Your team keeps working the way they always have — Supadense builds the brain in the background.</p>
+
+    <div style="margin-top:64px;display:flex;flex-direction:column;gap:0;">
+
+      <!-- STEP 1 -->
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:0;align-items:stretch;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--sd-amber-300);display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;z-index:1;">01</div>
+          <div style="width:2px;flex:1;background:linear-gradient(to bottom,var(--sd-amber-300),var(--sd-ground-300));min-height:40px;"></div>
+        </div>
+        <div style="padding:0 0 48px 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:8px;margin-top:10px;">Connect · 2 minutes</div>
+          <h3 style="font-size:22px;font-weight:700;color:var(--sd-ink-100);margin-bottom:10px;line-height:1.3;">Connect your GitHub repo.</h3>
+          <p style="font-size:14px;color:var(--sd-ink-400);line-height:1.7;max-width:560px;margin-bottom:20px;">One command. Hooks into your existing repo. No migration, no new workflow.</p>
+          <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;max-width:620px;">
+            <div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:8px;">
+              <div style="display:flex;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></span><span style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></span><span style="width:10px;height:10px;border-radius:50%;background:#28c840;"></span></div>
+              <span style="font-family:'Courier New',monospace;font-size:11px;color:rgba(255,255,255,.4);margin-left:4px;">Terminal</span>
+            </div>
+            <div style="padding:20px 24px;font-family:'Courier New',monospace;font-size:12px;line-height:2.0;">
+              <div><span style="color:rgba(255,255,255,.3);">~%</span> <span style="color:#fff;">npx supadense connect github</span></div>
+              <div style="color:rgba(255,255,255,.35);">✓ Authenticated as vaibhaw@meet5.club</div>
+              <div style="color:rgba(255,255,255,.35);">✓ Repo: <span style="color:#d68a2e;">meet5/auth-service</span> connected</div>
+              <div style="color:rgba(255,255,255,.35);">✓ Scanning PRs and commits...</div>
+              <div style="color:#28c840;">→ 412 commits ingested · brain initialising</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:0;align-items:stretch;">
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--sd-ground-000);border:2px solid var(--sd-amber-300);display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--sd-amber-300);flex-shrink:0;z-index:1;">02</div>
+          <div style="width:2px;flex:1;background:linear-gradient(to bottom,var(--sd-ground-300),var(--sd-ground-300));min-height:40px;"></div>
+        </div>
+        <div style="padding:0 0 48px 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:8px;margin-top:10px;">Develop · as usual</div>
+          <h3 style="font-size:22px;font-weight:700;color:var(--sd-ink-100);margin-bottom:10px;line-height:1.3;">Build with your coding agent.</h3>
+          <p style="font-size:14px;color:var(--sd-ink-400);line-height:1.7;max-width:560px;margin-bottom:20px;">Keep using Claude Code, Cursor, Copilot. Supadense runs alongside and watches. No new interface.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:620px;">
+            <div style="background:var(--sd-ground-050);border:1px solid var(--sd-ground-300);border-radius:8px;overflow:hidden;">
+              <div style="padding:10px 14px;border-bottom:1px solid var(--sd-ground-200);font-family:'Courier New',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--sd-ink-400);">Coding Agent</div>
+              <div style="padding:8px 0;">
+                <div style="padding:9px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--sd-ground-100);">
+                  <span style="font-size:13px;color:var(--sd-ink-200);display:flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#d68a2e;flex-shrink:0;"></span>Claude Code</span>
+                  <span style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;">Watching</span>
+                </div>
+                <div style="padding:9px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--sd-ground-100);">
+                  <span style="font-size:13px;color:var(--sd-ink-200);display:flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:50%;background:#38bdf8;flex-shrink:0;"></span>Cursor</span>
+                  <span style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;">Watching</span>
+                </div>
+                <div style="padding:9px 14px;display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-size:13px;color:var(--sd-ink-300);display:flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--sd-ground-300);flex-shrink:0;"></span>GitHub Copilot</span>
+                  <span style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;">Watching</span>
+                </div>
+              </div>
+            </div>
+            <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;">
+              <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.08);font-family:'Courier New',monospace;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.35);">claude code · session active</div>
+              <div style="padding:16px;font-family:'Courier New',monospace;font-size:11px;line-height:1.9;color:rgba(255,255,255,.5);">
+                <div><span style="color:#d68a2e;">claude</span> refactor JWT handler</div>
+                <div>→ analysing auth-service...</div>
+                <div>→ modifying token.go</div>
+                <div style="color:#28c840;">✓ 3 files changed</div>
+                <div style="color:#d68a2e;">supadense watching<span style="animation:blink 1.1s step-end infinite;">█</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:0;align-items:stretch;">
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--sd-ground-000);border:2px solid var(--sd-amber-300);display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--sd-amber-300);flex-shrink:0;z-index:1;">03</div>
+          <div style="width:2px;flex:1;background:linear-gradient(to bottom,var(--sd-ground-300),var(--sd-ground-300));min-height:40px;"></div>
+        </div>
+        <div style="padding:0 0 48px 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:8px;margin-top:10px;">Capture · automatic</div>
+          <h3 style="font-size:22px;font-weight:700;color:var(--sd-ink-100);margin-bottom:10px;line-height:1.3;">Decisions and context captured on their own.</h3>
+          <p style="font-size:14px;color:var(--sd-ink-400);line-height:1.7;max-width:560px;margin-bottom:20px;">Monitors agent sessions, PRs, Slack threads — extracts decisions and context automatically. Zero extra work from the engineer.</p>
+          <div style="max-width:620px;background:var(--sd-ground-050);border:1px solid var(--sd-ground-300);border-radius:8px;overflow:hidden;">
+            <div style="padding:10px 16px;border-bottom:1px solid var(--sd-ground-200);font-family:'Courier New',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--sd-ink-400);display:flex;align-items:center;gap:8px;">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--sd-amber-300);animation:pulse-amber 2s infinite;"></span>
+              supadense · auto-capturing
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0;">
+              <div style="padding:12px 16px;border-bottom:1px solid var(--sd-ground-200);display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;">
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);padding-top:2px;white-space:nowrap;">PR #412</span>
+                <div>
+                  <div style="font-size:12px;color:var(--sd-ink-200);line-height:1.5;">"chose stateless JWT — eliminates Redis dep, enables horizontal scaling"</div>
+                  <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);margin-top:4px;">extracted from PR description · auth-service · sarah</div>
+                </div>
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;white-space:nowrap;">✓ captured</span>
+              </div>
+              <div style="padding:12px 16px;border-bottom:1px solid var(--sd-ground-200);display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;">
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);padding-top:2px;white-space:nowrap;">Slack</span>
+                <div>
+                  <div style="font-size:12px;color:var(--sd-ink-200);line-height:1.5;">"decided against Postgres FTS — too slow at scale, going with ES8"</div>
+                  <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);margin-top:4px;">extracted from #search-infra thread · priya</div>
+                </div>
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;white-space:nowrap;">✓ captured</span>
+              </div>
+              <div style="padding:12px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;">
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);padding-top:2px;white-space:nowrap;">Agent</span>
+                <div>
+                  <div style="font-size:12px;color:var(--sd-ink-200);line-height:1.5;">Claude Code session: tradeoff between retry strategies noted during refactor</div>
+                  <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);margin-top:4px;">extracted from claude code session · event-pipeline · alex</div>
+                </div>
+                <span style="font-family:'Courier New',monospace;font-size:9px;color:#d68a2e;white-space:nowrap;">⟳ pending</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:0;align-items:stretch;">
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--sd-ground-000);border:2px solid var(--sd-amber-300);display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--sd-amber-300);flex-shrink:0;z-index:1;">04</div>
+          <div style="width:2px;flex:1;background:linear-gradient(to bottom,var(--sd-ground-300),var(--sd-amber-300));min-height:40px;"></div>
+        </div>
+        <div style="padding:0 0 48px 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:8px;margin-top:10px;">Commit · one command</div>
+          <h3 style="font-size:22px;font-weight:700;color:var(--sd-ink-100);margin-bottom:10px;line-height:1.3;">Engineering commit — linked to code.</h3>
+          <p style="font-size:14px;color:var(--sd-ink-400);line-height:1.7;max-width:560px;margin-bottom:20px;">Captured context becomes a draft commit. One confirm — permanently linked to the PR, tagged to the component, owned.</p>
+          <div style="max-width:620px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;">
+              <div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.08);font-family:'Courier New',monospace;font-size:9px;color:rgba(255,255,255,.35);">Terminal</div>
+              <div style="padding:18px 20px;font-family:'Courier New',monospace;font-size:11px;line-height:2.0;">
+                <div><span style="color:rgba(255,255,255,.3);">auth-service %</span> <span style="color:#fff;">supadense commit</span></div>
+                <div style="color:rgba(255,255,255,.35);">Draft ready from session:</div>
+                <div style="color:#d68a2e;">"JWT stateless — Redis dep removed"</div>
+                <div style="color:rgba(255,255,255,.35);">Confirm? <span style="color:#fff;">[Y/n]</span> Y</div>
+                <div style="color:#28c840;">✓ #auth-012 committed → PR #412</div>
+              </div>
+            </div>
+            <div style="background:var(--sd-ground-050);border:1px solid var(--sd-ground-300);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px;">
+              <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);">#auth-012 · committed</div>
+              <div style="font-size:13px;color:var(--sd-ink-200);line-height:1.5;">JWT stateless over sessions — eliminates Redis dependency, enables horizontal scaling.</div>
+              <div style="margin-top:4px;display:flex;flex-direction:column;gap:5px;">
+                <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);">owner · sarah</div>
+                <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);">component · auth-service</div>
+                <div style="font-family:'Courier New',monospace;font-size:9px;color:#16a34a;">linked · PR #412 · merged</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 5 -->
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:0;">
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--sd-amber-300);display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;z-index:1;">05</div>
+        </div>
+        <div style="padding:0 0 0 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--sd-amber-300);margin-bottom:8px;margin-top:10px;">Compound · forever</div>
+          <h3 style="font-size:22px;font-weight:700;color:var(--sd-ink-100);margin-bottom:10px;line-height:1.3;">Engineering brain that grows every sprint.</h3>
+          <p style="font-size:14px;color:var(--sd-ink-400);line-height:1.7;max-width:560px;margin-bottom:20px;">Every commit feeds the brain. It gets richer every sprint. Prior art surfaces automatically. Intelligence compounds — never resets.</p>
+          <div style="max-width:620px;border:1px solid var(--sd-ground-300);border-radius:8px;overflow:hidden;background:var(--sd-ground-000);">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;">
+              <div style="padding:24px 20px;border-right:1px solid var(--sd-ground-200);text-align:center;">
+                <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;color:var(--sd-amber-300);letter-spacing:-.02em;">412</div>
+                <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-top:6px;">eng commits · this sprint</div>
+                <div style="margin-top:10px;height:3px;background:var(--sd-ground-200);border-radius:2px;overflow:hidden;"><div style="width:72%;height:100%;background:var(--sd-amber-300);border-radius:2px;"></div></div>
+              </div>
+              <div style="padding:24px 20px;border-right:1px solid var(--sd-ground-200);text-align:center;">
+                <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;color:var(--sd-ink-100);letter-spacing:-.02em;">2 hrs</div>
+                <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-top:6px;">onboarding · was 2 months</div>
+                <div style="margin-top:10px;height:3px;background:var(--sd-ground-200);border-radius:2px;overflow:hidden;"><div style="width:90%;height:100%;background:#16a34a;border-radius:2px;"></div></div>
+              </div>
+              <div style="padding:24px 20px;text-align:center;">
+                <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;color:var(--sd-ink-100);letter-spacing:-.02em;">0</div>
+                <div style="font-family:'Courier New',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--sd-ink-400);margin-top:6px;">context lost on exit</div>
+                <div style="margin-top:10px;height:3px;background:var(--sd-ground-200);border-radius:2px;overflow:hidden;"><div style="width:100%;height:100%;background:#0e7490;border-radius:2px;"></div></div>
+              </div>
+            </div>
+            <div style="padding:16px 20px;border-top:1px solid var(--sd-ground-200);background:rgba(214,138,46,.03);display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-size:13px;color:var(--sd-ink-300);">Sprint 12 brain is <strong style="color:var(--sd-ink-100);">4.2×</strong> richer than Sprint 1. Every decision compounds.</div>
+              <a href="#waitlist" style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--sd-amber-300);text-decoration:none;white-space:nowrap;padding-left:20px;">start building →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- WHY SUPADENSE? [3/3] -->
+<section class="compare-sec" id="why">
+  <div class="shell">
+    <div class="sec-num-bar">
+      <div class="snb-tag"><span style="color:var(--sd-amber-300);">〉</span>&nbsp;WHY SUPADENSE?</div>
+      <div class="snb-num">[3/3]</div>
+    </div>
+    <h2 class="sec-h2">Three things no wiki,<br>ticket, or git log <em>can do.</em></h2>
+    <p class="sec-desc" style="margin-top:16px;">The name says it all. Dense. Actionable. Compound. Three properties that turn engineering from something that evaporates into something that builds.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--sd-ground-300);border:1px solid var(--sd-ground-300);border-radius:var(--sd-radius-md);overflow:hidden;margin-top:56px;">
+
+      <!-- DENSE -->
+      <div style="background:var(--sd-ground-000);padding:40px 32px;display:flex;flex-direction:column;">
+        <div style="font-family:'Courier New',monospace;font-size:40px;font-weight:700;color:var(--sd-amber-300);letter-spacing:-.03em;line-height:1;margin-bottom:20px;">Dense</div>
+        <h3 style="font-size:18px;font-weight:700;color:var(--sd-ink-100);line-height:1.35;margin-bottom:14px;">Captures engineering depth, not summaries.</h3>
+        <p style="font-size:13px;color:var(--sd-ink-400);line-height:1.75;flex:1;margin-bottom:28px;">Notion stores titles. JIRA stores tickets. Supadense captures the full reasoning — the decision, the tradeoff, the failed experiment. Context that explains <em>why</em>, not just what.</p>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="padding:10px 14px;background:var(--sd-ground-050);border:1px solid var(--sd-ground-200);border-radius:5px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-amber-300);letter-spacing:.06em;margin-bottom:4px;">#auth-012 · sarah · architecture</div>
+            <div style="font-size:12px;color:var(--sd-ink-200);line-height:1.5;">"JWT stateless over sessions — eliminates Redis dep, enables horizontal scaling without session sync overhead."</div>
+          </div>
+          <div style="padding:10px 14px;background:rgba(220,38,38,.03);border:1px solid rgba(220,38,38,.12);border-radius:5px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-danger);letter-spacing:.06em;margin-bottom:4px;">#evt-009 · unowned · no commit</div>
+            <div style="font-size:12px;color:var(--sd-ink-300);line-height:1.5;">Kafka retry logic — 3 engineers modified it. Zero decision context captured. Gap detected.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIONABLE -->
+      <div style="background:var(--sd-ground-000);padding:40px 32px;border-left:1px solid var(--sd-ground-300);display:flex;flex-direction:column;">
+        <div style="font-family:'Courier New',monospace;font-size:40px;font-weight:700;color:var(--sd-amber-300);letter-spacing:-.03em;line-height:1;margin-bottom:20px;">Actionable</div>
+        <h3 style="font-size:18px;font-weight:700;color:var(--sd-ink-100);line-height:1.35;margin-bottom:14px;">Converts engineering context back into code.</h3>
+        <p style="font-size:13px;color:var(--sd-ink-400);line-height:1.75;flex:1;margin-bottom:28px;">Most tools capture and stop. Supadense converts. Query from terminal, IDE, or agent — get answers that propose the next commit or flag the gap. Memory that ships.</p>
+        <div style="background:#1a1a1a;border-radius:6px;overflow:hidden;">
+          <div style="padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.08);font-family:'Courier New',monospace;font-size:9px;color:rgba(255,255,255,.3);">supadense · agent query</div>
+          <div style="padding:14px 16px;font-family:'Courier New',monospace;font-size:11px;line-height:1.9;">
+            <div><span style="color:rgba(255,255,255,.3);">$</span> <span style="color:#fff;">supadense ask</span> <span style="color:#d68a2e;">"why is auth stateless?"</span></div>
+            <div style="color:rgba(255,255,255,.4);">→ #auth-012 · sarah · Q4 2024</div>
+            <div style="color:rgba(255,255,255,.4);">→ still current · linked PR #412</div>
+            <div style="color:#d68a2e;">→ propose next commit? [Y/n]</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPOUND -->
+      <div style="background:rgba(214,138,46,.025);padding:40px 32px;border-left:1px solid var(--sd-ground-300);display:flex;flex-direction:column;">
+        <div style="font-family:'Courier New',monospace;font-size:40px;font-weight:700;color:var(--sd-amber-300);letter-spacing:-.03em;line-height:1;margin-bottom:20px;">Compound</div>
+        <h3 style="font-size:18px;font-weight:700;color:var(--sd-ink-100);line-height:1.35;margin-bottom:14px;">Every sprint builds on the last. Forever.</h3>
+        <p style="font-size:13px;color:var(--sd-ink-400);line-height:1.75;flex:1;margin-bottom:28px;">Code gets copied. Reasoning compounds. Every decision stacks. New engineers inherit full intelligence on day one. Sprints accelerate instead of resetting.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:48px;flex-shrink:0;">Sprint 1</div>
+            <div style="flex:1;height:6px;background:var(--sd-ground-200);border-radius:3px;overflow:hidden;"><div style="width:18%;height:100%;background:var(--sd-amber-300);border-radius:3px;opacity:.5;"></div></div>
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:28px;text-align:right;">18</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:48px;flex-shrink:0;">Sprint 4</div>
+            <div style="flex:1;height:6px;background:var(--sd-ground-200);border-radius:3px;overflow:hidden;"><div style="width:42%;height:100%;background:var(--sd-amber-300);border-radius:3px;opacity:.65;"></div></div>
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:28px;text-align:right;">96</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:48px;flex-shrink:0;">Sprint 8</div>
+            <div style="flex:1;height:6px;background:var(--sd-ground-200);border-radius:3px;overflow:hidden;"><div style="width:70%;height:100%;background:var(--sd-amber-300);border-radius:3px;opacity:.8;"></div></div>
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);width:28px;text-align:right;">241</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-amber-300);font-weight:700;width:48px;flex-shrink:0;">Sprint 12</div>
+            <div style="flex:1;height:6px;background:var(--sd-ground-200);border-radius:3px;overflow:hidden;"><div style="width:100%;height:100%;background:var(--sd-amber-300);border-radius:3px;"></div></div>
+            <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-amber-300);font-weight:700;width:28px;text-align:right;">412</div>
+          </div>
+          <div style="font-family:'Courier New',monospace;font-size:9px;color:var(--sd-ink-400);margin-top:2px;">engineering commits · brain grows every sprint</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER CTA -->
+<section class="footer-cta" id="waitlist">
+  <div class="bg-glow" style="width:700px;height:500px;top:-100px;left:50%;transform:translateX(-50%);opacity:.7;"></div>
+  <div class="ftcta-inner">
+    <div class="sec-eyebrow" style="justify-content:center;color:rgba(255,255,255,.35);margin-bottom:20px;"><span style="width:5px;height:5px;background:var(--sd-amber-300);display:inline-block;"></span>&nbsp;join the waitlist</div>
+    <h2>Code is cheap now.<br>Your engineering<br><em>should compound.</em></h2>
+    <p class="ftcta-sub">engineering memory for teams · private beta · 100+ engineers on waitlist</p>
+    <form class="wl-form" onsubmit="handleWaitlist(event)">
+      <input type="email" name="email" placeholder="you@where-you-build.com" autocomplete="email" required>
+      <div class="wl-row">
+        <input type="text" name="company" placeholder="company name" autocomplete="organization">
+        <button type="submit" id="waitlist-btn">get early access →</button>
+      </div>
+      <div class="wl-stamps">
+        <span>0 sales emails ever</span>
+        <span>early-stage &amp; scaling teams</span>
+        <span>unsubscribe with one click</span>
+      </div>
+    </form>
+    <div class="ftcta-counter">
+      <div class="ftcta-stat"><div class="stn">412<em>+</em></div><div class="stl">engineering commits this week</div></div>
+      <div class="ftcta-stat"><div class="stn"><em>0</em></div><div class="stl">knowledge lost on engineer exit</div></div>
+      <div class="ftcta-stat"><div class="stn">100<em>+</em></div><div class="stl">teams on the waitlist</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DARK FOOTER -->
+<footer class="dark-footer">
+  <div class="footer-cols">
+    <div class="fc-brand">
+      <a class="sd-wordmark sd-wordmark-dark" href="/">
+        <span class="sd-mark"><i></i><i></i><i></i><i></i><i></i><i class="amber"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
         <span>supadense</span>
       </a>
-      <div class="tag">dense knowledge. for engineers.</div>
+      <p class="fc-tagline">Code is cheap. Engineering compounds. Supadense is the infrastructure for it.</p>
     </div>
-    <div class="links">
-      <a href="#">manifesto</a>
-      <a href="#">changelog</a>
-      <a href="#">x · @vaibhawkhemka6</a>
-      <a href="#">privacy</a>
+    <div>
+      <div class="fc-col-title">Product</div>
+      <div class="fc-links">
+        <a href="#catalog">eng commits</a>
+        <a href="#catalog">team graph</a>
+        <a href="#catalog">gap detection</a>
+        <a href="app.html">platform demo</a>
+      </div>
+    </div>
+    <div>
+      <div class="fc-col-title">Resources</div>
+      <div class="fc-links">
+        <a href="#">documentation</a>
+        <a href="#">api reference</a>
+        <a href="#">cli guide</a>
+        <a href="#">changelog</a>
+      </div>
+    </div>
+    <div>
+      <div class="fc-col-title">Company</div>
+      <div class="fc-links">
+        <a href="mailto:hello@supadense.com">contact</a>
+        <a href="#">privacy</a>
+        <a href="#">terms</a>
+        <a href="#">security</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span class="fb-copy">© 2026 · SUPADENSE · ALL RIGHTS RESERVED</span>
+    <div class="fb-links">
+      <a href="#">twitter</a>
+      <a href="#">github</a>
+      <a href="#">linkedin</a>
     </div>
   </div>
 </footer>
 
 <script>
-  (() => {
-    const fab = document.getElementById('peek-ask');
-    const frame = document.getElementById('peek-frame');
-    if (!fab || !frame) return;
-    fab.addEventListener('click', () => {
-      try {
-        const askFab = frame.contentDocument && frame.contentDocument.getElementById('ask-fab');
-        if (askFab) askFab.click();
-      } catch(e) {}
+async function handleWaitlist(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('waitlist-btn');
+  btn.textContent = 'joining…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/supa-auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: form.email.value, company: form.company.value || undefined })
     });
-  })();
-
-  async function handleWaitlist(e) {
-    e.preventDefault();
-    const form = e.target;
-    const btn = document.getElementById('waitlist-btn');
-    btn.textContent = 'joining…';
-    btn.disabled = true;
-    try {
-      const res = await fetch('/api/supa-auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email.value, years_experience: form.years_experience.value })
-      });
-      if (res.ok) {
-        btn.textContent = '✓ on the list';
-      } else {
-        const d = await res.json().catch(() => ({}));
-        btn.textContent = d.error || 'try again';
-        btn.disabled = false;
-      }
-    } catch {
-      btn.textContent = 'try again';
+    if (res.ok) {
+      btn.textContent = '✓ you\'re on the list';
+      btn.style.background = '#16a34a';
+    } else {
+      const d = await res.json().catch(() => ({}));
+      btn.textContent = d.error || 'try again';
       btn.disabled = false;
     }
+  } catch {
+    btn.textContent = 'try again';
+    btn.disabled = false;
   }
+}
 </script>
+
+<!-- Brain canvas animation -->
+<script>
+(function() {
+  function buildHeroBrain() {
+    const canvas = document.getElementById('hero-brain-canvas');
+    if (!canvas) return;
+    const W = canvas.parentElement.offsetWidth || 1100;
+    const H = 520;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const cx = W / 2, cy = H / 2 - 10;
+
+    function inBrain(x, y) {
+      const aw = W * 0.22, ah = H * 0.34;
+      const lx = (x - (cx - W * 0.12)) / aw, ly = (y - cy) / ah;
+      const rx = (x - (cx + W * 0.12)) / aw, ry = (y - cy) / ah;
+      const mx = (x - cx) / (W * 0.10), my = (y - cy) / (H * 0.30);
+      return (lx*lx + ly*ly < 1) || (rx*rx + ry*ry < 1) || (mx*mx + my*my < 1);
+    }
+
+    const NEURON_COUNT = 110;
+    const neurons = [];
+    let tries = 0;
+    while (neurons.length < NEURON_COUNT && tries < 8000) {
+      tries++;
+      const x = cx - W * 0.40 + Math.random() * W * 0.80;
+      const y = cy - H * 0.38 + Math.random() * H * 0.76;
+      if (!inBrain(x, y)) continue;
+      const isCyan = Math.random() < 0.28;
+      neurons.push({
+        x, y, ox: x, oy: y,
+        vx: (Math.random() - 0.5) * 0.18,
+        vy: (Math.random() - 0.5) * 0.18,
+        r: 2.0 + Math.random() * 2.2,
+        phase: Math.random() * Math.PI * 2,
+        fireEnd: 0,
+        fireInterval: 1800 + Math.random() * 4000,
+        nextFire: Math.random() * 3000,
+        color: isCyan ? [14, 116, 144] : [214, 138, 46],
+      });
+    }
+
+    const MAX_D = W * 0.115;
+    const edges = [];
+    for (let i = 0; i < neurons.length; i++) {
+      for (let j = i + 1; j < neurons.length; j++) {
+        const dx = neurons[i].x - neurons[j].x;
+        const dy = neurons[i].y - neurons[j].y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < MAX_D) edges.push({ a: i, b: j, d, pulses: [] });
+      }
+    }
+
+    let lastTs = 0;
+
+    function animate(ts) {
+      const dt = Math.min(ts - lastTs, 50);
+      lastTs = ts;
+
+      ctx.fillStyle = 'rgba(250,250,250,0.55)';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.setLineDash([3, 5]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(214,138,46,0.12)';
+      ctx.beginPath(); ctx.ellipse(cx - W*0.12, cy, W*0.22, H*0.34, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(cx + W*0.12, cy, W*0.22, H*0.34, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([2, 6]);
+      ctx.strokeStyle = 'rgba(214,138,46,0.08)';
+      ctx.beginPath(); ctx.moveTo(cx, cy - H*0.30); ctx.lineTo(cx, cy + H*0.30); ctx.stroke();
+      ctx.restore();
+
+      neurons.forEach((n, i) => {
+        n.x += n.vx;
+        n.y += n.vy;
+        if (!inBrain(n.x, n.y)) {
+          n.vx *= -1; n.vy *= -1;
+          n.x += n.vx * 3; n.y += n.vy * 3;
+        }
+        n.vx += (n.ox - n.x) * 0.0004;
+        n.vy += (n.oy - n.y) * 0.0004;
+        n.nextFire -= dt;
+        if (n.nextFire <= 0) {
+          n.fireEnd = ts + 700 + Math.random() * 300;
+          n.nextFire = n.fireInterval + Math.random() * 2000;
+          edges.forEach(e => {
+            if (e.a === i || e.b === i) {
+              e.pulses.push({ t: 0, dir: e.a === i ? 0 : 1, col: n.color });
+            }
+          });
+        }
+      });
+
+      edges.forEach(e => {
+        const na = neurons[e.a], nb = neurons[e.b];
+        const baseAlpha = 0.045 + (1 - e.d / MAX_D) * 0.04;
+        const isCyan = na.color[0] < 100 || nb.color[0] < 100;
+        const [r, g, b] = isCyan ? [14, 116, 144] : [214, 138, 46];
+        ctx.beginPath();
+        ctx.moveTo(na.x, na.y);
+        ctx.lineTo(nb.x, nb.y);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${baseAlpha})`;
+        ctx.lineWidth = 0.7;
+        ctx.setLineDash([]);
+        ctx.stroke();
+
+        e.pulses = e.pulses.filter(p => p.t <= 1.05);
+        e.pulses.forEach(p => {
+          p.t += dt / (300 + e.d * 1.2);
+          if (p.t > 1) return;
+          const t = Math.min(p.t, 1);
+          const px = (p.dir === 0 ? 1 - t : t);
+          const x = na.x + (nb.x - na.x) * px;
+          const y = na.y + (nb.y - na.y) * px;
+          const [pr, pg, pb] = p.col;
+          const grd = ctx.createRadialGradient(x, y, 0, x, y, 5);
+          grd.addColorStop(0, `rgba(${pr},${pg},${pb},0.9)`);
+          grd.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
+          ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
+          ctx.fillStyle = grd; ctx.fill();
+        });
+      });
+
+      neurons.forEach(n => {
+        const firing = ts < n.fireEnd;
+        const fp = firing ? Math.min((n.fireEnd - ts) / 700, 1) : 0;
+        const [r, g, b] = n.color;
+        const energy = (Math.sin(ts * 0.0008 + n.phase) + 1) * 0.5;
+
+        if (firing) {
+          const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 18 * fp);
+          grd.addColorStop(0, `rgba(${r},${g},${b},${0.35 * fp})`);
+          grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          ctx.beginPath(); ctx.arc(n.x, n.y, 18 * fp, 0, Math.PI*2);
+          ctx.fillStyle = grd; ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + fp * 1.8, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.45 + energy * 0.45 + fp * 0.2})`;
+        ctx.fill();
+      });
+
+      ctx.save();
+      ctx.font = '10px "Courier New", monospace';
+      ctx.fillStyle = 'rgba(163,163,163,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText('engineering memory · always on', cx, H - 28);
+      ctx.restore();
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', buildHeroBrain);
+  } else {
+    buildHeroBrain();
+  }
+  window.addEventListener('resize', () => {
+    const c = document.getElementById('hero-brain-canvas');
+    if (c) { const p = c.parentElement; c.width = p.offsetWidth || 1100; }
+  });
+})();
+</script>
+
 </body>
 </html>

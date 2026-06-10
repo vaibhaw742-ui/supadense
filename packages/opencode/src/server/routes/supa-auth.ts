@@ -106,11 +106,11 @@ export function SupaAuthRoutes() {
     const secret = Flag.SUPADENSE_AUTH_SECRET
     if (!secret) return c.json({ error: "Auth not configured" }, 503)
 
-    let email: string, yearsOfExperience: string | undefined
+    let email: string, company: string | undefined
     try {
       const body = await c.req.json()
       email = body.email?.trim()
-      yearsOfExperience = body.years_of_experience?.trim() || undefined
+      company = body.company?.trim() || undefined
     } catch {
       return c.json({ error: "Invalid request body" }, 400)
     }
@@ -120,8 +120,8 @@ export function SupaAuthRoutes() {
     if (existing) return c.json({ error: "Email already registered" }, 409)
 
     Database.Client().$client
-      .prepare("INSERT INTO auth_users (id, email, password_hash, status, years_of_experience, created_at) VALUES (?, ?, '', 'pending', ?, ?)")
-      .run(randomUUID(), email, yearsOfExperience ?? null, new Date().toISOString())
+      .prepare("INSERT INTO auth_users (id, email, password_hash, status, company, created_at) VALUES (?, ?, '', 'pending', ?, ?)")
+      .run(randomUUID(), email, company ?? null, new Date().toISOString())
 
     return c.json({ waitlisted: true })
   })
@@ -267,8 +267,8 @@ export function SupaAuthRoutes() {
     const auth = requireAdmin(c)
     if ("error" in auth) return c.json({ error: auth.error }, auth.error === "Forbidden" ? 403 : 401)
     const users = Database.Client().$client
-      .prepare("SELECT id, email, years_of_experience, created_at FROM auth_users WHERE status = 'pending' ORDER BY created_at ASC")
-      .all() as { id: string; email: string; years_of_experience: string | null; created_at: string }[]
+      .prepare("SELECT id, email, company, created_at FROM auth_users WHERE status = 'pending' ORDER BY created_at ASC")
+      .all() as { id: string; email: string; company: string | null; created_at: string }[]
     return c.json(users)
   })
 
