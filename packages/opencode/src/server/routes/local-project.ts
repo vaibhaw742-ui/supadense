@@ -228,6 +228,7 @@ LocalProjectRoutes.get("/all-sources", (c) => {
     filename:     string
     title:        string
     url:          string | null
+    source_type:  string
     status:       "processing" | "done" | "failed"
     size:         number
     time_created: number
@@ -598,7 +599,7 @@ LocalProjectRoutes.post("/:id/sources", async (c) => {
 
         const apiKey = process.env.AIRTOP_API_KEY
         let content = ""
-        let title: string = body.title ?? body.url
+        let title: string = body.title ?? body.url ?? "Untitled"
 
         if (!apiKey) throw new Error("AIRTOP_API_KEY is not configured — cannot process URLs")
 
