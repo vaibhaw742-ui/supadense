@@ -60,6 +60,7 @@ const AdminRoute = lazy(() => import("@/pages/admin"))
 const ProjectsPanel = lazy(() => import("@/pages/projects/projects-panel"))
 const ProjectView = lazy(() => import("@/pages/projects/project-view"))
 const ProjectGraph = lazy(() => import("@/pages/projects/project-graph"))
+const LocalProjectView = lazy(() => import("@/pages/projects/local-project-view"))
 const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const WikiHome = lazy(() => import("@/pages/wiki/wiki-home"))
@@ -76,10 +77,16 @@ if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname))
 
 function SessionRouteContent() {
   const size = createSizing()
+  const isGraphView = () => activeSidebarView().view === "lib"
   return (
     <>
-      <SessionHeader />
-      <div class="size-full bg-background-base relative flex min-h-0 overflow-hidden">
+      <Show when={!isGraphView()}>
+        <SessionHeader />
+      </Show>
+      <div class="size-full relative flex min-h-0 overflow-hidden"
+        style={{ background: isGraphView() ? "#ffffff" : undefined }}
+        classList={{ "bg-background-base": !isGraphView() }}
+      >
         <div class="flex-1 min-w-0 min-h-0 overflow-hidden">
           <Show when={activeSidebarView().view === "read"}>
             <ReadPanel />
@@ -198,7 +205,7 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const isWiki = () => /\/wiki(?:\/|$)/.test(location.pathname)
   const isFiles = () => /\/files(?:\/|$)/.test(location.pathname)
   const isHome = () => location.pathname === "/" || location.pathname === "/workspaces"
-  const isProjects = () => /\/projects(?:\/|$)/.test(location.pathname)
+  const isProjects = () => /\/projects(?:\/|$)/.test(location.pathname) || /\/local-projects(?:\/|$)/.test(location.pathname)
   const isStandalone = () => isWiki() || isFiles() || isHome()
 
   return (
@@ -399,6 +406,7 @@ export function AppInterface(props: {
                 <Route path="/projects" component={ProjectsPanel} />
                 <Route path="/projects/:id" component={ProjectView} />
                 <Route path="/projects/:id/graph" component={ProjectGraph} />
+                <Route path="/local-projects/:id" component={LocalProjectView} />
                 <Route path="/admin" component={AdminRoute} />
                 <Route path="/:dir" component={DirectoryLayout}>
                   <Route path="/" component={SessionIndexRoute} />

@@ -1105,6 +1105,768 @@ function ResourceReader(props: {
   )
 }
 
+// ── Local Source types ────────────────────────────────────────────────────────
+
+type LocalSource = {
+  id: string; project_id: string; project_name: string; filename: string
+  title: string; url: string | null; status: "processing" | "done" | "failed"
+  size: number; time_created: number; source_type?: string
+}
+
+// One card per filename, with all projects it belongs to
+type GroupedLocalSource = {
+  filename: string
+  title: string
+  url: string | null
+  status: "processing" | "done" | "failed"
+  size: number
+  time_created: number
+  source_type?: string
+  projects: Array<{ project_id: string; project_name: string }>
+}
+
+// ── Local Source Reader ───────────────────────────────────────────────────────
+
+function LocalSourceReader(props: { source: GroupedLocalSource; onBack: () => void }) {
+  const marked = useMarked()
+  const [proseEl, setProseEl] = createSignal<HTMLDivElement | undefined>(undefined)
+  let scrollRef: HTMLDivElement | undefined
+
+  const domain = () => {
+    if (!props.source.url) return null
+    try { return new URL(props.source.url).hostname.replace(/^www\./, "") } catch { return null }
+  }
+
+  const typeLabel = () => {
+    const st = (props.source as any).source_type as string | undefined
+    if (st) return st.toUpperCase()
+    if (!props.source.url) return "NOTE"
+    const d = domain() ?? ""
+    if (d.includes("x.com") || d.includes("twitter.com")) return "X"
+    if (d.includes("linkedin.com")) return "LINKEDIN"
+    if (d.includes("youtube.com") || d.includes("youtu.be")) return "YOUTUBE"
+    if (d.includes("github.com")) return "GITHUB"
+    if (d.includes("notion.so")) return "NOTION"
+    if (d.includes("medium.com")) return "MEDIUM"
+    if (d.includes("substack.com")) return "SUBSTACK"
+    if (d.includes("reddit.com")) return "REDDIT"
+    if (d.includes("news.ycombinator.com")) return "HN"
+    if (d.includes("arxiv.org")) return "ARXIV"
+    if (props.source.url.endsWith(".pdf") || props.source.url.includes(".pdf?")) return "PDF"
+    return "WEB"
+  }
+
+  const typeBadgeStyle = () => {
+    const label = typeLabel()
+    const styles: Record<string, { color: string; bg: string; border: string }> = {
+      X:        { color: "#ffffff", bg: "#000000", border: "#000000" },
+      LINKEDIN: { color: "#ffffff", bg: "#0077b5", border: "#0077b5" },
+      YOUTUBE:  { color: "#ffffff", bg: "#ff0000", border: "#ff0000" },
+      GITHUB:   { color: "#ffffff", bg: "#24292e", border: "#24292e" },
+      PDF:      { color: "#ffffff", bg: "#dc2626", border: "#dc2626" },
+      NOTION:   { color: "#ffffff", bg: "#191919", border: "#191919" },
+      MEDIUM:   { color: "#ffffff", bg: "#000000", border: "#000000" },
+      SUBSTACK: { color: "#ffffff", bg: "#ff6719", border: "#ff6719" },
+      REDDIT:   { color: "#ffffff", bg: "#ff4500", border: "#ff4500" },
+      HN:       { color: "#ffffff", bg: "#ff6600", border: "#ff6600" },
+      ARXIV:    { color: "#ffffff", bg: "#b31b1b", border: "#b31b1b" },
+      WEB:      { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+      NOTE:     { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+    }
+    return styles[label] ?? { color: "#d68a2e", bg: "rgba(214,138,46,0.06)", border: "rgba(214,138,46,0.3)" }
+  }
+
+  // Fetch the file content from the backend
+  const [content, { refetch }] = createResource(
+    () => ({ id: props.source.projects[0]?.project_id ?? "", filename: props.source.filename }),
+    async ({ id, filename }) => {
+      try {
+        const res = await elApi.getLocalSourceFileContent(id, filename)
+        return res
+      } catch { return null }
+    }
+  )
+
+  // Poll while processing
+  createEffect(() => {
+    if (props.source.status === "processing") {
+      const t = setInterval(() => void refetch(), 5000)
+      onCleanup(() => clearInterval(t))
+    }
+  })
+
+  const [readSecs, setReadSecs] = createSignal(0)
+  const timer = setInterval(() => setReadSecs(s => s + 1), 1000)
+  onCleanup(() => clearInterval(timer))
+
+  const fragments = createMemo(() => extractFragments(content() ?? ""))
+
+  const [activePanel, setActivePanel] = createSignal<"fragments" | "stats" | null>(null)
+
+  // Render markdown into prose div
+  createEffect(() => {
+    const el = proseEl()
+    const c = content()
+    if (!el || !c) return
+    // Strip the first two lines (title + Source:) already shown in header
+    const body = c.replace(/^#[^\n]*\n/, "").replace(/^Source:[^\n]*\n/, "").replace(/^Status:[^\n]*\n/, "").trim()
+    void Promise.resolve(marked.parse(body)).then((html: string) => {
+      const currentEl = proseEl()
+      if (!currentEl) return
+      currentEl.innerHTML = html
+    })
+  })
+
+  return (
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", overflow: "hidden", position: "relative" }}
+      onClick={() => setActivePanel(null)}
+    >
+      {/* Toolbar */}
+      <div style={{
+        "flex-shrink": "0", display: "flex", "align-items": "center", gap: "10px",
+        padding: "10px 24px", "border-bottom": "1px solid var(--border-weak-base)",
+        background: "var(--background-base)",
+      }}>
+        <button type="button" onClick={props.onBack}
+          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", "align-items": "center", gap: "5px", color: "var(--color-text-weak)", padding: "0", "font-size": "12px", "font-family": "inherit" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <span style={{
+          "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "700", "letter-spacing": "0.1em",
+          color: typeBadgeStyle().color, padding: "2px 6px", "border-radius": "3px",
+          background: typeBadgeStyle().bg, border: `1px solid ${typeBadgeStyle().border}`,
+        }}>{typeLabel()}</span>
+        <Show when={props.source.url}>
+          <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "letter-spacing": "0.08em", color: "var(--color-text-weak)", opacity: "0.6" }}>
+            {(() => { try { const u = new URL(props.source.url!); return u.pathname.split("/").filter(Boolean).slice(-2).join("/") } catch { return "" } })()}
+          </span>
+        </Show>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: "1", position: "relative", overflow: "hidden" }}>
+        <div ref={scrollRef} class="sd-content-scroll" style={{ position: "absolute", inset: "0", "overflow-y": "auto" }}>
+          <div style={{ "max-width": "720px", margin: "0 auto", padding: "32px 48px 80px" }}>
+            <h1 style={{ "font-size": "28px", "font-weight": "600", color: "var(--color-text-strong)", "line-height": "1.25", margin: "0 0 14px 0" }}>
+              {props.source.title}
+            </h1>
+            <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "28px", "flex-wrap": "wrap" }}>
+              <Show when={domain()}>
+                <span style={{ "font-size": "11px", color: "var(--color-text-weak)", "text-transform": "uppercase", "letter-spacing": "0.06em" }}>{domain()}</span>
+                <span style={{ color: "var(--color-text-weak)", opacity: "0.4" }}>·</span>
+              </Show>
+              <span style={{ "font-size": "11px", color: "var(--color-text-dimmed, var(--text-weak))" }}>{timeAgo(props.source.time_created)}</span>
+              <Show when={props.source.url}>
+                <span style={{ color: "var(--color-text-weak)", opacity: "0.4" }}>·</span>
+                <a href={props.source.url!} target="_blank" rel="noopener noreferrer"
+                  style={{ "font-size": "11px", color: "#d68a2e", "text-decoration": "none" }}>
+                  Open source ↗
+                </a>
+              </Show>
+            </div>
+            <div style={{ "border-top": "1px solid var(--border-weak-base)", "margin-bottom": "28px" }} />
+            <Show when={content.loading}>
+              <div style={{ color: "var(--color-text-weak)", "font-size": "14px" }}>Loading…</div>
+            </Show>
+            <Show when={props.source.status === "processing" && !content()}>
+              <div style={{ display: "flex", "align-items": "center", gap: "8px", color: "var(--color-text-weak)", "font-size": "14px", "font-style": "italic" }}>
+                <svg style={{ animation: "spin 1s linear infinite" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Fetching content via Airtop…
+              </div>
+            </Show>
+            <div ref={(el) => setProseEl(el)} class="sd-prose"
+              style={{ "font-size": "15px", "line-height": "1.7", color: "var(--color-text-base, var(--text-base))", "word-break": "break-word" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Fragments panel */}
+      <Show when={activePanel() === "fragments"}>
+        <FragmentsPanel fragments={fragments()} isCapturing={props.source.status === "processing"} onClose={() => setActivePanel(null)} />
+      </Show>
+
+      {/* Bottom bar */}
+      <div style={{ "flex-shrink": "0", padding: "0 16px 14px", display: "flex", "justify-content": "center" }}>
+        <div style={{
+          display: "flex", "align-items": "center", padding: "0 12px", height: "44px",
+          width: "fit-content", "max-width": "680px",
+          border: "1px solid var(--border-weak-base)", "border-radius": "10px",
+          background: "var(--background-surface, var(--background-base))", gap: "4px",
+        }} onClick={e => e.stopPropagation()}>
+          {/* Status */}
+          <div style={{ display: "flex", "align-items": "center", gap: "7px", "margin-right": "8px" }}>
+            <span style={{
+              display: "inline-block", width: "8px", height: "8px", "border-radius": "2px",
+              background: props.source.status === "processing" ? "#d68a2e" : "var(--color-text-dimmed, var(--text-weak))",
+              opacity: props.source.status === "processing" ? "1" : "0.35",
+              animation: props.source.status === "processing" ? "sd-pulse 1.4s ease-in-out infinite" : "none",
+            }} />
+            <span style={{
+              "font-family": "'Geist Mono', monospace", "font-size": "10px", "letter-spacing": "0.06em",
+              color: props.source.status === "processing" ? "var(--color-text-base, var(--text-base))" : "var(--color-text-weak)",
+              opacity: props.source.status === "processing" ? "1" : "0.6",
+            }}>
+              {props.source.status === "processing" ? "capturing · live" : props.source.status === "done" ? "processed" : "failed"}
+            </span>
+          </div>
+          <div style={{ width: "1px", height: "18px", background: "var(--border-weak-base)", margin: "0 8px" }} />
+          {/* Fragments */}
+          <button type="button" onClick={e => { e.stopPropagation(); setActivePanel(v => v === "fragments" ? null : "fragments") }}
+            style={{
+              display: "flex", "align-items": "center", gap: "5px", padding: "4px 10px", "border-radius": "5px",
+              border: activePanel() === "fragments" ? "1px solid rgba(214,138,46,0.6)" : "1px solid var(--border-weak-base)",
+              background: activePanel() === "fragments" ? "rgba(214,138,46,0.12)" : "transparent",
+              cursor: "pointer", transition: "all 120ms",
+            }}>
+            <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "500", "letter-spacing": "0.06em", color: activePanel() === "fragments" ? "#d68a2e" : "var(--color-text-weak)" }}>Fragments</span>
+            <Show when={fragments().length > 0}>
+              <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "700", color: activePanel() === "fragments" ? "#d68a2e" : "var(--color-text-strong)" }}>· {fragments().length}</span>
+            </Show>
+          </button>
+          <div style={{ flex: "1" }} />
+          {/* Action buttons */}
+          <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+            <Show when={props.source.url}>
+              <button type="button" onClick={() => window.open(props.source.url!, "_blank")}
+                style={{ padding: "5px 14px", "border-radius": "5px", border: "1px solid rgba(214,138,46,0.4)", background: "rgba(214,138,46,0.1)", cursor: "pointer", transition: "all 120ms" }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(214,138,46,0.2)"; el.style.borderColor = "rgba(214,138,46,0.7)" }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(214,138,46,0.1)"; el.style.borderColor = "rgba(214,138,46,0.4)" }}
+              >
+                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", "letter-spacing": "0.06em", color: "#d68a2e" }}>Open Source</span>
+              </button>
+            </Show>
+            <button type="button"
+              onClick={() => window.location.href = `/local-projects/${props.source.projects[0]?.project_id ?? ""}`}
+              style={{ padding: "5px 14px", "border-radius": "5px", border: "1px solid rgba(214,138,46,0.4)", background: "#d68a2e", cursor: "pointer", transition: "opacity 120ms" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.85" }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
+            >
+              <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", "letter-spacing": "0.06em", color: "#fff" }}>View Project</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Local Source Card ─────────────────────────────────────────────────────────
+
+function LocalSourceCard(props: {
+  source: GroupedLocalSource
+  onOpen: (src: GroupedLocalSource) => void
+  onChanged?: () => void
+}) {
+  const [hovered, setHovered] = createSignal(false)
+  const [pickerOpen, setPickerOpen] = createSignal(false)
+  const [addingToProject, setAddingToProject] = createSignal<string | null>(null)
+  const [addedProjects, setAddedProjects] = createSignal<string[]>([])
+  // Track which project pills have been removed locally (optimistic UI)
+  const [removedProjects, setRemovedProjects] = createSignal<string[]>([])
+  const [removingProject, setRemovingProject] = createSignal<string | null>(null)
+  const [deletingAll, setDeletingAll] = createSignal(false)
+  const [confirmDelete, setConfirmDelete] = createSignal(false)
+
+  const visibleProjects = () => props.source.projects.filter(p => !removedProjects().includes(p.project_id))
+
+  async function handleRemoveFromProject(e: MouseEvent, projectId: string, projectName: string) {
+    e.stopPropagation()
+    if (removingProject()) return
+    setRemovingProject(projectId)
+    try {
+      await elApi.deleteLocalSource(projectId, props.source.filename)
+      setRemovedProjects(prev => [...prev, projectId])
+      // If last project removed, tell parent to refetch (card will disappear)
+      if (visibleProjects().length === 0) props.onChanged?.()
+    } catch {
+      showToast({ variant: "error", title: `Failed to remove from ${projectName}` })
+    } finally {
+      setRemovingProject(null)
+    }
+  }
+
+  async function handleDeleteAll(e: MouseEvent) {
+    e.stopPropagation()
+    if (deletingAll()) return
+    setDeletingAll(true)
+    try {
+      await Promise.all(
+        visibleProjects().map(p => elApi.deleteLocalSource(p.project_id, props.source.filename))
+      )
+      props.onChanged?.()
+    } catch {
+      showToast({ variant: "error", title: "Failed to delete from all projects" })
+      setDeletingAll(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  // Fetch all projects (EL + local) when picker opens
+  const [elProjects] = createResource(pickerOpen, (open) => open ? elApi.listProjects() : Promise.resolve([]))
+  const [localProjects] = createResource(pickerOpen, (open) => open ? elApi.listLocalProjects() : Promise.resolve([]))
+
+  const alreadyInProjectIds = () => new Set([
+    ...props.source.projects.map(p => p.project_id),
+    ...addedProjects(),
+  ])
+
+  async function addToProject(projectId: string, projectName: string, projectType: "el" | "local") {
+    setAddingToProject(projectId)
+    try {
+      if (projectType === "local") {
+        const base = import.meta.env.DEV
+          ? `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:4096`
+          : `${location.origin}/api`
+        const res = await fetch(`${base}/local-projects/${projectId}/sources`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: props.source.url }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(err.error ?? "Failed to add")
+        }
+      } else {
+        if (!props.source.url) throw new Error("No URL on this source")
+        await elApi.addResource(projectId, props.source.url, "supplementary")
+      }
+      setAddedProjects(prev => [...prev, projectId])
+      showToast({ variant: "success", title: `Added to ${projectName}` })
+    } catch (e: any) {
+      showToast({ variant: "error", title: e?.message ?? "Failed to add" })
+    } finally {
+      setAddingToProject(null)
+    }
+  }
+
+  const domain = () => {
+    if (!props.source.url) return null
+    try { return new URL(props.source.url).hostname.replace(/^www\./, "") } catch { return null }
+  }
+
+  const typeLabel = () => {
+    const st = (props.source as any).source_type as string | undefined
+    if (st) return st.toUpperCase()
+    if (!props.source.url) return "NOTE"
+    const d = domain() ?? ""
+    if (d.includes("x.com") || d.includes("twitter.com")) return "X"
+    if (d.includes("linkedin.com")) return "LINKEDIN"
+    if (d.includes("youtube.com") || d.includes("youtu.be")) return "YOUTUBE"
+    if (d.includes("github.com")) return "GITHUB"
+    if (d.includes("notion.so")) return "NOTION"
+    if (d.includes("medium.com")) return "MEDIUM"
+    if (d.includes("substack.com")) return "SUBSTACK"
+    if (d.includes("reddit.com")) return "REDDIT"
+    if (d.includes("news.ycombinator.com")) return "HN"
+    if (d.includes("arxiv.org")) return "ARXIV"
+    if (props.source.url.endsWith(".pdf") || props.source.url.includes(".pdf?")) return "PDF"
+    return "WEB"
+  }
+
+  const typeBadgeStyle = () => {
+    const label = typeLabel()
+    const styles: Record<string, { color: string; bg: string; border: string }> = {
+      X:        { color: "#ffffff", bg: "#000000", border: "#000000" },
+      LINKEDIN: { color: "#ffffff", bg: "#0077b5", border: "#0077b5" },
+      YOUTUBE:  { color: "#ffffff", bg: "#ff0000", border: "#ff0000" },
+      GITHUB:   { color: "#ffffff", bg: "#24292e", border: "#24292e" },
+      PDF:      { color: "#ffffff", bg: "#dc2626", border: "#dc2626" },
+      NOTION:   { color: "#ffffff", bg: "#191919", border: "#191919" },
+      MEDIUM:   { color: "#ffffff", bg: "#000000", border: "#000000" },
+      SUBSTACK: { color: "#ffffff", bg: "#ff6719", border: "#ff6719" },
+      REDDIT:   { color: "#ffffff", bg: "#ff4500", border: "#ff4500" },
+      HN:       { color: "#ffffff", bg: "#ff6600", border: "#ff6600" },
+      ARXIV:    { color: "#ffffff", bg: "#b31b1b", border: "#b31b1b" },
+      WEB:      { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+      NOTE:     { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+    }
+    return styles[label] ?? { color: "#d68a2e", bg: "rgba(214,138,46,0.06)", border: "rgba(214,138,46,0.3)" }
+  }
+
+  const urlPath = () => {
+    if (!props.source.url) return null
+    try {
+      const u = new URL(props.source.url)
+      const parts = u.pathname.split("/").filter(Boolean)
+      return parts.length ? parts.slice(-2).join("/") : null
+    } catch { return null }
+  }
+
+  // Don't render if all projects have been removed optimistically
+  return (
+    <Show when={visibleProjects().length > 0}>
+      <div
+        style={{ "border-bottom": "1px solid #ebebeb", background: "#ffffff" }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setConfirmDelete(false) }}
+      >
+        <div
+          onClick={() => props.onOpen(props.source)}
+          style={{
+            padding: "18px 20px 16px",
+            background: hovered() ? "#fafafa" : "transparent",
+            transition: "background 120ms",
+            cursor: "pointer",
+          }}
+        >
+          {/* ROW 1: type badge + status + domain (left) | project pills + add button (right) */}
+          <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between", "margin-bottom": "10px", gap: "12px" }}>
+            {/* Left badges */}
+            <div style={{ display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap", "min-width": "0", flex: "1" }}>
+              <span style={{
+                "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "700",
+                "letter-spacing": "0.1em", "text-transform": "uppercase",
+                color: typeBadgeStyle().color, padding: "3px 7px", "border-radius": "3px",
+                background: typeBadgeStyle().bg, border: `1px solid ${typeBadgeStyle().border}`,
+                "white-space": "nowrap", "flex-shrink": "0",
+              }}>{typeLabel()}</span>
+
+              <Show when={props.source.status === "processing"}>
+                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600", "letter-spacing": "0.1em", "text-transform": "uppercase", color: "#f59e0b", padding: "3px 7px", "border-radius": "3px", background: "#fffbeb", border: "1px solid #fde68a", "white-space": "nowrap", "flex-shrink": "0" }}>PARSING</span>
+              </Show>
+              <Show when={props.source.status === "done"}>
+                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600", "letter-spacing": "0.1em", "text-transform": "uppercase", color: "#a3a3a3", padding: "3px 7px", "border-radius": "3px", background: "#f5f5f5", border: "1px solid #e5e5e5", "white-space": "nowrap", "flex-shrink": "0" }}>PROCESSED</span>
+              </Show>
+              <Show when={props.source.status === "failed"}>
+                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600", "letter-spacing": "0.1em", "text-transform": "uppercase", color: "#ef4444", padding: "3px 7px", "border-radius": "3px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.25)", "white-space": "nowrap", "flex-shrink": "0" }}>FAILED</span>
+              </Show>
+
+              <Show when={domain()}>
+                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{domain()}</span>
+              </Show>
+            </div>
+
+            {/* Right: project pills with × + add button */}
+            <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-wrap": "wrap", "justify-content": "flex-end", "flex-shrink": "0", "max-width": "240px" }} onClick={e => e.stopPropagation()}>
+              <For each={visibleProjects()}>
+                {(proj) => {
+                  const isRemoving = () => removingProject() === proj.project_id
+                  return (
+                    <div style={{
+                      display: "inline-flex", "align-items": "center", gap: "4px",
+                      padding: "3px 6px 3px 8px", "border-radius": "999px",
+                      background: "rgba(214,138,46,0.06)", border: "1px solid rgba(214,138,46,0.25)",
+                      "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#d68a2e",
+                    }}>
+                      <span style={{ width: "6px", height: "6px", "border-radius": "50%", background: "#d68a2e", display: "inline-block", "flex-shrink": "0" }} />
+                      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "max-width": "90px" }}>{proj.project_name}</span>
+                      <button
+                        type="button"
+                        title={`Remove from ${proj.project_name}`}
+                        disabled={isRemoving()}
+                        onClick={(e) => void handleRemoveFromProject(e, proj.project_id, proj.project_name)}
+                        style={{
+                          background: "none", border: "none", cursor: isRemoving() ? "not-allowed" : "pointer",
+                          color: "#d68a2e", opacity: isRemoving() ? "0.4" : "0.6",
+                          display: "flex", "align-items": "center", padding: "0 1px",
+                          "font-size": "11px", "line-height": "1", transition: "opacity 100ms",
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = isRemoving() ? "0.4" : "0.6" }}
+                      >×</button>
+                    </div>
+                  )
+                }}
+              </For>
+
+              {/* + add to project button */}
+              <Show when={props.source.url}>
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    title="Add to another project"
+                    onClick={(e) => { e.stopPropagation(); setPickerOpen(v => !v) }}
+                    style={{
+                      width: "22px", height: "22px", "border-radius": "6px",
+                      background: pickerOpen() ? "#f5f5f5" : "none",
+                      border: `1px solid ${pickerOpen() ? "#d4d4d4" : "#e5e5e5"}`,
+                      cursor: "pointer", color: "#525252",
+                      display: "flex", "align-items": "center", "justify-content": "center",
+                      "font-size": "14px", "line-height": "1",
+                    }}
+                  >+</button>
+
+                  <Show when={pickerOpen()}>
+                    <div style={{ position: "fixed", inset: "0", "z-index": "40" }} onClick={() => setPickerOpen(false)} />
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: "0",
+                      width: "240px", background: "#ffffff",
+                      "border-radius": "10px", "box-shadow": "0 4px 24px rgba(0,0,0,0.12)",
+                      border: "1px solid #e5e5e5", "z-index": "50", overflow: "hidden",
+                    }}>
+                      <div style={{ padding: "10px 14px 8px", "border-bottom": "1px solid #f0f0f0" }}>
+                        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", "letter-spacing": "0.08em", "text-transform": "uppercase", color: "#a3a3a3" }}>ADD TO PROJECT</span>
+                      </div>
+                      <div style={{ "max-height": "240px", "overflow-y": "auto" }}>
+                        <For each={elProjects() ?? []}>
+                          {(proj) => {
+                            const isAdded = () => alreadyInProjectIds().has(proj.id)
+                            const isAdding = () => addingToProject() === proj.id
+                            return (
+                              <button type="button" disabled={isAdded() || isAdding()}
+                                onClick={(e) => { e.stopPropagation(); void addToProject(proj.id, proj.name, "el") }}
+                                style={{ width: "100%", display: "flex", "align-items": "center", "justify-content": "space-between", padding: "10px 14px", background: "none", border: "none", cursor: isAdded() ? "default" : "pointer", "border-bottom": "1px solid #f9f9f9", transition: "background 100ms" }}
+                                onMouseEnter={e => { if (!isAdded()) (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                              >
+                                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                                  <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: isAdded() ? "#d4d4d4" : "#d68a2e", "flex-shrink": "0" }} />
+                                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: isAdded() ? "#a3a3a3" : "#0a0a0a" }}>{proj.name}</span>
+                                </div>
+                                <Show when={isAdded()}><span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#a3a3a3" }}>added</span></Show>
+                                <Show when={isAdding()}><span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#d68a2e" }}>adding…</span></Show>
+                              </button>
+                            )
+                          }}
+                        </For>
+                        <For each={(localProjects() ?? []).filter(p => !alreadyInProjectIds().has(p.id))}>
+                          {(proj) => {
+                            const isAdding = () => addingToProject() === proj.id
+                            return (
+                              <button type="button" disabled={isAdding() || !props.source.url}
+                                onClick={(e) => { e.stopPropagation(); void addToProject(proj.id, proj.name, "local") }}
+                                style={{ width: "100%", display: "flex", "align-items": "center", "justify-content": "space-between", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", "border-bottom": "1px solid #f9f9f9", transition: "background 100ms" }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                              >
+                                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                                  <span style={{ width: "7px", height: "7px", "border-radius": "50%", background: "#6366f1", "flex-shrink": "0" }} />
+                                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#0a0a0a" }}>{proj.name}</span>
+                                </div>
+                                <Show when={isAdding()}><span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#6366f1" }}>adding…</span></Show>
+                                <Show when={!isAdding()}><span style={{ "font-family": "'Geist Mono', monospace", "font-size": "9px", color: "#a3a3a3" }}>local</span></Show>
+                              </button>
+                            )
+                          }}
+                        </For>
+                        <Show when={!elProjects.loading && !localProjects.loading && (elProjects()?.length ?? 0) + ((localProjects() ?? []).filter(p => !alreadyInProjectIds().has(p.id)).length) === 0}>
+                          <div style={{ padding: "16px 14px", "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3", "text-align": "center" }}>No other projects</div>
+                        </Show>
+                        <Show when={elProjects.loading || localProjects.loading}>
+                          <div style={{ padding: "12px 14px", "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3" }}>Loading…</div>
+                        </Show>
+                      </div>
+                    </div>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+          </div>
+
+          {/* ROW 2: Title */}
+          <div style={{
+            "font-family": "'Geist Mono', monospace", "font-size": "15px", "font-weight": "500",
+            "line-height": "1.45", color: props.source.status === "processing" ? "#a3a3a3" : "#c87c2a",
+            "margin-bottom": "10px",
+            overflow: "hidden", display: "-webkit-box",
+            "-webkit-line-clamp": "2", "-webkit-box-orient": "vertical",
+          }}>
+            {props.source.title}
+          </div>
+
+          {/* ROW 3: meta left | action buttons right */}
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "12px" }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "6px", "min-width": "0", flex: "1" }}>
+              <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3", "white-space": "nowrap", "flex-shrink": "0" }}>
+                {timeAgo(props.source.time_created)}
+              </span>
+              <Show when={urlPath()}>
+                <span style={{ color: "#d4d4d4", "flex-shrink": "0" }}>·</span>
+                <a href={props.source.url!} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                  style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#d68a2e", "text-decoration": "none", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                  {urlPath()}
+                </a>
+              </Show>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", "align-items": "center", gap: "6px", "flex-shrink": "0" }} onClick={e => e.stopPropagation()}>
+              <button type="button" onClick={() => props.onOpen(props.source)}
+                style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "500", color: "#525252", background: "none", border: "1px solid #e5e5e5", "border-radius": "5px", padding: "5px 14px", cursor: "pointer", transition: "all 120ms" }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "#a3a3a3"; el.style.color = "#0a0a0a" }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "#e5e5e5"; el.style.color = "#525252" }}
+              >review notes</button>
+              <button type="button" onClick={() => props.onOpen(props.source)}
+                style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600", color: "#ffffff", background: "#d68a2e", border: "1px solid #d68a2e", "border-radius": "5px", padding: "5px 14px", cursor: "pointer", transition: "opacity 120ms" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.85" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
+              >learn</button>
+
+              {/* Delete from all projects — with confirm */}
+              <Show when={!confirmDelete()}>
+                <button type="button" title={`Delete from all ${visibleProjects().length} project(s)`}
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
+                  disabled={deletingAll()}
+                  style={{ width: "28px", height: "28px", display: "flex", "align-items": "center", "justify-content": "center", background: "none", border: "1px solid #e5e5e5", "border-radius": "5px", cursor: "pointer", color: "#a3a3a3", transition: "all 120ms" }}
+                  onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "#fca5a5"; el.style.color = "#ef4444" }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "#e5e5e5"; el.style.color = "#a3a3a3" }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>
+              </Show>
+              <Show when={confirmDelete()}>
+                <div style={{ display: "inline-flex", "align-items": "center", gap: "4px", padding: "3px 6px", "border-radius": "5px", border: "1px solid #fca5a5", background: "#fef2f2" }}>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: "#dc2626" }}>
+                    delete all {visibleProjects().length > 1 ? `(${visibleProjects().length})` : ""}?
+                  </span>
+                  <button type="button" onClick={handleDeleteAll} disabled={deletingAll()}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", padding: "0 2px" }}>
+                    {deletingAll() ? "…" : "yes"}
+                  </button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmDelete(false) }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#a3a3a3", "font-family": "'Geist Mono', monospace", "font-size": "10px", padding: "0 2px" }}>
+                    no
+                  </button>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Show>
+  )
+}
+
+// ── Document Table Row ────────────────────────────────────────────────────────
+
+function DocumentTableRow(props: { source: GroupedLocalSource; onOpen: (src: GroupedLocalSource) => void }) {
+  const [hovered, setHovered] = createSignal(false)
+
+  const docId = () => {
+    // Use filename without extension, truncated
+    const base = props.source.filename.replace(/\.[^.]+$/, "")
+    return base.length > 18 ? base.slice(0, 18) + "…" : base
+  }
+
+  const typeLabel = () => {
+    const st = props.source.source_type
+    if (st) return st.toUpperCase()
+    if (!props.source.url) return "NOTE"
+    try {
+      const d = new URL(props.source.url).hostname.replace(/^www\./, "")
+      if (d.includes("x.com") || d.includes("twitter.com")) return "X"
+      if (d.includes("linkedin.com")) return "LINKEDIN"
+      if (d.includes("youtube.com") || d.includes("youtu.be")) return "YOUTUBE"
+      if (d.includes("github.com")) return "GITHUB"
+      if (d.includes("notion.so")) return "NOTION"
+      if (d.includes("medium.com")) return "MEDIUM"
+      if (d.includes("substack.com")) return "SUBSTACK"
+      if (d.includes("reddit.com")) return "REDDIT"
+      if (d.includes("news.ycombinator.com")) return "HN"
+      if (d.includes("arxiv.org")) return "ARXIV"
+    } catch { /* ignore */ }
+    if (props.source.url?.endsWith(".pdf") || props.source.url?.includes(".pdf?")) return "PDF"
+    return "WEB"
+  }
+
+  const statusStyle = () => {
+    const s = props.source.status
+    if (s === "done") return { color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" }
+    if (s === "processing") return { color: "#d97706", bg: "#fffbeb", border: "#fde68a" }
+    return { color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" }
+  }
+
+  const statusLabel = () => {
+    if (props.source.status === "done") return "done"
+    if (props.source.status === "processing") return "processing"
+    return "new"
+  }
+
+  return (
+    <tr
+      style={{ "border-bottom": "1px solid #f3f4f6", cursor: "pointer", background: hovered() ? "#fafafa" : "transparent", transition: "background 120ms" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => props.onOpen(props.source)}
+    >
+      {/* DOCUMENT ID */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle", "max-width": "160px" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#9ca3af" }}>{docId()}</span>
+      </td>
+
+      {/* CONTENT */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle" }}>
+        <span style={{ "font-size": "13px", color: "#111827", "font-weight": "500", "font-family": "inherit" }}>
+          {props.source.title || props.source.filename}
+        </span>
+      </td>
+
+      {/* TYPE */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle" }}>
+        {(() => {
+          const label = typeLabel()
+          const styles: Record<string, { color: string; bg: string; border: string }> = {
+            X:        { color: "#ffffff", bg: "#000000", border: "#000000" },
+            LINKEDIN: { color: "#ffffff", bg: "#0077b5", border: "#0077b5" },
+            YOUTUBE:  { color: "#ffffff", bg: "#ff0000", border: "#ff0000" },
+            GITHUB:   { color: "#ffffff", bg: "#24292e", border: "#24292e" },
+            PDF:      { color: "#ffffff", bg: "#dc2626", border: "#dc2626" },
+            NOTION:   { color: "#ffffff", bg: "#191919", border: "#191919" },
+            MEDIUM:   { color: "#ffffff", bg: "#000000", border: "#000000" },
+            SUBSTACK: { color: "#ffffff", bg: "#ff6719", border: "#ff6719" },
+            REDDIT:   { color: "#ffffff", bg: "#ff4500", border: "#ff4500" },
+            HN:       { color: "#ffffff", bg: "#ff6600", border: "#ff6600" },
+            ARXIV:    { color: "#ffffff", bg: "#b31b1b", border: "#b31b1b" },
+            WEB:      { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+            NOTE:     { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" },
+          }
+          const s = styles[label] ?? { color: "#6b7280", bg: "#f3f4f6", border: "#e5e7eb" }
+          return (
+            <span style={{
+              "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "700",
+              "letter-spacing": "0.08em", "text-transform": "uppercase",
+              color: s.color, padding: "3px 7px", "border-radius": "3px",
+              background: s.bg, border: `1px solid ${s.border}`,
+              "white-space": "nowrap",
+            }}>{label}</span>
+          )
+        })()}
+      </td>
+
+      {/* PROJECT TAGS */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle" }}>
+        <div style={{ display: "flex", gap: "5px", "flex-wrap": "wrap" }}>
+          <For each={props.source.projects}>
+            {(p) => (
+              <span style={{
+                "font-size": "11px", color: "#374151", padding: "2px 8px",
+                "border-radius": "4px", border: "1px solid #d1d5db", background: "#ffffff",
+                "font-family": "'Geist Mono', monospace", "white-space": "nowrap",
+              }}>{p.project_name}</span>
+            )}
+          </For>
+        </div>
+      </td>
+
+      {/* STATUS */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle" }}>
+        <span style={{
+          "font-size": "11px", "font-family": "'Geist Mono', monospace", "font-weight": "600",
+          color: statusStyle().color, padding: "3px 9px", "border-radius": "5px",
+          background: statusStyle().bg, border: `1px solid ${statusStyle().border}`,
+          "white-space": "nowrap",
+        }}>{statusLabel()}</span>
+      </td>
+
+      {/* MEMORIES */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle", "text-align": "left" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#374151" }}>—</span>
+      </td>
+
+      {/* UPDATED */}
+      <td style={{ padding: "14px 12px", "vertical-align": "middle" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#9ca3af" }}>
+          {timeAgo(props.source.time_created)}
+        </span>
+      </td>
+    </tr>
+  )
+}
+
 // ── Main ReadPanel ─────────────────────────────────────────────────────────────
 
 // Module-level cache so the resource list survives tab switches (Show unmounts the component)
@@ -1114,7 +1876,31 @@ export function ReadPanel() {
   const api = useWikiApi()
   const [resources, { refetch }] = createResource(() => elApi.listAllResources())
   const [resourceProjects] = createResource(() => elApi.getResourceProjects())
+  const [localSources, { refetch: refetchLocalSources }] = createResource(() => elApi.listAllLocalSources())
   const [selected, setSelected] = createSignal<{ id: string; badge: string } | null>(null)
+  const [selectedLocal, setSelectedLocal] = createSignal<GroupedLocalSource | null>(null)
+
+  // Group local sources by filename → one card per file, showing all projects
+  const groupedLocalSources = (): GroupedLocalSource[] => {
+    const rows = localSources() ?? []
+    const map = new Map<string, GroupedLocalSource>()
+    for (const row of rows) {
+      if (!map.has(row.filename)) {
+        map.set(row.filename, {
+          filename:     row.filename,
+          title:        row.title,
+          url:          row.url,
+          status:       row.status,
+          size:         row.size,
+          time_created: row.time_created,
+          source_type:  row.source_type,
+          projects:     [],
+        })
+      }
+      map.get(row.filename)!.projects.push({ project_id: row.project_id, project_name: row.project_name })
+    }
+    return Array.from(map.values())
+  }
 
   // Build a lookup map: url → project assignments
   const projectsByUrl = () => {
@@ -1153,6 +1939,21 @@ export function ReadPanel() {
     if (listPollInterval) { clearInterval(listPollInterval); listPollInterval = null }
   })
 
+  // Poll local sources while any are processing
+  let localPollInterval: ReturnType<typeof setInterval> | null = null
+  createEffect(() => {
+    const hasProcessing = (localSources() ?? []).some(s => s.status === "processing")
+    if (hasProcessing && !localPollInterval) {
+      localPollInterval = setInterval(() => void refetchLocalSources(), 5000)
+    } else if (!hasProcessing && localPollInterval) {
+      clearInterval(localPollInterval)
+      localPollInterval = null
+    }
+  })
+  onCleanup(() => {
+    if (localPollInterval) { clearInterval(localPollInterval); localPollInterval = null }
+  })
+
   const selectItem = (item: WikiResourceListItem) => {
     setSelected({ id: item.id, badge: sourceBadge(item) })
     setActiveSourceName(item.title ?? item.url ?? null)
@@ -1185,61 +1986,63 @@ export function ReadPanel() {
 
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column", background: "#ffffff", overflow: "hidden" }}>
-      <Show when={!selected()}>
-        {/* List view */}
-        <div style={{ "flex-shrink": "0", display: "flex", "align-items": "center", "justify-content": "space-between", padding: "12px 20px 10px", "border-bottom": "1px solid #e5e5e5", background: "#ffffff" }}>
-          <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600", "letter-spacing": "0.1em", "text-transform": "uppercase", color: "#525252" }}>
-            READ
-            <span style={{ color: "#d4d4d4", padding: "0 8px" }}>·</span>
-            <span style={{ color: "#d68a2e" }}>
-              {(resources() ?? cachedResources ?? []).filter(r => r.status !== "done").length} UNREAD
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#a3a3a3", display: "flex", "align-items": "center", padding: "2px", transition: "color 120ms" }}
-            title="Refresh"
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#737373" }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#a3a3a3" }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
+      <Show when={!selected() && !selectedLocal()}>
+        {/* Documents table view */}
+        <div style={{ "flex-shrink": "0", padding: "28px 32px 20px", background: "#ffffff" }}>
+          <h1 style={{ margin: "0 0 4px", "font-size": "22px", "font-weight": "700", color: "#111827", "font-family": "inherit" }}>Documents</h1>
+          <p style={{ margin: "0", "font-size": "13px", color: "#6b7280", "font-family": "'Geist Mono', monospace" }}>Browse all documents across your organization</p>
+        </div>
+
+        {/* Toolbar */}
+        <div style={{ "flex-shrink": "0", display: "flex", "align-items": "center", gap: "10px", padding: "0 32px 16px", background: "#ffffff" }}>
+          <button type="button" style={{ display: "flex", "align-items": "center", gap: "6px", padding: "6px 14px", "border-radius": "6px", border: "1px solid #e5e7eb", background: "#ffffff", cursor: "pointer", "font-size": "12px", "font-family": "'Geist Mono', monospace", color: "#374151", "font-weight": "500" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            ALL TAGS
+          </button>
+          <button type="button" style={{ display: "flex", "align-items": "center", gap: "6px", padding: "6px 14px", "border-radius": "6px", border: "1px solid #e5e7eb", background: "#ffffff", cursor: "pointer", "font-size": "12px", "font-family": "'Geist Mono', monospace", color: "#374151", "font-weight": "500" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            All statuses
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div style={{ flex: "1" }} />
+          <button type="button" style={{ display: "flex", "align-items": "center", gap: "7px", padding: "7px 18px", "border-radius": "6px", border: "none", background: "#2563eb", cursor: "pointer", "font-size": "12px", "font-family": "'Geist Mono', monospace", color: "#ffffff", "font-weight": "700", "letter-spacing": "0.05em" }}>
+            SEARCH PLAYGROUND
           </button>
         </div>
 
-        <div style={{ flex: "1", "overflow-y": "auto" }}>
-          {/* Show cached list immediately while reloading to avoid blank flash */}
-          <Show when={resources.loading && !cachedResources}>
-            <div style={{ display: "flex", "align-items": "center", "justify-content": "center", "padding-top": "60px", color: "#a3a3a3", "font-size": "13px" }}>
-              Loading…
-            </div>
-          </Show>
-
-          <Show when={!resources.loading && (resources() ?? cachedResources ?? []).length === 0}>
-            <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", "padding-top": "60px", gap: "8px" }}>
+        <div style={{ flex: "1", "overflow-y": "auto", padding: "0 32px" }}>
+          {/* Empty state */}
+          <Show when={groupedLocalSources().length === 0 && !localSources.loading}>
+            <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", "padding-top": "80px", gap: "8px" }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ color: "#d4d4d4" }}>
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
               </svg>
-              <span style={{ "font-size": "13px", color: "#737373" }}>No resources yet</span>
+              <span style={{ "font-size": "13px", color: "#737373" }}>No documents yet</span>
               <span style={{ "font-size": "12px", color: "#a3a3a3" }}>Use the Capture button to add links</span>
             </div>
           </Show>
 
-          <Show when={(resources() ?? cachedResources ?? []).length > 0}>
-            <For each={resources() ?? cachedResources}>
-              {(item) => (
-                <ResourceCard
-                  item={item}
-                  projectAssignments={item.url ? (projectsByUrl().get(item.url) ?? []) : []}
-                  onClick={() => selectItem(item)}
-                  onRetried={() => void refetch()}
-                  onDeleted={() => void refetch()}
-                />
-              )}
-            </For>
+          {/* Table */}
+          <Show when={groupedLocalSources().length > 0}>
+            <table style={{ width: "100%", "border-collapse": "collapse" }}>
+              <thead>
+                <tr style={{ "border-bottom": "1px solid #e5e7eb" }}>
+                  {(["DOCUMENT ID", "CONTENT", "TYPE", "PROJECT TAGS", "STATUS", "MEMORIES", "UPDATED"] as const).map((col) => (
+                    <th style={{
+                      "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
+                      "letter-spacing": "0.08em", color: "#9ca3af", "text-align": "left",
+                      padding: "8px 12px 10px", "white-space": "nowrap",
+                      "border-bottom": "1px solid #e5e7eb",
+                    }}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <For each={groupedLocalSources()}>
+                  {(src) => <DocumentTableRow source={src} onOpen={(s) => { setSelectedLocal(s) }} />}
+                </For>
+              </tbody>
+            </table>
           </Show>
         </div>
       </Show>
@@ -1253,10 +2056,18 @@ export function ReadPanel() {
               setSelected(null)
               setActiveSourceName(null)
               if (activeGraphProjectId()) {
-                // Source was opened from a project graph — go back to it
                 setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
               }
             }}
+          />
+        )}
+      </Show>
+
+      <Show when={selectedLocal()}>
+        {(src) => (
+          <LocalSourceReader
+            source={src()}
+            onBack={() => { setSelectedLocal(null); setActiveSourceName(null) }}
           />
         )}
       </Show>

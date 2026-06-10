@@ -1,7 +1,8 @@
 import { createResource, createSignal, For, Show } from "solid-js"
-import { elApi, type ElProject } from "@/pages/projects/el-api"
-import { setActiveGraphProjectId, setActiveGraphProjectName } from "@/context/sidebar-view"
-import { NewProjectModal } from "./new-project-modal"
+import { elApi, type ElProject, type LocalProject } from "@/pages/projects/el-api"
+import { setActiveGraphProjectId, setActiveGraphProjectName, setActiveSidebarView } from "@/context/sidebar-view"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { useNavigate } from "@solidjs/router"
 
 const T = {
   bg: "#ffffff",
@@ -28,22 +29,9 @@ function timeAgo(ms: number): string {
   return `${Math.floor(days / 30)}mo ago`
 }
 
-function statusColor(status: ElProject["status"]) {
-  if (status === "active") return T.amber
-  if (status === "paused") return T.textFaint
-  return T.textMuted
-}
+// ── EL Project Row ─────────────────────────────────────────────────────────────
 
-function statusLabel(status: ElProject["status"]) {
-  if (status === "active") return "ACTIVE"
-  if (status === "paused") return "PAUSED"
-  return "ONBOARDING"
-}
-
-function ProjectRow(props: {
-  project: ElProject
-  onOpen: () => void
-}) {
+function ElProjectRow(props: { project: ElProject; onOpen: () => void }) {
   const [hov, setHov] = createSignal(false)
   const githubRepo = () => {
     const url = props.project.context_json?.github_url ?? null
@@ -64,7 +52,6 @@ function ProjectRow(props: {
       onMouseLeave={() => setHov(false)}
       onClick={props.onOpen}
     >
-      {/* Row 1: badges + repo */}
       <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "8px", "flex-wrap": "wrap" }}>
         <span style={{
           "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600",
@@ -74,49 +61,16 @@ function ProjectRow(props: {
         }}>
           PROJECT
         </span>
-        <span style={{
-          "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600",
-          "letter-spacing": "0.1em", "text-transform": "uppercase",
-          color: statusColor(props.project.status), padding: "2px 6px", "border-radius": "3px",
-          background: "#f4f4f5", border: `1px solid ${T.border}`,
-        }}>
-          {statusLabel(props.project.status)}
-        </span>
-        <Show when={props.project.clone_status && props.project.clone_status !== "none"}>
-          <span
-            title={props.project.clone_status === "failed" && props.project.clone_error ? props.project.clone_error : undefined}
-            style={{
-              "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600",
-              "letter-spacing": "0.1em", "text-transform": "uppercase",
-              color: props.project.clone_status === "done" ? "#22c55e"
-                : props.project.clone_status === "failed" ? "#ef4444"
-                : T.amber,
-              padding: "2px 6px", "border-radius": "3px",
-              background: props.project.clone_status === "done" ? "rgba(34,197,94,0.08)"
-                : props.project.clone_status === "failed" ? "rgba(239,68,68,0.08)"
-                : T.amberBg,
-              border: `1px solid ${props.project.clone_status === "done" ? "rgba(34,197,94,0.3)"
-                : props.project.clone_status === "failed" ? "rgba(239,68,68,0.3)"
-                : T.amberBorder}`,
-              cursor: props.project.clone_status === "failed" ? "help" : "default",
-            }}>
-            {props.project.clone_status === "done" ? "INDEXED"
-              : props.project.clone_status === "failed" ? "FAILED ⓘ"
-              : props.project.clone_status === "cloning" ? "CLONING"
-              : "INDEXING"}
-          </span>
-        </Show>
         <Show when={githubRepo()}>
           <span style={{
             "font-family": "'Geist Mono', monospace", "font-size": "11px", color: T.textFaint,
             overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
           }}>
-            {githubRepo()!.replace("https://github.com/", "")}
+            {githubRepo()}
           </span>
         </Show>
       </div>
 
-      {/* Row 2: project name */}
       <div style={{
         "font-size": "17px", "font-weight": "500", color: T.text,
         "line-height": "1.3", "margin-bottom": "10px",
@@ -124,21 +78,9 @@ function ProjectRow(props: {
         {props.project.name}
       </div>
 
-      {/* Row 3: meta left | action right */}
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "8px" }}>
-        <span style={{
-          "font-family": "'Geist Mono', monospace", "font-size": "11px", color: T.textFaint,
-        }}>
-          {props.project.clone_status === "cloning" || props.project.clone_status === "indexing"
-            ? `${props.project.clone_status === "cloning" ? "Cloning" : "Indexing"}…`
-            : props.project.clone_status === "done"
-            ? `${props.project.resource_count ?? 0} components · cloned`
-            : props.project.clone_status === "failed"
-            ? props.project.clone_error
-              ? `Error: ${props.project.clone_error.slice(0, 80)}${props.project.clone_error.length > 80 ? "…" : ""}`
-              : "Clone failed"
-            : `${props.project.resource_count ?? 0} resources · added ${timeAgo(props.project.time_created)}`
-          }
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: T.textFaint }}>
+          {props.project.resource_count ?? 0} resources · added {timeAgo(props.project.time_created)}
         </span>
         <button
           type="button"
@@ -161,9 +103,88 @@ function ProjectRow(props: {
   )
 }
 
+// ── Local Project Row ─────────────────────────────────────────────────────────
+
+function LocalProjectRow(props: { project: LocalProject; onOpen: () => void }) {
+  const [hov, setHov] = createSignal(false)
+  const pathParts = () => {
+    const parts = props.project.local_path.replace(/\\/g, "/").split("/").filter(Boolean)
+    return parts.slice(-2).join("/")
+  }
+
+  return (
+    <div
+      style={{
+        "border-bottom": `1px solid ${T.border}`,
+        background: hov() ? T.surfaceHov : T.bg,
+        cursor: "pointer",
+        transition: "background 120ms",
+        padding: "14px 20px",
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={props.onOpen}
+    >
+      <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "8px" }}>
+        <span style={{
+          "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600",
+          "letter-spacing": "0.1em", "text-transform": "uppercase",
+          color: T.amber, padding: "2px 6px", "border-radius": "3px",
+          background: T.amberBg, border: `1px solid ${T.amberBorder}`,
+        }}>
+          LOCAL
+        </span>
+        <span style={{
+          "font-family": "'Geist Mono', monospace", "font-size": "9px", "font-weight": "600",
+          "letter-spacing": "0.1em", color: "#6366f1",
+          padding: "2px 6px", "border-radius": "3px",
+          background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.3)",
+        }}>
+          CLI
+        </span>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: T.textFaint }}>
+          ~/{pathParts()}
+        </span>
+      </div>
+
+      <div style={{ "font-size": "17px", "font-weight": "500", color: T.text, "line-height": "1.3", "margin-bottom": "10px" }}>
+        {props.project.name}
+      </div>
+
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "8px" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: T.textFaint }}>
+          brain graph · added {timeAgo(props.project.time_created)}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); props.onOpen() }}
+          style={{
+            padding: "4px 10px", "border-radius": "4px",
+            border: `1px solid ${T.amberBorder}`, background: T.amberBg,
+            "font-family": "'Geist Mono', monospace", "font-size": "10px",
+            "font-weight": "600", "letter-spacing": "0.05em",
+            color: T.amber, cursor: "pointer", transition: "all 120ms",
+            "flex-shrink": "0",
+          }}
+          onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(214,138,46,0.2)"; el.style.borderColor = "rgba(214,138,46,0.6)" }}
+          onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = T.amberBg; el.style.borderColor = T.amberBorder }}
+        >
+          view graph →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function GraphProjectsPanel() {
-  const [showNewModal, setShowNewModal] = createSignal(false)
-  const [projects, { refetch }] = createResource(() => elApi.listProjects())
+  const navigate = useNavigate()
+  const [localProjects, { refetch: refetchLocal }] = createResource(() => elApi.listLocalProjects())
+
+  const totalCount = () => (localProjects() ?? []).length
+
+  function refetch() { void refetchLocal() }
 
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column", background: T.bg, overflow: "hidden" }}>
@@ -180,36 +201,14 @@ export function GraphProjectsPanel() {
           "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
           "letter-spacing": "0.1em", "text-transform": "uppercase", color: T.textFaint,
         }}>
-          Projects · {(projects() ?? []).length} graphs
+          Projects · {totalCount()} graphs
         </span>
 
         <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-          {/* + New Project */}
-          <button
-            type="button"
-            onClick={() => setShowNewModal(true)}
-            style={{
-              display: "inline-flex", "align-items": "center", gap: "5px",
-              padding: "4px 10px", "border-radius": "4px",
-              "font-family": "'Geist Mono', monospace", "font-size": "10px",
-              "font-weight": "600", "letter-spacing": "0.04em",
-              color: T.amber, border: `1px solid ${T.amberBorder}`,
-              background: T.amberBg, cursor: "pointer", transition: "all 120ms",
-            }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(214,138,46,0.2)" }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = T.amberBg }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            New Project
-          </button>
-
-          {/* Refresh */}
           <button
             type="button"
             title="Refresh"
-            onClick={() => void refetch()}
+            onClick={refetch}
             style={{
               background: "none", border: "none", cursor: "pointer",
               color: T.textFaint, display: "flex", "align-items": "center",
@@ -228,7 +227,7 @@ export function GraphProjectsPanel() {
 
       {/* List */}
       <div style={{ flex: "1", "overflow-y": "auto" }}>
-        <Show when={projects.loading}>
+        <Show when={localProjects.loading}>
           <div style={{
             display: "flex", "align-items": "center", "justify-content": "center",
             "padding-top": "60px", color: T.textFaint, "font-size": "13px",
@@ -237,7 +236,7 @@ export function GraphProjectsPanel() {
           </div>
         </Show>
 
-        <Show when={!projects.loading && (projects() ?? []).length === 0}>
+        <Show when={!localProjects.loading && totalCount() === 0}>
           <div style={{
             display: "flex", "flex-direction": "column", "align-items": "center",
             "justify-content": "center", "padding-top": "60px", gap: "8px",
@@ -249,31 +248,29 @@ export function GraphProjectsPanel() {
               <line x1="10" y1="14" x2="7" y2="17"/><line x1="14" y1="14" x2="17" y2="17"/>
             </svg>
             <span style={{ "font-size": "13px", color: T.textMuted }}>No projects yet</span>
-            <span style={{ "font-size": "12px", color: T.textFaint }}>Create a project to start building a graph</span>
+            <span style={{ "font-size": "12px", color: T.textFaint }}>Run <code>supadense init</code> in any folder</span>
           </div>
         </Show>
 
-        <Show when={(projects() ?? []).length > 0}>
-          <For each={projects()}>
+        {/* Local projects first */}
+        <Show when={(localProjects() ?? []).length > 0}>
+          <For each={localProjects()}>
             {(project) => (
-              <ProjectRow
+              <LocalProjectRow
                 project={project}
-                onOpen={() => { setActiveGraphProjectId(project.id); setActiveGraphProjectName(project.name) }}
+                onOpen={() => {
+                  setActiveGraphProjectId(project.id)
+                  setActiveGraphProjectName(project.name)
+                  setActiveSidebarView({ section: "workspace", view: "lib", label: project.name })
+                  navigate(`/${base64Encode(project.local_path)}/session`)
+                }}
               />
             )}
           </For>
         </Show>
+
       </div>
 
-      <Show when={showNewModal()}>
-        <NewProjectModal
-          onClose={() => setShowNewModal(false)}
-          onCreated={() => {
-            setShowNewModal(false)
-            void refetch()
-          }}
-        />
-      </Show>
     </div>
   )
 }

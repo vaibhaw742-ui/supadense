@@ -204,12 +204,14 @@ export function WikiGraph(props: WikiGraphProps) {
         if (d.type === "github") return "rgba(10,10,10,0.92)"
         if (d.type === "project") return "rgba(214,138,46,0.15)"
         if (d.type === "directory") return "rgba(10,10,10,0.08)"
+        if (d.type === "source") return "rgba(20,184,166,0.15)"
         return `${RESOURCE_COLOR}33`
       })
       .attr("stroke", (d) => {
         if (d.type === "github") return "#d68a2e"
         if (d.type === "project") return "#d68a2e"
         if (d.type === "directory") return "#737373"
+        if (d.type === "source") return "#14b8a6"
         return RESOURCE_COLOR
       })
       .attr("stroke-width", (d) => {

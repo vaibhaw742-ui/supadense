@@ -290,7 +290,7 @@ export function WikiGraphPanel(props: { projectId?: string | null }) {
   )
 
   return (
-    <div class="size-full flex flex-col bg-background-base">
+    <div class="size-full flex flex-col" style={{ background: "#ffffff" }}>
       {/* Back button when navigated into a page/resource */}
       <Show when={graphNav()}>
         <div class="shrink-0 flex items-center gap-2 border-b border-border-weaker-base px-4 py-2">

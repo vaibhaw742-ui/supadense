@@ -23,6 +23,9 @@ import {
   setSessionViewMode,
   projectViewMode,
   setProjectViewMode,
+  brainGraphOpen,
+  brainViewMode,
+  setBrainViewMode,
 } from "@/context/sidebar-view"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 
@@ -43,7 +46,7 @@ const C = {
   fontSans:  '"Geist", ui-sans-serif, system-ui, sans-serif',
 }
 
-export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () => void; sidebarCollapsed?: boolean }) {
+export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () => void; sidebarCollapsed?: boolean; userEmail?: string; onLogout?: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
   const command = useCommand()
@@ -181,8 +184,8 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
       {/* ── Right actions ── */}
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-left": "auto" }}>
 
-        {/* View-mode-group — only in session views */}
-        <Show when={isSession()}>
+        {/* View-mode-group — only in brain graph (session views), hide when project group is also showing */}
+        <Show when={isSession() && !activeGraphProjectId()}>
           <div
             style={{
               display: "inline-flex",
@@ -265,6 +268,25 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
           </div>
         </Show>
 
+        {/* Brain graph view-mode buttons — only when brain graph overlay is open */}
+        <Show when={brainGraphOpen()}>
+          <div style={{
+            display: "inline-flex", "align-items": "center",
+            border: `1px solid ${C.borderMid}`, "border-radius": "6px",
+            overflow: "hidden", background: C.bg,
+          }}>
+            <VmgBtn active={brainViewMode() === "graph"} title="Graph" onClick={() => setBrainViewMode("graph")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </VmgBtn>
+            <VmgBtn active={brainViewMode() === "files"} title="Files" onClick={() => setBrainViewMode("files")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </VmgBtn>
+            <VmgBtn active={false} title="Layers" last onClick={() => {}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </VmgBtn>
+          </div>
+        </Show>
+
         {/* Capture button */}
         <button
           type="button"
@@ -330,6 +352,70 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
             ))}
           </span>
         </button>
+
+        {/* DOCS + SUPPORT links */}
+        <div style={{ display: "flex", "align-items": "center", "font-family": C.fontMono, "font-size": "10px", "letter-spacing": "0.1em" }}>
+          <a href="/docs" target="_blank" style={{ display: "inline-flex", "align-items": "center", gap: "3px", color: C.ink400, "text-decoration": "none", padding: "4px 8px", "border-radius": "3px", transition: "color 120ms" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink100 }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink400 }}
+          >
+            DOCS
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+          </a>
+          <a href="#" style={{ color: C.ink400, "text-decoration": "none", padding: "4px 8px", "border-radius": "3px", transition: "color 120ms", "font-family": C.fontMono, "font-size": "10px", "letter-spacing": "0.1em" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink100 }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink400 }}
+          >
+            SUPPORT
+          </a>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: "1px", height: "20px", background: C.border, "flex-shrink": "0" }} />
+
+        {/* User avatar — rightmost */}
+        <Show when={props.userEmail}>
+          {(() => {
+            const [open, setOpen] = createSignal(false)
+            const initials = () => {
+              const name = (props.userEmail ?? "").split("@")[0] || "U"
+              return name.substring(0, 2).toUpperCase()
+            }
+            return (
+              <div style={{ position: "relative" }}>
+                <button type="button" title={props.userEmail} onClick={() => setOpen(v => !v)}
+                  style={{ width: "32px", height: "32px", "border-radius": "50%", background: "#e5e5e5", border: "none", cursor: "pointer", "font-family": C.fontMono, "font-weight": "600", "font-size": "11px", color: C.ink300, display: "flex", "align-items": "center", "justify-content": "center", transition: "background 120ms" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#d4d4d4" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#e5e5e5" }}
+                >
+                  {initials()}
+                </button>
+                <Show when={open()}>
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", right: "0", width: "200px", background: "#ffffff", border: `1px solid ${C.border}`, "border-radius": "6px", "box-shadow": "0 8px 24px rgba(0,0,0,0.12)", padding: "6px", "z-index": "300" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ padding: "10px", "border-bottom": `1px solid ${C.border}`, "margin-bottom": "4px" }}>
+                      <div style={{ "font-size": "13px", "font-weight": "500", color: C.ink100, "font-family": C.fontSans, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {(props.userEmail ?? "").split("@")[0]}
+                      </div>
+                      <div style={{ "font-size": "11px", color: C.ink400, "font-family": C.fontMono, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {props.userEmail}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => { setOpen(false); props.onLogout?.() }}
+                      style={{ width: "100%", padding: "8px 10px", background: "none", border: "none", "border-radius": "4px", cursor: "pointer", "text-align": "left", "font-size": "13px", "font-family": C.fontSans, color: "#ef4444", transition: "background 100ms" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#fef2f2" }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </Show>
+              </div>
+            )
+          })()}
+        </Show>
+
       </div>
     </header>
   )

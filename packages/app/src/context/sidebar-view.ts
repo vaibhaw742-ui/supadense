@@ -37,3 +37,10 @@ export const [projectViewMode, setProjectViewMode] = createSignal<ProjectViewMod
 // "layers"  → L0 / L1 / L2 brain node explorer
 export type SessionViewMode = "code" | "brain" | "sources" | "layers"
 export const [sessionViewMode, setSessionViewMode] = createSignal<SessionViewMode>("code")
+
+// ── Brain graph overlay open (local project view) ──
+export const [brainGraphOpen, setBrainGraphOpen] = createSignal(false)
+
+// ── Brain view mode: "graph" | "files" ──
+export type BrainViewMode = "graph" | "files"
+export const [brainViewMode, setBrainViewMode] = createSignal<BrainViewMode>("graph")

@@ -1,11 +1,5 @@
-import { createResource, createSignal, For, Show } from "solid-js"
+import { createResource, createSignal, createEffect, onCleanup, For, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getAuthToken, clearAuthToken } from "@/utils/server"
-import { elApi, type ElProject } from "./el-api"
-import { CreateProjectDialog } from "./create-project-dialog"
 
 function timeAgo(ms: number): string {
   const diff = Date.now() - ms
@@ -17,273 +11,445 @@ function timeAgo(ms: number): string {
   return `${days}d ago`
 }
 
-export default function ProjectsPanel() {
-  const navigate = useNavigate()
-  const dialog = useDialog()
-  const [showCreate, setShowCreate] = createSignal(false)
+import { elApi } from "./el-api"
+import { setActiveSidebarView } from "@/context/sidebar-view"
 
-  const [projects, { refetch }] = createResource(async () => elApi.listProjects())
+// ── CLI Onboarding Modal ───────────────────────────────────────────────────────
 
-  const userEmail = (() => {
-    const token = getAuthToken()
-    if (!token) return undefined
-    try {
-      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
-      return typeof payload.email === "string" ? payload.email : undefined
-    } catch { return undefined }
-  })()
+function CliOnboardingModal(props: { onClose: () => void; onDetected: () => void }) {
+  const serverUrl = () => {
+    if (typeof window !== "undefined") return window.location.origin
+    return "http://localhost:4096"
+  }
 
-  function openSettings() {
-    void import("@/components/dialog-settings").then((x) => {
-      dialog.show(() => <x.DialogSettings />)
+  const [copied, setCopied] = createSignal<string | null>(null)
+
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1800)
     })
   }
 
-  async function handleCreated(project: ElProject) {
-    setShowCreate(false)
-    void refetch()
-    // Auto-start clone if a GitHub URL was provided
-    const githubUrl = (project.context_json as any)?.github_url
-    if (githubUrl && project.clone_status === "none") {
-      await elApi.cloneRepo(project.id).catch(() => {})
-    }
-    navigate(`/projects/${project.id}`)
-  }
+  // Poll for new projects every 3s while modal is open
+  const [prevCount, setPrevCount] = createSignal<number | null>(null)
+  createEffect(() => {
+    elApi.listLocalProjects().then(p => setPrevCount(p.length))
+    const iv = setInterval(async () => {
+      const projects = await elApi.listLocalProjects()
+      const prev = prevCount()
+      if (prev !== null && projects.length > prev) {
+        props.onDetected()
+      }
+      setPrevCount(projects.length)
+    }, 3000)
+    onCleanup(() => clearInterval(iv))
+  })
+
+  const steps: Array<{ key: string; step: string; label: string; cmd: string }> = [
+    {
+      key: "install",
+      step: "1",
+      label: "Install Supadense CLI",
+      cmd: `curl -fsSL ${serverUrl()}/install.sh | bash`,
+    },
+    {
+      key: "login",
+      step: "2",
+      label: "Login",
+      cmd: "supadense login",
+    },
+    {
+      key: "init",
+      step: "3",
+      label: "Init your project",
+      cmd: "cd /path/to/your-project && supadense init",
+    },
+  ]
 
   return (
-    <div class="size-full flex flex-col overflow-y-auto" style={{ background: "#ffffff" }}>
-
-      {/* Projects header row */}
+    <div
+      style={{
+        position: "fixed", inset: "0", "z-index": "9999",
+        display: "flex", "align-items": "center", "justify-content": "center",
+        background: "rgba(0,0,0,0.45)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) props.onClose() }}
+    >
       <div style={{
-        "flex-shrink": "0",
-        display: "flex", "align-items": "center", "justify-content": "space-between",
-        padding: "20px 32px 16px",
+        background: "#ffffff",
+        "border-radius": "12px",
+        width: "520px",
+        "max-width": "calc(100vw - 32px)",
+        padding: "32px",
+        "box-shadow": "0 20px 60px rgba(0,0,0,0.18)",
+        position: "relative",
       }}>
-        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "letter-spacing": "0.06em", color: "#a3a3a3" }}>
-          PROJECTS
-          <Show when={!projects.loading && (projects()?.length ?? 0) > 0}>
-            {" · "}{projects()!.length} GRAPHS
-          </Show>
-        </span>
-        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#a3a3a3", display: "flex", "align-items": "center", padding: "4px", "border-radius": "4px", transition: "color 120ms" }}
-            title="Refresh"
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#525252" }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#a3a3a3" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            style={{
-              display: "inline-flex", "align-items": "center", gap: "6px",
-              padding: "6px 14px",
-              border: "1px solid #d68a2e",
-              "border-radius": "6px",
-              background: "transparent",
-              "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600",
-              "letter-spacing": "0.04em", color: "#d68a2e",
-              cursor: "pointer", transition: "background 120ms",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(214,138,46,0.08)" }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
-          >
-            + New Project
-          </button>
-        </div>
-      </div>
+        {/* Close */}
+        <button
+          type="button"
+          onClick={props.onClose}
+          style={{
+            position: "absolute", top: "16px", right: "16px",
+            background: "none", border: "none", cursor: "pointer",
+            color: "#a3a3a3", "font-size": "18px", "line-height": "1",
+            padding: "4px 6px", "border-radius": "4px",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#525252" }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#a3a3a3" }}
+        >
+          ✕
+        </button>
 
-      {/* Project list */}
-      <div style={{ flex: "1", padding: "0 32px 32px" }}>
-        {/* Loading skeletons */}
-        <Show when={projects.loading}>
-          <For each={[1, 2, 3]}>
-            {() => (
-              <div style={{ padding: "20px 0", "border-bottom": "1px solid #f0f0f0" }}>
-                <div style={{ width: "120px", height: "20px", "border-radius": "4px", background: "#f0f0f0", "margin-bottom": "8px" }} />
-                <div style={{ width: "200px", height: "28px", "border-radius": "4px", background: "#f5f5f5" }} />
+        {/* Title */}
+        <div style={{ "margin-bottom": "8px" }}>
+          <span style={{
+            "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
+            "letter-spacing": "0.08em", color: "#d68a2e",
+          }}>
+            ADD PROJECT
+          </span>
+        </div>
+        <div style={{ "font-size": "22px", "font-weight": "700", color: "#0a0a0a", "margin-bottom": "6px" }}>
+          Connect your codebase
+        </div>
+        <div style={{ "font-size": "13px", color: "#737373", "margin-bottom": "28px", "line-height": "1.5" }}>
+          Run these commands in your terminal. Your project will appear here automatically once initialised.
+        </div>
+
+        {/* Steps */}
+        <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
+          <For each={steps}>
+            {(s) => (
+              <div style={{
+                background: "#fafafa",
+                border: "1px solid #e5e5e5",
+                "border-radius": "8px",
+                padding: "14px 16px",
+              }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "10px" }}>
+                  <span style={{
+                    "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "700",
+                    color: "#d68a2e",
+                    background: "rgba(214,138,46,0.1)",
+                    border: "1px solid rgba(214,138,46,0.3)",
+                    "border-radius": "4px",
+                    padding: "1px 7px",
+                  }}>
+                    {s.step}
+                  </span>
+                  <span style={{ "font-size": "13px", "font-weight": "600", color: "#0a0a0a" }}>{s.label}</span>
+                  <Show when={s.key === "install"}>
+                    <span style={{ "font-size": "11px", color: "#a3a3a3", "margin-left": "2px" }}>(skip if already done)</span>
+                  </Show>
+                </div>
+                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                  <code style={{
+                    flex: "1",
+                    "font-family": "'Geist Mono', monospace",
+                    "font-size": "12px",
+                    color: "#0a0a0a",
+                    background: "#f0f0f0",
+                    "border-radius": "5px",
+                    padding: "8px 12px",
+                    display: "block",
+                    overflow: "auto",
+                    "white-space": "nowrap",
+                  }}>
+                    {s.cmd}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copy(s.cmd, s.key)}
+                    title="Copy"
+                    style={{
+                      "flex-shrink": "0",
+                      background: copied() === s.key ? "rgba(22,163,74,0.1)" : "rgba(214,138,46,0.08)",
+                      border: `1px solid ${copied() === s.key ? "rgba(22,163,74,0.3)" : "rgba(214,138,46,0.3)"}`,
+                      "border-radius": "5px",
+                      cursor: "pointer",
+                      padding: "8px 10px",
+                      display: "flex", "align-items": "center", "justify-content": "center",
+                      transition: "all 150ms",
+                      color: copied() === s.key ? "#16a34a" : "#d68a2e",
+                    }}
+                  >
+                    <Show
+                      when={copied() === s.key}
+                      fallback={
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      }
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </Show>
+                  </button>
+                </div>
               </div>
             )}
           </For>
-        </Show>
+        </div>
 
-        {/* Empty state */}
-        <Show when={!projects.loading && (projects()?.length ?? 0) === 0}>
-          <div style={{ padding: "64px 0", display: "flex", "flex-direction": "column", "align-items": "center", gap: "12px" }}>
-            <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#a3a3a3" }}>
-              no projects yet
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              style={{
-                padding: "8px 20px", "border-radius": "6px",
-                background: "#d68a2e", border: "none", cursor: "pointer",
-                "font-family": "'Geist Mono', monospace", "font-size": "12px",
-                "font-weight": "600", color: "#ffffff",
-              }}
-            >
-              Create your first project
-            </button>
+        {/* Waiting indicator */}
+        <div style={{
+          "margin-top": "20px",
+          display: "flex", "align-items": "center", gap: "8px",
+          "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3",
+        }}>
+          <span style={{
+            width: "6px", height: "6px", "border-radius": "50%",
+            background: "#d68a2e",
+            animation: "pulse 1.6s ease-in-out infinite",
+          }} />
+          Waiting for <code style={{ color: "#525252" }}>supadense init</code>…
+        </div>
+
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+          }
+        `}</style>
+      </div>
+    </div>
+  )
+}
+
+// ── Main panel ────────────────────────────────────────────────────────────────
+
+type TagRow = {
+  name: string
+  project_id: string
+  doc_count: number
+  last_activity: number
+}
+
+export default function ProjectsPanel() {
+  const navigate = useNavigate()
+  const [showModal, setShowModal] = createSignal(false)
+  const [search, setSearch] = createSignal("")
+  const [sortBy, setSortBy] = createSignal<"documents" | "memories" | "activity">("documents")
+
+  const [sources, { refetch: refetchSources }] = createResource(() => elApi.listAllLocalSources())
+  const [projects, { refetch: refetchProjects }] = createResource(() => elApi.listLocalProjects())
+
+  function handleDetected() {
+    void refetchProjects()
+    void refetchSources()
+    setShowModal(false)
+  }
+
+  // Group sources by project, deduplicated by filename per project
+  const tagRows = (): TagRow[] => {
+    const rows = sources() ?? []
+    const map = new Map<string, TagRow>()
+    const seen = new Set<string>() // project_id + filename dedup
+    for (const row of rows) {
+      const key = `${row.project_id}::${row.filename}`
+      if (!map.has(row.project_id)) {
+        map.set(row.project_id, { name: row.project_name, project_id: row.project_id, doc_count: 0, last_activity: row.time_created })
+      }
+      const entry = map.get(row.project_id)!
+      if (!seen.has(key)) {
+        seen.add(key)
+        entry.doc_count++
+      }
+      if (row.time_created > entry.last_activity) entry.last_activity = row.time_created
+    }
+    let result = Array.from(map.values())
+
+    // Filter
+    const q = search().toLowerCase().trim()
+    if (q) result = result.filter(r => r.name.toLowerCase().includes(q))
+
+    // Sort
+    if (sortBy() === "documents") result.sort((a, b) => b.doc_count - a.doc_count)
+    else if (sortBy() === "activity") result.sort((a, b) => b.last_activity - a.last_activity)
+    // "memories" — no real data yet, keep doc order
+
+    return result
+  }
+
+  const SortBtn = (p: { label: string; value: "documents" | "memories" | "activity" }) => (
+    <button
+      type="button"
+      onClick={() => setSortBy(p.value)}
+      style={{
+        padding: "6px 14px",
+        border: "1px solid #e5e7eb",
+        "border-radius": "6px",
+        background: sortBy() === p.value ? "#111827" : "#ffffff",
+        cursor: "pointer",
+        "font-family": "'Geist Mono', monospace",
+        "font-size": "11px",
+        "font-weight": "600",
+        "letter-spacing": "0.06em",
+        color: sortBy() === p.value ? "#ffffff" : "#6b7280",
+        transition: "all 120ms",
+      }}
+    >
+      {sortBy() === p.value ? `SORT: ${p.label}` : p.label}
+    </button>
+  )
+
+  return (
+    <div class="size-full flex flex-col" style={{ background: "#f9fafb", overflow: "hidden" }}>
+
+      {/* Header */}
+      <div style={{ "flex-shrink": "0", padding: "28px 32px 0", background: "#f9fafb" }}>
+        <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between", "margin-bottom": "4px" }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", "font-size": "22px", "font-weight": "700", color: "#111827", "font-family": "inherit" }}>Project Tags</h1>
+            <p style={{ margin: "0", "font-size": "13px", color: "#6b7280", "font-family": "'Geist Mono', monospace" }}>Project tags organize your documents and memories</p>
           </div>
-        </Show>
+        </div>
 
-        {/* Project rows */}
-        <Show when={!projects.loading}>
-          <For each={projects() ?? []}>
-            {(project) => <ProjectRow project={project} onDelete={() => void refetch()} onOpen={(id) => navigate(`/projects/${id}`)} />}
-          </For>
+        {/* Toolbar */}
+        <div style={{ display: "flex", "align-items": "center", gap: "10px", "margin-top": "20px", "margin-bottom": "16px" }}>
+          {/* Search */}
+          <div style={{ position: "relative", flex: "1", "max-width": "320px" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", "pointer-events": "none" }}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search tags..."
+              value={search()}
+              onInput={(e) => setSearch(e.currentTarget.value)}
+              style={{
+                width: "100%", "box-sizing": "border-box",
+                padding: "7px 12px 7px 30px",
+                border: "1px solid #e5e7eb", "border-radius": "6px",
+                background: "#ffffff", "font-size": "12px",
+                "font-family": "'Geist Mono', monospace", color: "#374151",
+                outline: "none",
+              }}
+            />
+          </div>
+          <div style={{ flex: "1" }} />
+          <SortBtn label="DOCUMENTS" value="documents" />
+          <SortBtn label="MEMORIES" value="memories" />
+          <SortBtn label="ACTIVITY" value="activity" />
+        </div>
+      </div>
+
+      {/* Table container */}
+      <div style={{ flex: "1", "overflow-y": "auto", padding: "0 32px 32px" }}>
+        <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", "border-radius": "8px", overflow: "hidden" }}>
+          {/* Table header */}
+          <table style={{ width: "100%", "border-collapse": "collapse" }}>
+            <thead>
+              <tr style={{ "border-bottom": "1px solid #e5e7eb", background: "#f9fafb" }}>
+                {(["PROJECT TAG", "DOCUMENTS", "MEMORIES", "LAST ACTIVITY"] as const).map((col) => (
+                  <th style={{
+                    "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
+                    "letter-spacing": "0.08em", color: "#9ca3af", "text-align": col === "PROJECT TAG" ? "left" : "right",
+                    padding: "10px 20px", "white-space": "nowrap",
+                  }}>{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Loading skeletons */}
+              <Show when={sources.loading}>
+                <For each={[1, 2, 3, 4]}>
+                  {() => (
+                    <tr style={{ "border-bottom": "1px solid #f3f4f6" }}>
+                      <td style={{ padding: "16px 20px" }}><div style={{ width: "100px", height: "14px", background: "#f3f4f6", "border-radius": "3px" }} /></td>
+                      <td style={{ padding: "16px 20px", "text-align": "right" }}><div style={{ width: "24px", height: "14px", background: "#f3f4f6", "border-radius": "3px", "margin-left": "auto" }} /></td>
+                      <td style={{ padding: "16px 20px", "text-align": "right" }}><div style={{ width: "24px", height: "14px", background: "#f3f4f6", "border-radius": "3px", "margin-left": "auto" }} /></td>
+                      <td style={{ padding: "16px 20px", "text-align": "right" }}><div style={{ width: "60px", height: "14px", background: "#f3f4f6", "border-radius": "3px", "margin-left": "auto" }} /></td>
+                    </tr>
+                  )}
+                </For>
+              </Show>
+
+              {/* Empty state */}
+              <Show when={!sources.loading && tagRows().length === 0}>
+                <tr>
+                  <td colspan="4" style={{ padding: "60px 20px", "text-align": "center" }}>
+                    <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#9ca3af" }}>
+                      {search() ? "No tags match your search" : "No project tags yet"}
+                    </div>
+                    <Show when={!search()}>
+                      <div style={{ "font-size": "12px", color: "#d1d5db", "margin-top": "4px" }}>
+                        Add documents to projects to see tags here
+                      </div>
+                    </Show>
+                  </td>
+                </tr>
+              </Show>
+
+              {/* Tag rows */}
+              <For each={tagRows()}>
+                {(tag) => <TagTableRow tag={tag} onOpen={(id) => {
+                  setActiveSidebarView({ section: "workspace", view: "project", label: tag.name })
+                  navigate(`/local-projects/${id}`)
+                }} />}
+              </For>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer total */}
+        <Show when={!sources.loading && tagRows().length > 0}>
+          <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "12px" }}>
+            <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#9ca3af" }}>
+              {tagRows().length} total
+            </span>
+          </div>
         </Show>
       </div>
 
-      {/* Create dialog */}
-      <Show when={showCreate()}>
-        <CreateProjectDialog onCreated={handleCreated} onClose={() => setShowCreate(false)} />
+      {/* CLI Onboarding Modal */}
+      <Show when={showModal()}>
+        <CliOnboardingModal onClose={() => setShowModal(false)} onDetected={handleDetected} />
       </Show>
     </div>
   )
 }
 
-function ProjectRow(props: { project: ElProject; onDelete: () => void; onOpen: (id: string) => void }) {
-  const [confirmDelete, setConfirmDelete] = createSignal(false)
-  const [deleting, setDeleting] = createSignal(false)
+// ── Tag table row ─────────────────────────────────────────────────────────────
 
-  const handleDelete = async (e: MouseEvent) => {
-    e.stopPropagation()
-    if (!confirmDelete()) { setConfirmDelete(true); return }
-    setDeleting(true)
-    try {
-      await elApi.deleteProject(props.project.id)
-      props.onDelete()
-    } catch { setDeleting(false) }
-  }
-
-  const statusColor: Record<string, string> = { onboarding: "#d68a2e", active: "#16a34a", paused: "#94a3b8" }
-  const sc = () => statusColor[props.project.status] ?? "#a3a3a3"
+function TagTableRow(props: { tag: TagRow; onOpen: (id: string) => void }) {
+  const [hovered, setHovered] = createSignal(false)
 
   return (
-    <div
-      style={{
-        padding: "20px 0",
-        "border-bottom": "1px solid #f0f0f0",
-        display: "flex", "align-items": "center", "justify-content": "space-between",
-        gap: "16px",
-      }}
+    <tr
+      style={{ "border-bottom": "1px solid #f3f4f6", cursor: "pointer", background: hovered() ? "#fafafa" : "transparent", transition: "background 120ms" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => props.onOpen(props.tag.project_id)}
     >
-      {/* Left: tags + name + meta */}
-      <div style={{ flex: "1", "min-width": "0", cursor: "pointer" }} onClick={() => props.onOpen(props.project.id)}>
-        {/* Tag chips */}
-        <div style={{ display: "flex", gap: "6px", "margin-bottom": "6px" }}>
-          <span style={{
-            "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
-            "letter-spacing": "0.06em", color: "#d68a2e",
-            border: "1px solid #d68a2e", "border-radius": "4px",
-            padding: "1px 7px",
-          }}>
-            PROJECT
-          </span>
-          <span style={{
-            "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
-            "letter-spacing": "0.06em", color: sc(),
-            border: `1px solid ${sc()}`,
-            "border-radius": "4px", padding: "1px 7px",
-            "text-transform": "uppercase",
-          }}>
-            {props.project.status}
-          </span>
-          <Show when={props.project.clone_status && props.project.clone_status !== "none"}>
-            <span style={{
-              "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600",
-              "letter-spacing": "0.06em",
-              color: props.project.clone_status === "done" ? "#16a34a" : props.project.clone_status === "failed" ? "#dc2626" : "#f97316",
-              border: `1px solid ${props.project.clone_status === "done" ? "#16a34a" : props.project.clone_status === "failed" ? "#dc2626" : "#f97316"}`,
-              "border-radius": "4px", padding: "1px 7px",
-              "text-transform": "uppercase",
-            }}>
-              {props.project.clone_status}
-            </span>
-          </Show>
-        </div>
+      {/* PROJECT TAG */}
+      <td style={{ padding: "16px 20px", "vertical-align": "middle" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#374151" }}>
+          {props.tag.name}
+        </span>
+      </td>
 
-        {/* Project name */}
-        <div style={{ "font-size": "22px", "font-weight": "600", color: "#0a0a0a", "line-height": "1.2", "margin-bottom": "5px" }}>
-          {props.project.name}
-        </div>
+      {/* DOCUMENTS */}
+      <td style={{ padding: "16px 20px", "vertical-align": "middle", "text-align": "right" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#374151" }}>
+          {props.tag.doc_count}
+        </span>
+      </td>
 
-        {/* Meta */}
-        <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#a3a3a3" }}>
-          {props.project.resource_count ?? 0} {props.project.resource_count === 1 ? "resource" : "resources"}
-          {" · "}added {timeAgo(props.project.time_created)}
-        </div>
-      </div>
+      {/* MEMORIES */}
+      <td style={{ padding: "16px 20px", "vertical-align": "middle", "text-align": "right" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#9ca3af" }}>—</span>
+      </td>
 
-      {/* Right: delete + view graph */}
-      <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-shrink": "0" }}>
-        {/* Delete button */}
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting()}
-          title={confirmDelete() ? "Click again to confirm" : "Delete project"}
-          style={{
-            display: "inline-flex", "align-items": "center", gap: "5px",
-            padding: confirmDelete() ? "5px 10px" : "6px 8px",
-            border: confirmDelete() ? "1px solid #dc2626" : "1px solid #e5e5e5",
-            "border-radius": "6px",
-            background: confirmDelete() ? "rgba(220,38,38,0.06)" : "transparent",
-            cursor: deleting() ? "not-allowed" : "pointer",
-            color: confirmDelete() ? "#dc2626" : "#a3a3a3",
-            "font-family": "'Geist Mono', monospace", "font-size": "11px",
-            transition: "all 120ms",
-          }}
-          onMouseEnter={(e) => {
-            const el = e.currentTarget as HTMLElement
-            if (!confirmDelete()) { el.style.borderColor = "#dc2626"; el.style.color = "#dc2626" }
-          }}
-          onMouseLeave={(e) => {
-            const el = e.currentTarget as HTMLElement
-            if (!confirmDelete()) { el.style.borderColor = "#e5e5e5"; el.style.color = "#a3a3a3" }
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6M14 11v6"/>
-            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-          </svg>
-          <Show when={confirmDelete()}>
-            <span>{deleting() ? "Deleting…" : "Confirm?"}</span>
-          </Show>
-        </button>
-
-        {/* View graph button */}
-        <button
-          type="button"
-          onClick={() => props.onOpen(props.project.id)}
-          style={{
-            display: "inline-flex", "align-items": "center", gap: "5px",
-            padding: "6px 14px",
-            border: "1px solid #d68a2e",
-            "border-radius": "6px",
-            background: "transparent",
-            "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600",
-            "letter-spacing": "0.04em", color: "#d68a2e",
-            cursor: "pointer", transition: "background 120ms",
-            "white-space": "nowrap",
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(214,138,46,0.08)" }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
-        >
-          view graph →
-        </button>
-      </div>
-    </div>
+      {/* LAST ACTIVITY */}
+      <td style={{ padding: "16px 20px", "vertical-align": "middle", "text-align": "right" }}>
+        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#9ca3af" }}>
+          {timeAgo(props.tag.last_activity)}
+        </span>
+      </td>
+    </tr>
   )
 }

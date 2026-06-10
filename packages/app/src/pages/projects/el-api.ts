@@ -99,6 +99,49 @@ export interface TreeEntry {
   children?: TreeEntry[]
 }
 
+export interface LocalProject {
+  id: string
+  name: string
+  local_path: string
+  brain_dir: string
+  sources_dir: string
+  source_id: string
+  github_repo?: string | null
+  time_created: number
+  time_updated: number
+  brain_files?: string[]
+}
+
+export interface GithubPR {
+  number: number
+  title: string
+  author: string
+  state: "open" | "draft"
+  reviews: "approved" | "changes_requested" | "pending" | "none"
+  comments: number
+  updated_at: string
+  url: string
+  labels: string[]
+}
+
+export interface GithubIssue {
+  number: number
+  title: string
+  author: string
+  labels: string[]
+  comments: number
+  updated_at: string
+  url: string
+}
+
+export interface GithubActivity {
+  repo: string
+  prs: GithubPR[]
+  issues: GithubIssue[]
+  fetched_at: number
+  cached: boolean
+}
+
 export const elApi = {
   async listProjects(): Promise<ElProject[]> {
     const res = await fetch(`${apiBase()}/el/projects`, { headers: authHeaders() })
@@ -106,23 +149,14 @@ export const elApi = {
     return res.json()
   },
 
-  async createProject(data: { name: string; github_url?: string; arxiv_url?: string; github_pat?: string }): Promise<ElProject> {
-    const res = await fetch(`${apiBase()}/el/projects`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: string }
-      throw new Error(err.error ?? "Failed to create project")
+  async getProject(id: string): Promise<{ project: ElProject; resources: ElResource[] } | null> {
+    try {
+      const res = await fetch(`${apiBase()}/el/projects/${id}`, { headers: authHeaders() })
+      if (!res.ok) return null
+      return res.json()
+    } catch {
+      return null
     }
-    return res.json()
-  },
-
-  async getProject(id: string): Promise<{ project: ElProject; resources: ElResource[] }> {
-    const res = await fetch(`${apiBase()}/el/projects/${id}`, { headers: authHeaders() })
-    if (!res.ok) throw new Error("Project not found")
-    return res.json()
   },
 
   async updateContext(id: string, context: Record<string, string>, status?: ElProject["status"]): Promise<ElProject> {
@@ -156,9 +190,13 @@ export const elApi = {
   },
 
   async getGraph(id: string): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
-    const res = await fetch(`${apiBase()}/el/projects/${id}/graph`, { headers: authHeaders() })
-    if (!res.ok) throw new Error("Failed to load graph")
-    return res.json()
+    try {
+      const res = await fetch(`${apiBase()}/el/projects/${id}/graph`, { headers: authHeaders() })
+      if (!res.ok) return { nodes: [], edges: [] }
+      return res.json()
+    } catch {
+      return { nodes: [], edges: [] }
+    }
   },
 
   async listSessions(id: string): Promise<Array<{ id: string; title: string; time_created: number; time_updated: number }>> {
@@ -293,6 +331,40 @@ export const elApi = {
     await fetch(`${apiBase()}/el/projects/${id}`, { method: "DELETE", headers: authHeaders() })
   },
 
+  async getGithubActivity(id: string, force?: boolean): Promise<GithubActivity> {
+    const qs = force ? "?force=true" : ""
+    const res = await fetch(`${apiBase()}/local-projects/${id}/github-activity${qs}`, { headers: authHeaders() })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(err.error ?? "Failed to fetch GitHub activity")
+    }
+    return res.json()
+  },
+
+  async setGithubRepo(id: string, githubRepo: string): Promise<void> {
+    const res = await fetch(`${apiBase()}/local-projects/${id}/github-repo`, {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ github_repo: githubRepo }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(err.error ?? "Failed to set GitHub repo")
+    }
+  },
+
+  async deleteLocalProject(id: string, options?: { deleteDisk?: boolean }): Promise<void> {
+    const qs = options?.deleteDisk ? "?deleteDisk=true" : ""
+    const res = await fetch(`${apiBase()}/local-projects/${id}${qs}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(err.error ?? "Failed to delete local project")
+    }
+  },
+
   async getResourceProjects(): Promise<Array<{ url: string; project_id: string; project_name: string; join_id: string }>> {
     const res = await fetch(`${apiBase()}/el/resource-projects`, { headers: authHeaders() })
     if (!res.ok) return []
@@ -325,6 +397,83 @@ export const elApi = {
     if (limit) qs.set("limit", String(limit))
     const res = await fetch(`${apiBase()}/el/projects/${id}/commits?${qs}`, { headers: authHeaders() })
     if (!res.ok) return { commits: [] }
+    return res.json()
+  },
+
+  async listLocalProjects(): Promise<LocalProject[]> {
+    const res = await fetch(`${apiBase()}/local-projects`, { headers: authHeaders() })
+    if (!res.ok) return []
+    const data = await res.json() as { projects: LocalProject[] }
+    return data.projects
+  },
+
+  async getLocalProject(id: string): Promise<LocalProject & { brain_files: string[] }> {
+    const res = await fetch(`${apiBase()}/local-projects/${id}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Local project not found")
+    return res.json()
+  },
+
+  async getLocalProjectSources(id: string): Promise<Array<{ name: string; size: number; title: string; url: string | null; source_type: string; status: "processing" | "done" | "failed" }>> {
+    const res = await fetch(`${apiBase()}/local-projects/${id}/sources`, { headers: authHeaders() })
+    if (!res.ok) return []
+    const data = await res.json() as { sources: Array<{ name: string; size: number; title: string; url: string | null; source_type: string; status: "processing" | "done" | "failed" }> }
+    return data.sources
+  },
+
+  async getLocalProjectBrainFile(id: string, path: string): Promise<{ content: string; path: string }> {
+    const res = await fetch(`${apiBase()}/local-projects/${id}/brain-file?path=${encodeURIComponent(path)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to read brain file")
+    return res.json()
+  },
+
+  watchLocalProject(projectId: string, onChange: () => void): () => void {
+    const token = getAuthToken()
+    const url = `${apiBase()}/local-projects/${projectId}/watch${token ? `?auth_token=${encodeURIComponent(token)}` : ""}`
+    const es = new EventSource(url)
+    es.addEventListener("change", onChange)
+    return () => es.close()
+  },
+
+  async deleteLocalSource(projectId: string, filename: string): Promise<void> {
+    await fetch(`${apiBase()}/local-projects/${projectId}/sources/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    })
+  },
+
+  async getLocalSourceFileContent(projectId: string, filename: string): Promise<string> {
+    const res = await fetch(`${apiBase()}/local-projects/${projectId}/sources/${encodeURIComponent(filename)}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error("Failed to read source file")
+    return res.text()
+  },
+
+  async getApiRequests(params?: { range?: string; type?: string; status?: string }): Promise<{
+    requests: Array<{ id: string; type: string; status: number; duration_ms: number; document_id: string | null; time_created: number; project_id: string | null }>
+    stats: { total: number; successful: number; avg_latency_ms: number | null; type_counts: Record<string, number> }
+  }> {
+    const q = new URLSearchParams()
+    if (params?.range) q.set("range", params.range)
+    if (params?.type) q.set("type", params.type)
+    if (params?.status) q.set("status", params.status)
+    const res = await fetch(`${apiBase()}/local-projects/api-requests?${q}`, { headers: authHeaders() })
+    if (!res.ok) return { requests: [], stats: { total: 0, successful: 0, avg_latency_ms: null, type_counts: {} } }
+    return res.json()
+  },
+
+  async listAllLocalSources(): Promise<Array<{
+    id: string; project_id: string; project_name: string; filename: string
+    title: string; url: string | null; status: "processing" | "done" | "failed"
+    size: number; time_created: number; source_type?: string
+  }>> {
+    const res = await fetch(`${apiBase()}/local-projects/all-sources`, { headers: authHeaders() })
+    if (!res.ok) return []
+    const data = await res.json() as { sources: any[] }
+    return data.sources
+  },
+
+  async getLocalProjectGraph(id: string): Promise<{ nodes: Array<{ id: string; type: string; label: string; layer: string }>; edges: Array<{ source: string; target: string }> }> {
+    const res = await fetch(`${apiBase()}/local-projects/${id}/graph`, { headers: authHeaders() })
+    if (!res.ok) return { nodes: [], edges: [] }
     return res.json()
   },
 }

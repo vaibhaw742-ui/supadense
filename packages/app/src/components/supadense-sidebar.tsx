@@ -9,7 +9,9 @@ import { useNavigate, useLocation } from "@solidjs/router"
 import { SupadenseMark } from "@/components/supadense-chat-panel"
 import { clearAuthToken, getAuthToken } from "@/utils/server"
 import { useServer } from "@/context/server"
-import { activeSidebarView, setActiveSidebarView, setActiveGraphProjectId, setActiveGraphProjectName } from "@/context/sidebar-view"
+import { activeSidebarView, setActiveSidebarView, setActiveGraphProjectId, setActiveGraphProjectName, activeGraphProjectId } from "@/context/sidebar-view"
+import { elApi } from "@/pages/projects/el-api"
+import { base64Encode } from "@opencode-ai/util/encode"
 
 // ── Design tokens (mirrored from colors_and_type.css) ────────────────────────
 const T = {
@@ -44,16 +46,34 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   {
+    id: "today",
+    label: "Overview",
+    path: "/today",
+    icon: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  },
+  {
+    id: "chat",
+    label: "Playground",
+    path: "/ask",
+    icon: "M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z",
+  },
+  {
+    id: "sources",
+    label: "Documents",
+    path: "/sources",
+    icon: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z",
+  },
+  {
     id: "graph",
-    label: "Graph",
+    label: "Project Tags",
     path: "/projects",
     icon: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M5 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M5 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 10l-3-3M14 10l3-3M10 14l-3 3M14 14l3 3",
   },
   {
-    id: "sources",
-    label: "Sources",
-    path: "/sources",
-    icon: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z",
+    id: "experiments",
+    label: "Graph",
+    path: "/experiments",
+    icon: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0a3 3 0 1 0 6 0M9 14h6M14 3v11",
   },
   {
     id: "notes",
@@ -62,40 +82,10 @@ const NAV_ITEMS: NavItem[] = [
     icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6",
   },
   {
-    id: "experiments",
-    label: "Experiments",
-    path: "/experiments",
-    icon: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0a3 3 0 1 0 6 0M9 14h6M14 3v11",
-  },
-  {
-    id: "members",
-    label: "Members",
-    path: "/members",
-    icon: "M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 20c0-4 3.6-7 8-7s8 3 8 7",
-  },
-  {
-    id: "today",
-    label: "Today",
-    path: "/today",
-    icon: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
-  },
-  {
-    id: "gaps",
-    label: "Gaps",
-    path: "/gaps",
-    icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01",
-  },
-  {
-    id: "review",
-    label: "Review",
-    path: "/review",
-    icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01",
-  },
-  {
-    id: "chat",
-    label: "Ask",
-    path: "/ask",
-    icon: "M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z",
+    id: "requests",
+    label: "Requests",
+    path: "/requests",
+    icon: "M22 12h-4l-3 9L9 3l-3 9H2",
   },
 ]
 
@@ -122,17 +112,15 @@ export function SupadenseSidebar(props: {
   userEmail: string
   onLogout?: () => void
   onCapture?: () => void
+  onPlayground?: () => void
 }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const [profileOpen, setProfileOpen] = createSignal(false)
-
   // On mount: set initial view based on URL so Graph is highlighted on first load
   onMount(() => {
     const p = location.pathname
-    if (p.startsWith("/projects") || p === "/") {
-      setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
-    }
+    // Default view on load
+    setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })
   })
 
   // Active nav id: always driven by activeSidebarView signal first, fall back to URL
@@ -140,22 +128,13 @@ export function SupadenseSidebar(props: {
     const view = activeSidebarView().view
     if (view === "read") return "sources"
     if (view === "notes") return "notes"
-    if (view === "lib") return "graph"
+    if (view === "lib") return "experiments"
+    if (view === "project-tags") return "graph"
+    if (view === "ask") return "chat"
     // For other view values that match a nav id directly
     if (NAV_ITEMS.some(n => n.id === view)) return view
-    // Fall back to URL
-    const p = location.pathname
-    if (p.startsWith("/projects") || p === "/") return "graph"
     return "graph"
   }
-
-  const initials = () => {
-    const e = props.userEmail || ""
-    const name = e.split("@")[0] || "U"
-    return name.substring(0, 2).toUpperCase()
-  }
-
-  const username = () => (props.userEmail || "").split("@")[0] || "user"
 
   return (
     <aside
@@ -271,17 +250,30 @@ export function SupadenseSidebar(props: {
                 data-nav-id={item.id}
                 onClick={() => {
                   if (item.id === "graph") {
-                    // Graph has a real route
-                    setActiveGraphProjectId(null)
-                    setActiveGraphProjectName(null)
-                    setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
-                    navigate("/projects")
+                    // Project Tags virtual panel
+                    setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })
+                  } else if (item.id === "experiments") {
+                    // Graph — navigate to the project's directory session so WikiGraphPanel can render
+                    void elApi.listLocalProjects().then((projects) => {
+                      const first = projects[0]
+                      if (first) {
+                        setActiveGraphProjectId(first.id)
+                        setActiveGraphProjectName(first.name)
+                        setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
+                        // Navigate to /:dir/session so WikiGraphPanel (in SessionRouteContent) renders
+                        navigate(`/${base64Encode(first.local_path)}/session`)
+                      } else {
+                        setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
+                      }
+                    })
+                  } else if (item.id === "chat") {
+                    setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" })
+                    props.onPlayground?.()
                   } else if (item.id === "sources") {
-                    setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" })
+                    setActiveSidebarView({ section: "workspace", view: "read", label: "Documents" })
                   } else if (item.id === "notes") {
                     setActiveSidebarView({ section: "workspace", view: "notes", label: "Eng Notes" })
                   } else {
-                    // For other virtual tabs just switch the view, don't navigate
                     setActiveSidebarView({ section: "workspace", view: item.id, label: item.label })
                   }
                 }}
@@ -351,185 +343,87 @@ export function SupadenseSidebar(props: {
         </For>
       </nav>
 
-      {/* ── Spacer ── */}
-      <div style={{ flex: "1" }} />
+      {/* ── Extra sections ── */}
+      <div style={{ "overflow-y": "auto", flex: "1", padding: "0 8px 8px" }}>
 
-      {/* ── User pill ── */}
-      <div
-        style={{
-          "margin-top": "auto",
-          padding: "12px 10px",
-          "border-top": `1px solid ${T.ground300}`,
-          display: "flex",
-          "align-items": "center",
-          gap: "10px",
-          cursor: "pointer",
-          "border-radius": T.radiusSm,
-          transition: "background 140ms",
-          position: "relative",
-          background: profileOpen() ? T.ground150 : "transparent",
-          "flex-shrink": "0",
-        }}
-        onClick={() => setProfileOpen((v) => !v)}
-        onMouseEnter={(e) => { if (!profileOpen()) e.currentTarget.style.background = T.ground150 }}
-        onMouseLeave={(e) => { if (!profileOpen()) e.currentTarget.style.background = "transparent" }}
-      >
-        {/* Avatar */}
-        <div
-          style={{
-            width: "30px",
-            height: "30px",
-            "border-radius": "50%",
-            background: T.amber300,
-            color: T.ground050,
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            "font-family": T.fontMono,
-            "font-weight": "600",
-            "font-size": "12px",
-            "flex-shrink": "0",
-          }}
-        >
-          {initials()}
+        {/* ANALYTICS */}
+        <div style={{ padding: "14px 8px 4px", "font-family": T.fontMono, "font-size": "9px", "letter-spacing": "0.14em", "text-transform": "uppercase", color: T.ink400 }}>
+          analytics
         </div>
+        {[
+          { id: "gaps",   label: "Gaps",   badge: "14 open", icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" },
+          { id: "review", label: "Review", badge: "7 due",   icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01" },
+        ].map(item => (
+          <button type="button" onClick={() => setActiveSidebarView({ section: "workspace", view: item.id, label: item.label })}
+            style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", "font-family": T.fontSans, color: T.ink300, "border-radius": T.radiusXs, cursor: "pointer", border: "none", background: "transparent", "text-align": "left", width: "100%", transition: "background 100ms, color 100ms" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.ground150; e.currentTarget.style.color = T.ink100 }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.ink300 }}
+          >
+            <NavIcon d={item.icon} active={false} />
+            <span style={{ flex: "1" }}>{item.label}</span>
+            <span style={{ "font-family": T.fontMono, "font-size": "10px", color: T.ink400 }}>{item.badge}</span>
+          </button>
+        ))}
 
-        {/* Name + meta */}
-        <div style={{ "min-width": "0" }}>
-          <div
-            style={{
-              "font-size": "13px",
-              "font-weight": "500",
-              color: T.ink100,
-              "line-height": "1.1",
-              "font-family": T.fontSans,
-              overflow: "hidden",
-              "text-overflow": "ellipsis",
-              "white-space": "nowrap",
-            }}
-          >
-            {username()}
-          </div>
-          <div
-            style={{
-              "font-family": T.fontMono,
-              "font-size": "10px",
-              "letter-spacing": "0.06em",
-              color: T.ink400,
-              "text-transform": "uppercase",
-            }}
-          >
-            {props.userEmail || "—"}
-          </div>
+        {/* DATA */}
+        <div style={{ padding: "14px 8px 4px", "font-family": T.fontMono, "font-size": "9px", "letter-spacing": "0.14em", "text-transform": "uppercase", color: T.ink400 }}>
+          data
         </div>
-
-        {/* Caret */}
-        <svg
-          width="12" height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={T.ink400}
-          stroke-width="2.2"
-          style={{
-            "margin-left": "auto",
-            "flex-shrink": "0",
-            transform: profileOpen() ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 160ms",
-          }}
-        >
-          <polyline points="18 15 12 9 6 15" />
-        </svg>
-
-        {/* Profile popover */}
-        <Show when={profileOpen()}>
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 6px)",
-              left: "8px",
-              width: "200px",
-              background: T.ground150,
-              border: `1px solid ${T.ground400}`,
-              "border-radius": T.radiusMd,
-              "box-shadow": "0 8px 24px rgba(0,0,0,0.18)",
-              padding: "6px",
-              "z-index": "200",
-              display: "flex",
-              "flex-direction": "column",
-              gap: "2px",
-            }}
-            onClick={(e) => e.stopPropagation()}
+        {[
+          { id: "connectors", label: "Connectors", icon: "M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4zM16 10h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2M8 10H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2M12 8v2M12 16v2M8 14h8" },
+          { id: "import",     label: "Import",     icon: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" },
+        ].map(item => (
+          <button type="button" onClick={() => setActiveSidebarView({ section: "workspace", view: item.id, label: item.label })}
+            style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", "font-family": T.fontSans, color: T.ink300, "border-radius": T.radiusXs, cursor: "pointer", border: "none", background: "transparent", "text-align": "left", width: "100%", transition: "background 100ms, color 100ms" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.ground150; e.currentTarget.style.color = T.ink100 }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.ink300 }}
           >
-            {/* Header */}
-            <div
-              style={{
-                padding: "10px 10px 8px",
-                "border-bottom": `1px solid ${T.ground300}`,
-                "margin-bottom": "4px",
-              }}
-            >
-              <div style={{ "font-size": "13px", "font-weight": "600", color: T.ink100, "line-height": "1.2", "font-family": T.fontSans }}>
-                {username()}
-              </div>
-              <div style={{ "font-family": T.fontMono, "font-size": "10px", color: T.ink400, "letter-spacing": "0.04em", "margin-top": "2px" }}>
-                {props.userEmail}
-              </div>
-            </div>
+            <NavIcon d={item.icon} active={false} />
+            <span style={{ flex: "1" }}>{item.label}</span>
+          </button>
+        ))}
 
-            <PopItem
-              icon="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
-              label="Profile"
-              onClick={() => setProfileOpen(false)}
-            />
+        {/* DEVELOPER */}
+        <div style={{ padding: "14px 8px 4px", "font-family": T.fontMono, "font-size": "9px", "letter-spacing": "0.14em", "text-transform": "uppercase", color: T.ink400 }}>
+          developer
+        </div>
+        {[
+          { id: "apikeys",  label: "API Keys", icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" },
+          { id: "agents",   label: "Agents",   icon: "M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zM4 20c0-4 3.6-7 8-7s8 3 8 7M17 8h4M19 6v4" },
+          { id: "plugins",  label: "Plugins",  icon: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z" },
+        ].map(item => (
+          <button type="button" onClick={() => setActiveSidebarView({ section: "workspace", view: item.id, label: item.label })}
+            style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", "font-family": T.fontSans, color: T.ink300, "border-radius": T.radiusXs, cursor: "pointer", border: "none", background: "transparent", "text-align": "left", width: "100%", transition: "background 100ms, color 100ms" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.ground150; e.currentTarget.style.color = T.ink100 }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.ink300 }}
+          >
+            <NavIcon d={item.icon} active={false} />
+            <span style={{ flex: "1" }}>{item.label}</span>
+          </button>
+        ))}
 
-            <div style={{ height: "1px", background: T.ground300, margin: "2px 0" }} />
+        {/* ORGANIZATION */}
+        <div style={{ padding: "14px 8px 4px", "font-family": T.fontMono, "font-size": "9px", "letter-spacing": "0.14em", "text-transform": "uppercase", color: T.ink400 }}>
+          organization
+        </div>
+        {[
+          { id: "team",     label: "Team",     icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
+          { id: "billing",  label: "Billing",  icon: "M1 4h22v16H1zM1 9h22" },
+          { id: "settings", label: "Settings", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" },
+        ].map(item => (
+          <button type="button" onClick={() => setActiveSidebarView({ section: "workspace", view: item.id, label: item.label })}
+            style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", "font-family": T.fontSans, color: T.ink300, "border-radius": T.radiusXs, cursor: "pointer", border: "none", background: "transparent", "text-align": "left", width: "100%", transition: "background 100ms, color 100ms" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = T.ground150; e.currentTarget.style.color = T.ink100 }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.ink300 }}
+          >
+            <NavIcon d={item.icon} active={false} />
+            <span style={{ flex: "1" }}>{item.label}</span>
+          </button>
+        ))}
 
-            <PopItem
-              icon="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
-              label="Log out"
-              danger
-              onClick={() => {
-                setProfileOpen(false)
-                props.onLogout?.()
-              }}
-            />
-          </div>
-        </Show>
       </div>
-    </aside>
-  )
-}
 
-function PopItem(props: { icon: string; label: string; danger?: boolean; onClick: () => void }) {
-  const [hov, setHov] = createSignal(false)
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: "flex",
-        "align-items": "center",
-        gap: "10px",
-        width: "100%",
-        padding: "7px 10px",
-        background: hov() ? T.ground300 : "transparent",
-        border: "none",
-        "border-radius": T.radiusXs,
-        cursor: "pointer",
-        "font-size": "13px",
-        "font-family": T.fontSans,
-        color: props.danger ? "#dc2626" : T.ink200,
-        "text-align": "left",
-        transition: "background 100ms",
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d={props.icon} />
-      </svg>
-      {props.label}
-    </button>
+    </aside>
   )
 }
 

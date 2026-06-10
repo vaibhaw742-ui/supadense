@@ -88,12 +88,15 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { SupadenseMark, SupadenseChatOverlay } from "@/components/supadense-chat-panel"
+import { SupadenseMark, SupadenseChatOverlay, SupadenseChatPanel } from "@/components/supadense-chat-panel"
 import { SupadenseSidebar, SidebarCollapseToggle } from "@/components/supadense-sidebar"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import { CaptureDialog } from "@/components/capture-dialog"
 import { activeSidebarView, setActiveSidebarView, setActiveSourceName } from "@/context/sidebar-view"
 import { ReadPanel } from "@/pages/read-panel"
+import ProjectsPanel from "@/pages/projects/projects-panel"
+import { RequestsPanel } from "@/pages/requests-panel"
+import { ImportPanel } from "@/pages/import-panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2240,9 +2243,9 @@ export default function Layout(props: ParentProps) {
                 </button>
 
                 {/* Sources */}
-                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("read") || h("read") ? C.text : C.textSub, background: a("read") ? C.raised : h("read") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("read") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("read")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSourceName(null); setActiveSidebarView({ section: "workspace", view: "read", label: "Sources" }) }}>
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("read") || h("read") ? C.text : C.textSub, background: a("read") ? C.raised : h("read") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("read") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("read")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSourceName(null); setActiveSidebarView({ section: "workspace", view: "read", label: "Documents" }) }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("read") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                  <span style={{ flex: "1" }}>Sources</span>
+                  <span style={{ flex: "1" }}>Documents</span>
                   <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("read") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>3 new</span>
                 </button>
 
@@ -2254,9 +2257,9 @@ export default function Layout(props: ParentProps) {
                 </button>
 
                 {/* Experiments */}
-                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("experiments") || h("experiments") ? C.text : C.textSub, background: a("experiments") ? C.raised : h("experiments") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("experiments") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("experiments")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "experiments", label: "Experiments" })}>
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("experiments") || h("experiments") ? C.text : C.textSub, background: a("experiments") ? C.raised : h("experiments") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("experiments") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("experiments")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "experiments", label: "Project Tags" })}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("experiments") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0a3 3 0 1 0 6 0M9 14h6"/><path d="M14 3v11"/></svg>
-                  <span style={{ flex: "1" }}>Experiments</span>
+                  <span style={{ flex: "1" }}>Project Tags</span>
                 </button>
 
                 {/* Members */}
@@ -2266,9 +2269,9 @@ export default function Layout(props: ParentProps) {
                 </button>
 
                 {/* Today */}
-                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("dash") || h("dash") ? C.text : C.textSub, background: a("dash") ? C.raised : h("dash") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("dash") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("dash")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "dash", label: "Today" })}>
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("dash") || h("dash") ? C.text : C.textSub, background: a("dash") ? C.raised : h("dash") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("dash") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("dash")} onMouseLeave={() => setHoveredView("")} onClick={() => setActiveSidebarView({ section: "workspace", view: "dash", label: "Overview" })}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("dash") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                  <span style={{ flex: "1" }}>Today</span>
+                  <span style={{ flex: "1" }}>Overview</span>
                   <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "10px", color: a("dash") ? C.amber : C.textMuted, "letter-spacing": "0.04em" }}>7 due</span>
                 </button>
 
@@ -2287,9 +2290,9 @@ export default function Layout(props: ParentProps) {
                 </button>
 
                 {/* Ask */}
-                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("ask") || h("ask") ? C.text : C.textSub, background: a("ask") ? C.raised : h("ask") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("ask") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("ask")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSidebarView({ section: "workspace", view: "ask", label: "Ask" }); const dir = worktree(); if (dir) navigateWithSidebarReset(`/${slug()}/session`) }}>
+                <button type="button" style={{ padding: "7px 10px", display: "flex", "align-items": "center", gap: "10px", "font-size": "13px", color: a("ask") || h("ask") ? C.text : C.textSub, background: a("ask") ? C.raised : h("ask") ? C.surface : "transparent", "border-radius": "2px", cursor: "pointer", border: "none", "text-align": "left", width: "100%", "font-family": "inherit", "box-shadow": a("ask") ? `inset 2px 0 0 0 ${C.amber}` : "none" }} onMouseEnter={() => setHoveredView("ask")} onMouseLeave={() => setHoveredView("")} onClick={() => { setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" }); const dir = worktree(); if (dir) navigateWithSidebarReset(`/${slug()}/session`) }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={a("ask") ? C.amber : C.textMuted} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
-                  <span style={{ flex: "1" }}>Ask</span>
+                  <span style={{ flex: "1" }}>Playground</span>
                 </button>
 
               </div>
@@ -2511,6 +2514,7 @@ export default function Layout(props: ParentProps) {
           userEmail={getTopLevelUserEmail()}
           onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
           onCapture={() => setTopbarCaptureOpen(true)}
+          onPlayground={() => setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" })}
         />
       </div>
 
@@ -2529,6 +2533,8 @@ export default function Layout(props: ParentProps) {
           sidebarCollapsed={supadenseSidebarCollapsed()}
           onToggleSidebar={() => setSupadenseSidebarCollapsed(v => !v)}
           onCapture={() => setTopbarCaptureOpen(true)}
+          userEmail={getTopLevelUserEmail()}
+          onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
         />
 
         {/* ── Virtual panels (Sources etc.) — shown instead of router children ── */}
@@ -2538,7 +2544,31 @@ export default function Layout(props: ParentProps) {
           </div>
         </Show>
 
-        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden", display: activeSidebarView().view === "read" ? "none" : undefined }}>
+        <Show when={activeSidebarView().view === "ask"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff", height: "100%", display: "flex", "flex-direction": "column" }}>
+            <SupadenseChatPanel onClose={() => setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })} />
+          </div>
+        </Show>
+
+        <Show when={activeSidebarView().view === "project-tags"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#f9fafb" }}>
+            <ProjectsPanel />
+          </div>
+        </Show>
+
+        <Show when={activeSidebarView().view === "requests"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff" }}>
+            <RequestsPanel />
+          </div>
+        </Show>
+
+        <Show when={activeSidebarView().view === "import"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden auto", background: "#ffffff" }}>
+            <ImportPanel />
+          </div>
+        </Show>
+
+        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden", display: (activeSidebarView().view === "read" || activeSidebarView().view === "ask" || activeSidebarView().view === "project-tags" || activeSidebarView().view === "requests" || activeSidebarView().view === "import") ? "none" : undefined }}>
           <div class="size-full relative overflow-x-hidden">
             <nav
               aria-label={language.t("sidebar.nav.projectsAndSessions")}
