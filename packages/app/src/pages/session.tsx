@@ -1142,6 +1142,10 @@ const changesOptions = createMemo<ChangeMode[]>(() => {
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    fillInput: (text: string) => {
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      requestAnimationFrame(() => inputRef?.focus())
+    },
     review: reviewTab,
   })
 

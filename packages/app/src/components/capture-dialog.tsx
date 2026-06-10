@@ -27,18 +27,31 @@ export function CaptureDialog(props: Props) {
   const [pasteText, setPasteText] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [preview, setPreview] = createSignal<{ domain: string } | null>(null)
-  const [selectedProjectId, setSelectedProjectId] = createSignal<string | null>(null)
+  // Multi-select: set of selected project ids
+  const [selectedProjectIds, setSelectedProjectIds] = createSignal<Set<string>>(new Set())
 
-  const [projects] = createResource(() => elApi.listProjects().catch(() => []))
+  const [localProjects] = createResource(() => elApi.listLocalProjects().catch(() => []))
 
-  // Auto-select the default project once projects load
+  // Only local projects
+  const allProjects = createMemo(() =>
+    (localProjects() ?? []).map((p) => ({ id: p.id, name: p.name, type: "local" as const }))
+  )
+
+  // Auto-select first project once loaded
   createEffect(() => {
-    const allProjects = projects()
-    if (allProjects && selectedProjectId() === null) {
-      const def = allProjects.find((p) => p.is_default) ?? allProjects[0]
-      if (def) setSelectedProjectId(def.id)
+    const combined = allProjects()
+    if (combined.length > 0 && selectedProjectIds().size === 0) {
+      setSelectedProjectIds(new Set([combined[0].id]))
     }
   })
+
+  function toggleProject(id: string) {
+    setSelectedProjectIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+      return next
+    })
+  }
 
   let inputRef: HTMLInputElement | undefined
 
@@ -68,43 +81,71 @@ export function CaptureDialog(props: Props) {
     const isUrl = tab() === "url" && rawUrl
     const isText = tab() === "paste" && rawText
     if ((!isUrl && !isText) || loading()) return
+
+    const ids = selectedProjectIds()
+    if (ids.size === 0) {
+      showToast({ variant: "error", title: "Select at least one project" })
+      return
+    }
+
     setLoading(true)
     try {
-      // Determine target project: explicitly selected, or the default project, or first available
-      const allProjects = projects() ?? []
-      const pid = selectedProjectId()
-        ?? allProjects.find((p) => p.is_default)?.id
-        ?? allProjects[0]?.id
+      const token = getAuthToken()
+      const projects = allProjects().filter(p => ids.has(p.id))
 
-      if (!pid) {
-        showToast({ variant: "error", title: "No project found — create a project first" })
-        setLoading(false)
-        return
-      }
-
-      if (isUrl) {
-        await elApi.addResource(pid, rawUrl, "supplementary")
-        showToast({ variant: "success", title: "Capturing in background…" })
-      } else if (isText) {
-        // Text capture: post to el project resource endpoint with content
-        const token = getAuthToken()
-        const res = await fetch(`${kbApiBase()}/el/projects/${pid}/resources`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ text: rawText, role: "supplementary" }),
+      const results = await Promise.allSettled(
+        projects.map(async (proj) => {
+          if (isUrl) {
+            if (proj.type === "local") {
+              const res = await fetch(`${kbApiBase()}/local-projects/${proj.id}/sources`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ url: rawUrl }),
+              })
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({})) as { error?: string }
+                throw new Error(err.error ?? "Capture failed")
+              }
+            } else {
+              await elApi.addResource(proj.id, rawUrl, "supplementary")
+            }
+          } else if (isText) {
+            if (proj.type === "local") {
+              const res = await fetch(`${kbApiBase()}/local-projects/${proj.id}/sources`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ content: rawText, type: "note" }),
+              })
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({})) as { error?: string }
+                throw new Error(err.error ?? "Capture failed")
+              }
+            } else {
+              const res = await fetch(`${kbApiBase()}/el/projects/${proj.id}/resources`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ text: rawText, role: "supplementary" }),
+              })
+              if (!res.ok) {
+                const text = await res.text().catch(() => "")
+                let errMsg = "Capture failed"
+                try { const j = JSON.parse(text); errMsg = j.error ?? j.data?.message ?? j.message ?? (text.slice(0, 120) || errMsg) } catch {}
+                throw new Error(errMsg)
+              }
+            }
+          }
         })
-        if (!res.ok) {
-          const text = await res.text().catch(() => "")
-          let errMsg = "Capture failed"
-          try { const j = JSON.parse(text); errMsg = j.error ?? j.data?.message ?? j.message ?? (text.slice(0, 120) || errMsg) } catch {}
-          showToast({ variant: "error", title: errMsg })
-          setLoading(false)
-          return
-        }
-        showToast({ variant: "success", title: "Captured!" })
+      )
+
+      const failed = results.filter(r => r.status === "rejected")
+      const succeeded = results.filter(r => r.status === "fulfilled").length
+
+      if (succeeded > 0) {
+        const label = projects.length === 1 ? projects[0].name : `${succeeded} project${succeeded > 1 ? "s" : ""}`
+        showToast({ variant: "success", title: `Queued for ${label}` })
+      }
+      if (failed.length > 0) {
+        showToast({ variant: "error", title: `${failed.length} project(s) failed` })
       }
 
       setActiveSidebarView({ section: "workspace", view: "read", label: "Read" })
@@ -318,35 +359,68 @@ export function CaptureDialog(props: Props) {
 
           {/* Project selector — shown on URL and Paste tabs */}
           <Show when={tab() === "url" || tab() === "paste"}>
-            <div style={{ padding: "10px 18px 0", display: "flex", "align-items": "center", gap: "10px" }}>
-              <span style={{ "font-size": "11px", color: "var(--color-text-weak)", "white-space": "nowrap", "flex-shrink": "0" }}>add to project:</span>
+            <div style={{ padding: "10px 18px 0" }}>
+              <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "8px" }}>
+                <span style={{ "font-size": "11px", color: "var(--color-text-weak)", "white-space": "nowrap" }}>add to project:</span>
+                <Show when={selectedProjectIds().size > 1}>
+                  <span style={{ "font-size": "10px", color: "#d68a2e", "font-family": "'Geist Mono', monospace" }}>
+                    {selectedProjectIds().size} selected
+                  </span>
+                </Show>
+              </div>
               <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
-                <Show when={!projects.loading}>
-                  <For each={projects() ?? []}>
-                    {(project) => (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedProjectId(project.id)}
-                        style={{
-                          padding: "2px 10px",
-                          "border-radius": "4px",
-                          border: selectedProjectId() === project.id ? "1px solid #d68a2e" : "1px solid var(--border-base)",
-                          background: selectedProjectId() === project.id ? "rgba(214,138,46,0.1)" : "none",
-                          color: selectedProjectId() === project.id ? "#d68a2e" : "var(--color-text-weak)",
-                          "font-size": "11px",
-                          "font-family": "inherit",
-                          cursor: "pointer",
-                          transition: "all 100ms",
-                          "max-width": "160px",
-                          overflow: "hidden",
-                          "text-overflow": "ellipsis",
-                          "white-space": "nowrap",
-                        }}
-                      >
-                        {project.name}
-                      </button>
-                    )}
+                <Show when={!localProjects.loading} fallback={
+                  <span style={{ "font-size": "11px", color: "var(--color-text-dimmed, var(--text-weak))" }}>Loading…</span>
+                }>
+                  <For each={allProjects()}>
+                    {(project) => {
+                      const isSelected = () => selectedProjectIds().has(project.id)
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => toggleProject(project.id)}
+                          style={{
+                            display: "inline-flex", "align-items": "center", gap: "5px",
+                            padding: "3px 10px",
+                            "border-radius": "4px",
+                            border: isSelected() ? "1px solid #d68a2e" : "1px solid var(--border-base)",
+                            background: isSelected() ? "rgba(214,138,46,0.1)" : "none",
+                            color: isSelected() ? "#d68a2e" : "var(--color-text-weak)",
+                            "font-size": "11px",
+                            "font-family": "inherit",
+                            cursor: "pointer",
+                            transition: "all 100ms",
+                            "max-width": "160px",
+                            overflow: "hidden",
+                            "text-overflow": "ellipsis",
+                            "white-space": "nowrap",
+                          }}
+                        >
+                          {/* Checkbox indicator */}
+                          <span style={{
+                            width: "12px", height: "12px", "border-radius": "3px", "flex-shrink": "0",
+                            border: isSelected() ? "1.5px solid #d68a2e" : "1.5px solid var(--border-base)",
+                            background: isSelected() ? "#d68a2e" : "none",
+                            display: "inline-flex", "align-items": "center", "justify-content": "center",
+                            transition: "all 100ms",
+                          }}>
+                            <Show when={isSelected()}>
+                              <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                                <polyline points="1.5,5 4,7.5 8.5,2.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                              </svg>
+                            </Show>
+                          </span>
+                          {project.name}
+                          <Show when={project.type === "local"}>
+                            <span style={{ "font-size": "9px", opacity: "0.6" }}>cli</span>
+                          </Show>
+                        </button>
+                      )
+                    }}
                   </For>
+                  <Show when={allProjects().length === 0}>
+                    <span style={{ "font-size": "11px", color: "var(--color-text-dimmed, var(--text-weak))" }}>No projects — run supadense init</span>
+                  </Show>
                 </Show>
               </div>
             </div>

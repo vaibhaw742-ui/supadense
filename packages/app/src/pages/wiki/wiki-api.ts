@@ -115,7 +115,7 @@ dirSlug: () => params.dir,
 
 export interface GraphNode {
   id: string
-  type: "category" | "subcategory" | "resource" | "group" | "project" | "directory" | "github"
+  type: "category" | "subcategory" | "resource" | "group" | "project" | "directory" | "github" | "source"
   label: string
   color?: string
   slug?: string

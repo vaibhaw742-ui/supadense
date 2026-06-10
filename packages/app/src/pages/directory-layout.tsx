@@ -76,7 +76,6 @@ export default function Layout(props: ParentProps) {
         <SDKProvider directory={() => resolved}>
           <SyncProvider>
             <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-            <SupadenseFAB />
           </SyncProvider>
         </SDKProvider>
       )}

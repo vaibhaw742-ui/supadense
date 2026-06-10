@@ -16,6 +16,7 @@ import {
   ResourceAttachmentPart,
 } from "@/context/prompt"
 import { useWikiApi } from "@/pages/wiki/wiki-api"
+import { elApi } from "@/pages/projects/el-api"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -647,6 +648,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       addPart({ type: "resource", id: option.id, title: option.title, content: "@" + option.title, start: 0, end: 0 })
     } else if (option.type === "note") {
       addPart({ type: "text", content: `@note:${option.title}`, start: 0, end: 0 })
+    } else if (option.type === "project") {
+      addPart({ type: "text", content: `@project:${option.title} (id:${option.id})`, start: 0, end: 0 })
+    } else if (option.type === "el-source") {
+      addPart({ type: "resource", id: option.id, title: option.title, content: "@" + option.title, start: 0, end: 0 })
     } else {
       addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
     }
@@ -658,6 +663,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!x) return ""
     if (x.type === "agent") return `agent:${x.name}`
     if (x.type === "resource") return `resource:${x.id}`
+    if (x.type === "project") return `project:${x.id}`
+    if (x.type === "el-source") return `el-source:${x.id}`
     if (x.type === "note") return `note:${x.slug}`
     return `file:${x.path}`
   }
@@ -687,18 +694,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           .map((r): AtOption => ({ type: "resource", id: r.id, title: r.title!, display: r.title! }))
       } catch {}
 
-      if (!query.trim()) return [...agents, ...pinned, ...resourceOptions]
+      let projectOptions: AtOption[] = []
+      let elSourceOptions: AtOption[] = []
+      try {
+        const projects = await elApi.listProjects()
+        projectOptions = projects
+          .filter((p) => !q || p.name.toLowerCase().includes(q))
+          .map((p): AtOption => ({ type: "project", id: p.id, title: p.name, display: p.name }))
+
+        const allSources = await elApi.listAllResources()
+        elSourceOptions = allSources
+          .filter((r) => r.status === "done" && r.title)
+          .filter((r) => !q || r.title!.toLowerCase().includes(q))
+          .slice(0, 20)
+          .map((r): AtOption => ({ type: "el-source", id: r.id, title: r.title!, projectId: "", display: r.title! }))
+      } catch {}
+
+      if (!query.trim()) return [...agents, ...pinned, ...projectOptions, ...elSourceOptions, ...resourceOptions]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions, ...resourceOptions]
+      return [...agents, ...pinned, ...fileOptions, ...projectOptions, ...elSourceOptions, ...resourceOptions]
     },
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.type === "resource") return "resource"
+      if (item.type === "project") return "project"
+      if (item.type === "el-source") return "el-source"
       if (item.type === "file" && item.recent) return "recent"
       return "file"
     },
@@ -706,8 +731,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const rank = (category: string) => {
         if (category === "agent") return 0
         if (category === "recent") return 1
-        if (category === "resource") return 2
-        return 3
+        if (category === "project") return 2
+        if (category === "el-source") return 3
+        if (category === "resource") return 4
+        return 5
       }
       return rank(a.category) - rank(b.category)
     },
@@ -851,7 +878,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const selectPopoverActive = () => {
     if (store.popover === "at") {
-      if (atLevel() === "top") return // top level is mouse-driven
       const items = atFlat()
       if (items.length === 0) return
       const active = atActive()
@@ -1276,12 +1302,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "Escape") {
-      if (store.popover === "at" && atLevel() !== "top") {
-        setAtLevel("top")
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
       if (store.popover) {
         closePopover()
         event.preventDefault()
@@ -1343,13 +1363,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
       const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
       if (nav || ctrlNav) {
-        if (store.popover === "at" && atLevel() !== "top") {
-          atOnKeyDown(event)
-          event.preventDefault()
-          return
-        }
         if (store.popover === "at") {
-          // top-level: arrow keys and enter are ignored (mouse-driven)
+          atOnKeyDown(event)
           event.preventDefault()
           return
         }

@@ -6,6 +6,7 @@
   "type": "module",
   "packageManager": "bun@1.3.11",
   "scripts": {
+    "supadense": "bun run packages/opencode/src/brain/mcp/supadense-cli.ts",
     "dev": "OPENCODE_DB=/Users/vaibhawkhemka/Desktop/supadense/data/opencode/opencode-local.db bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:all": "bun run dev & bun run dev:web",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",

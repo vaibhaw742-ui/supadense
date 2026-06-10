@@ -13,7 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import PROMPT_KB_CURATOR from "./prompt/kb-curator.txt"
+import PROMPT_BRAIN_CURATOR from "./prompt/brain-curator.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -108,7 +108,7 @@ export namespace Agent {
           const agents: Record<string, Info> = {
             build: {
               name: "build",
-              description: "The default agent. Executes tools based on configured permissions.",
+              description: "The primary Supadense agent. Builds software while maintaining the engineering brain — capturing decisions, patterns, and context as you work.",
               options: {},
               permission: Permission.merge(
                 defaults,
@@ -147,7 +147,7 @@ export namespace Agent {
             },
             general: {
               name: "general",
-              description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+              description: `Research and multi-step execution agent. Use for complex investigations, parallel workstreams, or tasks that span multiple files and systems. Surfaces and captures relevant knowledge to and from the engineering brain.`,
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({
@@ -232,24 +232,21 @@ export namespace Agent {
               ),
               prompt: PROMPT_SUMMARY,
             },
-            "kb-curator": {
-              name: "kb-curator",
-              description: "Background knowledge base curator. Extracts and organizes resource content into the KB wiki following the schema.",
+            "brain-curator": {
+              name: "brain-curator",
+              description: "Engineering brain curator. After a significant session, extracts decisions, patterns, and architectural knowledge and saves them to the brain so future sessions can benefit.",
               mode: "subagent",
               native: true,
               hidden: true,
-              prompt: PROMPT_KB_CURATOR,
+              prompt: PROMPT_BRAIN_CURATOR,
               options: {},
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({
-                  // Allow all KB tools — deny everything else
                   "*": "deny",
-                  kb_workspace_init: "allow",
-                  kb_concept_upsert: "allow",
-                  kb_wiki_build: "allow",
-                  kb_event_log: "allow",
-                  kb_retrieve: "allow",
+                  brain_search: "allow",
+                  brain_save: "allow",
+                  brain_context: "allow",
                   read: "allow",
                 }),
                 user,

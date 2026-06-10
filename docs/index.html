@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supadense Docs — Memory Infrastructure for Engineering Teams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --bg-card:   #161b27;
+      --bg-hover:  #1e2535;
+      --border:    #1e2a3a;
+      --text:      #e2e8f0;
+      --text-dim:  #7a8fa6;
+      --text-muted:#4a5568;
+      --amber:     #d68a2e;
+      --amber-dim: rgba(214,138,46,0.12);
+      --teal:      #14b8a6;
+      --teal-dim:  rgba(20,184,166,0.12);
+      --blue:      #3b82f6;
+      --blue-dim:  rgba(59,130,246,0.12);
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --sidebar-w: 260px;
+      --content-max: 760px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.7; display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ─────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0; border-right: 1px solid var(--border);
+      position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto;
+      padding: 0 0 32px; background: #0c1018;
+    }
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    }
+    .logo-mark {
+      width: 30px; height: 30px; border-radius: 7px;
+      background: linear-gradient(135deg, var(--amber), #b8651a);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; color: var(--text); }
+    .logo-badge { font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 1px; }
+
+    .sidebar-section { padding: 20px 12px 4px; }
+    .sidebar-section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-muted); padding: 0 8px; margin-bottom: 4px;
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 13px; color: var(--text-dim); text-decoration: none;
+      transition: all 120ms;
+    }
+    .sidebar-item:hover { background: var(--bg-hover); color: var(--text); }
+    .sidebar-item.active { background: var(--amber-dim); color: var(--amber); font-weight: 500; }
+    .sidebar-item svg { flex-shrink: 0; opacity: 0.7; }
+    .sidebar-item.active svg { opacity: 1; }
+
+    /* ── Main layout ─────────────────────────────────── */
+    .main { margin-left: var(--sidebar-w); flex: 1; display: flex; }
+    .content { flex: 1; max-width: var(--content-max); padding: 48px 48px 80px; margin: 0 auto; }
+
+    /* Headings */
+    h1 { font-size: 32px; font-weight: 700; line-height: 1.2; color: #fff; margin-bottom: 16px; }
+    h2 { font-size: 22px; font-weight: 700; color: #fff; margin: 48px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    h3 { font-size: 16px; font-weight: 600; color: var(--text); margin: 28px 0 10px; }
+    h4 { font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 20px 0 8px; }
+    p { color: var(--text-dim); margin-bottom: 14px; }
+    a { color: var(--amber); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 20px; color: var(--text-dim); margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+    strong { color: var(--text); font-weight: 600; }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: var(--amber); }
+
+    /* Hero badge */
+    .page-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--amber); background: var(--amber-dim); border: 1px solid rgba(214,138,46,0.25);
+      border-radius: 20px; padding: 4px 12px; margin-bottom: 16px;
+    }
+    .page-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+    /* Callout */
+    .callout {
+      border-left: 3px solid var(--teal); background: var(--teal-dim);
+      border-radius: 0 8px 8px 0; padding: 14px 16px; margin: 20px 0;
+    }
+    .callout.amber { border-color: var(--amber); background: var(--amber-dim); }
+    .callout.blue  { border-color: var(--blue);  background: var(--blue-dim); }
+    .callout-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--teal); margin-bottom: 4px; }
+    .callout.amber .callout-title { color: var(--amber); }
+    .callout.blue  .callout-title { color: var(--blue); }
+    .callout p { margin: 0; font-size: 13.5px; }
+
+    /* Code block */
+    .code-block { background: #0c1018; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 20px 0; }
+    .code-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); }
+    .code-lang { font-size: 11px; font-weight: 600; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.08em; }
+    .code-copy { font-size: 11px; color: var(--text-muted); cursor: pointer; background: none; border: none; padding: 0; font-family: 'Inter', sans-serif; }
+    .code-copy:hover { color: var(--text); }
+    pre { padding: 18px 20px; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.7; color: #c9d1d9; }
+    .kw { color: #ff79c6; }
+    .fn { color: #50fa7b; }
+    .str { color: #f1fa8c; }
+    .cm { color: #6272a4; }
+    .var { color: #8be9fd; }
+    .num { color: #bd93f9; }
+
+    /* Cards */
+    .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 24px 0; }
+    .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px; text-decoration: none; color: inherit; display: block;
+      transition: all 160ms; cursor: pointer;
+    }
+    .card:hover { border-color: var(--amber); background: var(--bg-hover); transform: translateY(-1px); }
+    .card-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; font-size: 18px; }
+    .card-icon.amber { background: var(--amber-dim); }
+    .card-icon.teal  { background: var(--teal-dim); }
+    .card-icon.blue  { background: var(--blue-dim); }
+    .card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--text); border: none; padding: 0; }
+    .card p  { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .card .card-arrow { margin-top: 14px; font-size: 12px; color: var(--amber); font-weight: 500; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; margin: 20px 0; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th { background: var(--bg-card); color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    td { padding: 11px 16px; color: var(--text-dim); border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-hover); }
+
+    /* Steps */
+    .steps { margin: 24px 0; }
+    .step { display: flex; gap: 16px; margin-bottom: 28px; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--amber-dim); border: 1.5px solid var(--amber); color: var(--amber); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+    .step-body h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+    .step-body p  { margin: 0 0 8px; }
+
+    /* Pipeline */
+    .pipeline { display: flex; align-items: center; gap: 0; margin: 20px 0; flex-wrap: wrap; }
+    .pipeline-step { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); }
+    .pipeline-arrow { color: var(--text-muted); padding: 0 6px; font-size: 14px; }
+
+    /* Badge */
+    .badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 4px; }
+    .badge.green { background: rgba(34,197,94,0.12); color: var(--green); }
+    .badge.amber { background: var(--amber-dim); color: var(--amber); }
+    .badge.blue  { background: var(--blue-dim);  color: var(--blue); }
+    .badge.teal  { background: var(--teal-dim);  color: var(--teal); }
+
+    /* Page nav */
+    .page-nav { display: flex; justify-content: space-between; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .page-nav a { display: flex; flex-direction: column; gap: 4px; text-decoration: none; padding: 14px 18px; border: 1px solid var(--border); border-radius: 8px; min-width: 180px; transition: all 120ms; }
+    .page-nav a:hover { border-color: var(--amber); background: var(--amber-dim); }
+    .page-nav .nav-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .page-nav .nav-title { font-size: 14px; color: var(--text); font-weight: 500; }
+    .page-nav .next { text-align: right; margin-left: auto; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Section pages hidden by default */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Right TOC */
+    .toc { width: 200px; flex-shrink: 0; padding: 48px 0 0 32px; }
+    .toc-inner { position: sticky; top: 32px; }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; }
+    .toc-item { display: block; font-size: 12px; color: var(--text-muted); text-decoration: none; padding: 4px 0; border-left: 2px solid transparent; padding-left: 10px; transition: all 100ms; }
+    .toc-item:hover { color: var(--text); border-color: var(--text-muted); }
+    .toc-item.active { color: var(--amber); border-color: var(--amber); }
+
+    @media (max-width: 900px) {
+      .toc { display: none; }
+      .content { padding: 32px 24px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">S</div>
+    <div>
+      <div class="logo-text">Supadense</div>
+      <div class="logo-badge">docs · v1.0</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Getting Started</div>
+    <a class="sidebar-item active" onclick="showPage('intro')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Introduction
+    </a>
+    <a class="sidebar-item" onclick="showPage('quickstart')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Quickstart
+    </a>
+    <a class="sidebar-item" onclick="showPage('concepts')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      How It Works
+    </a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Core Concepts</div>
+    <a class="sidebar-item" onclick="showPage('brain')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+      Brain Layers
+    </a>
+    <a class="sidebar-item" onclick="showPage('sources')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Sources
+    </a>
+    <a class="sidebar-item" onclick="showPage('graph')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      Knowledge Graph
+    </a>
+    <a class="sidebar-item" onclick="showPage('mcp')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      MCP Server
+    </a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">CLI Reference</div>
+    <a class="sidebar-item" onclick="showPage('cli-init')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      init / deinit
+    </a>
+    <a class="sidebar-item" onclick="showPage('cli-sources')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      sources
+    </a>
+    <a class="sidebar-item" onclick="showPage('cli-brain')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      brain
+    </a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Guides</div>
+    <a class="sidebar-item" onclick="showPage('teams')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Teams & Monorepos
+    </a>
+    <a class="sidebar-item" onclick="showPage('github')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+      GitHub Integration
+    </a>
+  </div>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- INTRO PAGE -->
+  <div class="content page active" id="page-intro">
+    <div class="page-badge">Introduction</div>
+    <h1>Memory Infrastructure for Engineering Teams</h1>
+    <p style="font-size:17px;color:var(--text);line-height:1.6;margin-bottom:24px;">
+      Supadense gives every developer and engineering team a persistent, local-first brain that lives inside the codebase — capturing decisions, docs, and context so Claude Code always knows what matters.
+    </p>
+
+    <div class="callout amber">
+      <div class="callout-title">Local-First by Design</div>
+      <p>Your brain files live in <code>.supadense/</code> inside your project. Nothing leaves your machine unless you push it. No vendor lock-in. Works offline. Commits alongside code.</p>
+    </div>
+
+    <h2>What Is Supadense?</h2>
+    <p>When you work on a codebase with Claude Code, context disappears between sessions. Architecture decisions, why you chose one library over another, that tricky edge case you solved last week — all gone. Supadense solves this by maintaining a <strong>structured knowledge layer</strong> per project that Claude automatically reads and writes.</p>
+
+    <p>It's three things in one:</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon amber">🧠</div>
+        <h3>Persistent Brain</h3>
+        <p>L0 / L1 / L2 layered memory that grows as you work. Decisions, patterns, and summaries — auto-synthesised by Claude.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon teal">📄</div>
+        <h3>Source Library</h3>
+        <p>Capture URLs, PDFs, notes, and docs into <code>.supadense/sources/</code>. Airtop extracts clean markdown from any page.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon blue">🔗</div>
+        <h3>MCP Server</h3>
+        <p>Claude Code reads and writes memory via a local MCP server wired up automatically through <code>.mcp.json</code>.</p>
+      </div>
+    </div>
+
+    <h2>Who Is It For?</h2>
+
+    <div class="card-grid cols-3">
+      <div class="card">
+        <div class="card-icon amber">👩‍💻</div>
+        <h3>Solo Developers</h3>
+        <p>Never lose context between Claude sessions. Your decisions persist.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon teal">👥</div>
+        <h3>Engineering Teams</h3>
+        <p>Shared <code>.supadense/brain/</code> committed to git. New joiners onboard instantly.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon blue">🏗️</div>
+        <h3>Monorepos</h3>
+        <p>One brain per service, or a shared root brain — your choice.</p>
+      </div>
+    </div>
+
+    <h2>How It Compares</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Supadense</th><th>RAG tools (cloud)</th><th>Context window tricks</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Privacy</strong></td><td><span class="badge green">Local-first</span></td><td><span class="badge amber">Cloud</span></td><td><span class="badge green">Local</span></td></tr>
+          <tr><td><strong>Persists across sessions</strong></td><td>✅</td><td>✅</td><td>❌</td></tr>
+          <tr><td><strong>Git-trackable</strong></td><td>✅ commits with code</td><td>❌</td><td>❌</td></tr>
+          <tr><td><strong>Team-shareable</strong></td><td>✅ via git</td><td>✅ via API</td><td>❌</td></tr>
+          <tr><td><strong>Works offline</strong></td><td>✅</td><td>❌</td><td>✅</td></tr>
+          <tr><td><strong>IDE integration</strong></td><td>✅ MCP auto-wired</td><td>Manual</td><td>Manual</td></tr>
+          <tr><td><strong>Source capture</strong></td><td>✅ URLs, PDFs, notes</td><td>Varies</td><td>❌</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="page-nav">
+      <span></span>
+      <a class="next" onclick="showPage('quickstart')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">Quickstart</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- QUICKSTART PAGE -->
+  <div class="content page" id="page-quickstart">
+    <div class="page-badge">Quickstart</div>
+    <h1>Up and Running in 2 Minutes</h1>
+    <p>Install the CLI, log in, and initialise your first project.</p>
+
+    <h2>1. Install</h2>
+    <p>Supadense requires <strong>Bun</strong> (≥ 1.0) and <strong>Claude Code</strong>.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre><span class="cm"># Install Bun if you don't have it</span>
+curl -fsSL https://bun.sh/install | bash
+
+<span class="cm"># Install Supadense CLI</span>
+curl -fsSL https://supadense.ai/install.sh | bash</pre>
+    </div>
+
+    <h2>2. Log In</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense login</pre>
+    </div>
+
+    <p>This stores your API token at <code>~/.supadense/config.json</code>. The token is only used to sync brain files to your Supadense account if you choose to push.</p>
+
+    <h2>3. Initialise a Project</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre><span class="kw">cd</span> ~/projects/my-api
+supadense init</pre>
+    </div>
+
+    <p>This creates <code>.supadense/</code> inside your project and writes <code>.mcp.json</code> so Claude Code automatically connects.</p>
+
+    <div class="callout">
+      <div class="callout-title">What gets created</div>
+      <p><code>.supadense/brain/L0/</code> — raw decisions &amp; facts<br/>
+      <code>.supadense/brain/L1/</code> — synthesised summaries<br/>
+      <code>.supadense/brain/L2/</code> — durable patterns<br/>
+      <code>.supadense/sources/</code> &nbsp;— captured docs &amp; URLs<br/>
+      <code>.mcp.json</code> — MCP server config for Claude Code</p>
+    </div>
+
+    <h2>4. Start Claude Code</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>claude</pre>
+    </div>
+
+    <p>Claude Code picks up <code>.mcp.json</code> automatically. The <code>supadense-brain</code> MCP tool is now available in every session. Claude will read relevant context before answering and write decisions back to memory.</p>
+
+    <h2>5. Capture Your First Source</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense sources add https://docs.example.com/api-reference</pre>
+    </div>
+
+    <p>The URL is scraped via Airtop (full JS rendering) and saved as clean markdown in <code>.supadense/sources/</code>. It appears in the Supadense dashboard and in your graph within seconds.</p>
+
+    <div class="card-grid">
+      <a class="card" onclick="showPage('concepts')">
+        <div class="card-icon amber">📐</div>
+        <h3>How It Works</h3>
+        <p>Understand brain layers, the MCP protocol, and how memory is synthesised.</p>
+        <div class="card-arrow">Learn more →</div>
+      </a>
+      <a class="card" onclick="showPage('cli-init')">
+        <div class="card-icon teal">⌨️</div>
+        <h3>CLI Reference</h3>
+        <p>Full reference for every <code>supadense</code> command.</p>
+        <div class="card-arrow">View commands →</div>
+      </a>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('intro')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Introduction</span>
+      </a>
+      <a class="next" onclick="showPage('concepts')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">How It Works</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS PAGE -->
+  <div class="content page" id="page-concepts">
+    <div class="page-badge">Concepts</div>
+    <h1>How Supadense Works</h1>
+    <p>Supadense turns your codebase into a living knowledge base. Here's the full picture.</p>
+
+    <h2>The .supadense/ Folder</h2>
+    <p>Everything Supadense stores lives inside your project at <code>.supadense/</code>. This is intentional — your knowledge commits with your code, diffs with PRs, and travels with clones.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">tree</span></div>
+      <pre>my-project/
+├── src/
+├── .supadense/
+│   ├── brain/
+│   │   ├── L0/          <span class="cm"># decisions, raw facts, notes</span>
+│   │   ├── L1/          <span class="cm"># synthesised summaries</span>
+│   │   └── L2/          <span class="cm"># durable patterns &amp; architecture</span>
+│   └── sources/         <span class="cm"># captured URLs, PDFs, docs</span>
+├── .mcp.json            <span class="cm"># auto-connects Claude Code</span>
+└── .gitignore           <span class="cm"># brain/ excluded by default</span></pre>
+    </div>
+
+    <h2>Brain Layers Explained</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon amber">⚡</div>
+        <h3>L0 — Raw Capture</h3>
+        <p>Decisions as they happen. "<em>Chose Postgres over MySQL because of JSONB support.</em>" Verbatim, timestamped, unfiltered.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon teal">🔄</div>
+        <h3>L1 — Summaries</h3>
+        <p>Claude periodically synthesises L0 into concise summaries. Older entries collapse into patterns. Saves context window.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon blue">🏛️</div>
+        <h3>L2 — Architecture</h3>
+        <p>Durable, high-signal patterns. Rarely changes. This is your project's architectural DNA — conventions, constraints, non-negotiables.</p>
+      </div>
+    </div>
+
+    <h2>The MCP Loop</h2>
+    <p>Every Claude Code session runs the <code>supadense-brain</code> MCP server as a sidecar process. Claude uses it automatically:</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Session Start — Read</h3>
+          <p>Claude queries the MCP server for relevant context based on the current task. L2 patterns always load; L1 and L0 are retrieved by semantic similarity.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>During Work — Write</h3>
+          <p>When Claude makes a decision or learns something new, it writes to <code>L0/</code> via the MCP <code>write_brain</code> tool. Atomic, append-only.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Synthesis — Compress</h3>
+          <p>Periodically (or on demand), Claude synthesises L0 → L1 → L2. Older facts compress into higher-layer abstractions.</p>
+        </div>
+      </div>
+    </div>
+
+    <h2>Source Processing Pipeline</h2>
+    <p>When you add a URL via <code>supadense sources add</code> or the Capture button:</p>
+
+    <div class="pipeline">
+      <div class="pipeline-step">Queued</div><div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">Airtop fetch</div><div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">Markdown extract</div><div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">Saved to sources/</div><div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">Brain indexed</div><div class="pipeline-arrow">→</div>
+      <div class="pipeline-step" style="border-color:var(--green);color:var(--green)">Done</div>
+    </div>
+
+    <div class="callout blue">
+      <div class="callout-title">Why Airtop?</div>
+      <p>Plain HTTP fetch fails on SPAs, paywalled content, and login-required pages. Airtop runs a full browser — it handles React apps, Twitter threads, documentation sites, and more.</p>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('quickstart')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Quickstart</span>
+      </a>
+      <a class="next" onclick="showPage('brain')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">Brain Layers</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- BRAIN LAYERS PAGE -->
+  <div class="content page" id="page-brain">
+    <div class="page-badge">Core Concepts</div>
+    <h1>Brain Layers</h1>
+    <p>The brain is a three-layer knowledge pyramid. Each layer has a distinct purpose and lifetime.</p>
+
+    <h2>Layer Structure</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Purpose</th><th>Written by</th><th>Lifetime</th></tr></thead>
+        <tbody>
+          <tr><td><code>L0/</code></td><td>Raw decisions, facts, notes</td><td>Claude (MCP) or CLI</td><td>Session-level</td></tr>
+          <tr><td><code>L1/</code></td><td>Synthesised summaries</td><td>Claude (on demand)</td><td>Sprint-level</td></tr>
+          <tr><td><code>L2/</code></td><td>Durable architecture patterns</td><td>Claude + human review</td><td>Project lifetime</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>File Format</h2>
+    <p>All brain files are plain <code>.md</code> with a simple frontmatter convention:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">markdown</span></div>
+      <pre><span class="cm">---
+slug: L0/auth/jwt-decision
+created: 2025-06-09T14:32:00Z
+session: abc123
+---</span>
+
+<span class="str"># Chose JWT over sessions</span>
+
+Stateless auth needed for horizontal scaling. Refresh token stored
+in httpOnly cookie. Access token 15min TTL.
+
+<span class="str">## Trade-offs accepted</span>
+- Cannot revoke individual tokens instantly
+- Client must handle refresh logic</pre>
+    </div>
+
+    <h2>Writing to Brain from Claude</h2>
+    <p>Claude uses the MCP <code>write_brain</code> tool automatically. You can also write manually:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense brain write --layer L0 --title <span class="str">"Switched to Drizzle ORM"</span> <span class="str">"Replaced Prisma — Drizzle has better TS inference and no binary dependency."</span></pre>
+    </div>
+
+    <h2>Committing Brain Files</h2>
+    <div class="callout amber">
+      <div class="callout-title">Default: Brain is gitignored</div>
+      <p>On <code>supadense init</code>, <code>.supadense/brain/</code> is added to <code>.gitignore</code>. This keeps personal context private.<br/><br/>
+      To share brain with your team, remove the gitignore line. Brain files then ship with your repo — new team members get full project history on <code>git clone</code>.</p>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('concepts')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">How It Works</span>
+      </a>
+      <a class="next" onclick="showPage('sources')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">Sources</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- SOURCES PAGE -->
+  <div class="content page" id="page-sources">
+    <div class="page-badge">Core Concepts</div>
+    <h1>Sources</h1>
+    <p>Sources are external documents — URLs, PDFs, notes — captured into <code>.supadense/sources/</code> as clean markdown. Claude can read them as project context.</p>
+
+    <h2>Adding Sources</h2>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre><span class="cm"># Add a URL (scraped via Airtop)</span>
+supadense sources add https://docs.stripe.com/api
+
+<span class="cm"># Add to a specific project</span>
+supadense sources add https://arxiv.org/abs/2310.01344 --project my-ml-project
+
+<span class="cm"># Add to all projects</span>
+supadense sources add https://example.com/shared-style-guide --all-projects</pre>
+    </div>
+
+    <h2>Supported Content Types</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Type</th><th>How to add</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>URL / Web page</td><td><code>sources add &lt;url&gt;</code></td><td>Full JS rendering via Airtop</td></tr>
+          <tr><td>GitHub repo</td><td><code>sources add https://github.com/…</code></td><td>README + key files extracted</td></tr>
+          <tr><td>arXiv paper</td><td><code>sources add https://arxiv.org/…</code></td><td>Abstract + full text</td></tr>
+          <tr><td>Plain text / note</td><td>Capture dialog → Paste text</td><td>Saved immediately</td></tr>
+          <tr><td>Twitter/X thread</td><td><code>sources add https://x.com/…</code></td><td>Requires Airtop API key</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Managing Sources</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre><span class="cm"># List sources in current project</span>
+supadense sources list
+
+<span class="cm"># Interactive remove (numbered picker + confirm)</span>
+supadense sources remove
+
+<span class="cm"># Delete from ALL projects everywhere</span>
+supadense sources delete</pre>
+    </div>
+
+    <h2>Sources in the Dashboard</h2>
+    <p>Every captured source appears in the <strong>Sources</strong> tab of the Supadense web UI with its real title (extracted from the <code># </code> heading), status badge, and project pills. Sources are automatically synced to the local <code>.supadense/sources/</code> folder — fully bidirectional.</p>
+
+    <div class="page-nav">
+      <a onclick="showPage('brain')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Brain Layers</span>
+      </a>
+      <a class="next" onclick="showPage('graph')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">Knowledge Graph</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- GRAPH PAGE -->
+  <div class="content page" id="page-graph">
+    <div class="page-badge">Core Concepts</div>
+    <h1>Knowledge Graph</h1>
+    <p>Supadense renders your project's brain and sources as an interactive force-directed graph. It's a live map of what Claude knows about your project.</p>
+
+    <h2>Node Types</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Node</th><th>Color</th><th>Represents</th></tr></thead>
+        <tbody>
+          <tr><td>Project root</td><td><span class="badge amber">Amber</span></td><td>Your project (centre of the graph)</td></tr>
+          <tr><td>L0 / L1 / L2</td><td><span class="badge amber">Amber</span></td><td>Brain layer clusters</td></tr>
+          <tr><td>Brain file</td><td><span class="badge amber">Amber</span></td><td>Individual <code>.md</code> memory files</td></tr>
+          <tr><td>Sources cluster</td><td><span class="badge teal">Teal</span></td><td>Container for all captured sources</td></tr>
+          <tr><td>Source file</td><td><span class="badge teal">Teal</span></td><td>Individual captured document</td></tr>
+          <tr><td>GitHub</td><td><span class="badge amber">Amber glow</span></td><td>Connected GitHub repo activity</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Interacting with the Graph</h2>
+    <ul>
+      <li><strong>Drag</strong> nodes to rearrange the layout</li>
+      <li><strong>Click</strong> a brain or source node to open its content</li>
+      <li><strong>Hover</strong> to see the full node label</li>
+      <li><strong>Scroll / pinch</strong> to zoom</li>
+      <li>The graph <strong>auto-updates</strong> as files are added or removed via CLI or capture dialog</li>
+    </ul>
+
+    <div class="page-nav">
+      <a onclick="showPage('sources')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Sources</span>
+      </a>
+      <a class="next" onclick="showPage('mcp')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">MCP Server</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- MCP SERVER PAGE -->
+  <div class="content page" id="page-mcp">
+    <div class="page-badge">Core Concepts</div>
+    <h1>MCP Server</h1>
+    <p>Supadense exposes a <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a> server that Claude Code connects to automatically via <code>.mcp.json</code>.</p>
+
+    <h2>Auto-Configuration</h2>
+    <p><code>supadense init</code> writes this into your project root:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">json — .mcp.json</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>{
+  <span class="var">"mcpServers"</span>: {
+    <span class="var">"supadense-brain"</span>: {
+      <span class="var">"command"</span>: <span class="str">"bun"</span>,
+      <span class="var">"args"</span>: [<span class="str">"run"</span>, <span class="str">"~/.supadense/stdio.ts"</span>],
+      <span class="var">"env"</span>: {
+        <span class="var">"SUPADENSE_URL"</span>:     <span class="str">"http://localhost:4096"</span>,
+        <span class="var">"SUPADENSE_TOKEN"</span>:   <span class="str">"&lt;your-token&gt;"</span>,
+        <span class="var">"SUPADENSE_PROJECT"</span>: <span class="str">"my-api"</span>
+      }
+    }
+  }
+}</pre>
+    </div>
+
+    <h2>Available MCP Tools</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>read_brain</code></td><td>Retrieve relevant memory chunks by semantic query</td></tr>
+          <tr><td><code>write_brain</code></td><td>Append a new fact or decision to L0</td></tr>
+          <tr><td><code>list_sources</code></td><td>List all captured sources for the current project</td></tr>
+          <tr><td><code>read_source</code></td><td>Read the full content of a specific source file</td></tr>
+          <tr><td><code>search_brain</code></td><td>Full-text search across all brain layers</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Using from Claude</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">claude code prompt</span></div>
+      <pre><span class="cm"># Claude reads memory automatically</span>
+What database are we using and why?
+<span class="cm"># → Claude calls read_brain("database choice") and answers from L0/L1</span>
+
+<span class="cm"># Claude writes decisions automatically</span>
+We're switching to Drizzle ORM instead of Prisma.
+<span class="cm"># → Claude calls write_brain() to record this in L0</span></pre>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('graph')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Knowledge Graph</span>
+      </a>
+      <a class="next" onclick="showPage('cli-init')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">CLI — init / deinit</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- CLI INIT PAGE -->
+  <div class="content page" id="page-cli-init">
+    <div class="page-badge">CLI Reference</div>
+    <h1>init / deinit</h1>
+
+    <h2>supadense init</h2>
+    <p>Register the current directory as a Supadense project.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense init [--name &lt;name&gt;]</pre>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--name</code></td><td>directory name</td><td>Display name for the project</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Creates:</strong> <code>.supadense/brain/{L0,L1,L2}/</code>, <code>.supadense/sources/</code>, <code>.mcp.json</code>, updates <code>.gitignore</code>.</p>
+
+    <h2>supadense deinit</h2>
+    <p>Unregister a project and remove all local Supadense files.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense deinit [-f] [project-id]
+supadense deinit --disk-only [-f]</pre>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>-f / --force</code></td><td>Skip confirmation prompt</td></tr>
+        <tr><td><code>--disk-only</code></td><td>Only delete <code>.supadense/</code> from disk (project already unregistered)</td></tr>
+      </tbody>
+    </table></div>
+    <p>Also removes <code>supadense-brain</code> from <code>.mcp.json</code> and cleans up <code>.gitignore</code>.</p>
+
+    <h2>supadense projects</h2>
+    <p>List all registered projects with their IDs and paths. The current project (based on <code>cwd</code>) is marked with <code>▶</code>.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense projects</pre>
+    </div>
+
+    <h2>supadense status</h2>
+    <p>Show the status of the current project — brain file count, last sync, GitHub repo.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense status</pre>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('mcp')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">MCP Server</span>
+      </a>
+      <a class="next" onclick="showPage('cli-sources')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">CLI — sources</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- CLI SOURCES PAGE -->
+  <div class="content page" id="page-cli-sources">
+    <div class="page-badge">CLI Reference</div>
+    <h1>sources</h1>
+
+    <h2>supadense sources list</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense sources list [--project &lt;id&gt;]</pre>
+    </div>
+    <p>Lists all sources in the current (or specified) project with title, status, and size.</p>
+
+    <h2>supadense sources add</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense sources add &lt;url&gt; [--project &lt;id&gt;] [--all-projects]</pre>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>--project &lt;id&gt;</code></td><td>Add to a specific project (repeatable)</td></tr>
+        <tr><td><code>--all-projects</code></td><td>Add to every registered project</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>supadense sources remove</h2>
+    <p>Interactive — lists all sources in the current project, ask you to pick one by number, then confirms before deleting.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense sources remove</pre>
+    </div>
+
+    <h2>supadense sources delete</h2>
+    <p>Finds all projects that have a given source file, shows a summary, and deletes it everywhere after confirmation.</p>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense sources delete [--force]</pre>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('cli-init')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">CLI — init / deinit</span>
+      </a>
+      <a class="next" onclick="showPage('cli-brain')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">CLI — brain</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- CLI BRAIN PAGE -->
+  <div class="content page" id="page-cli-brain">
+    <div class="page-badge">CLI Reference</div>
+    <h1>brain</h1>
+
+    <h2>supadense brain list</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense brain list [--project &lt;id&gt;]</pre>
+    </div>
+    <p>Lists all brain files grouped by layer (L0, L1, L2) with file sizes.</p>
+
+    <h2>supadense brain search</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense brain search &lt;query&gt; [--project &lt;id&gt;]</pre>
+    </div>
+    <p>Full-text search across all brain files. Returns matching snippets with file paths.</p>
+
+    <h2>supadense brain write</h2>
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre>supadense brain write --layer L0 --title <span class="str">"Decision title"</span> <span class="str">"Content here…"</span></pre>
+    </div>
+    <p>Manually write a fact or decision to the brain. Claude does this automatically via MCP; this command is for scripting or manual notes.</p>
+
+    <div class="page-nav">
+      <a onclick="showPage('cli-sources')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">CLI — sources</span>
+      </a>
+      <a class="next" onclick="showPage('teams')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">Teams & Monorepos</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- TEAMS PAGE -->
+  <div class="content page" id="page-teams">
+    <div class="page-badge">Guides</div>
+    <h1>Teams &amp; Monorepos</h1>
+
+    <h2>Sharing Brain with Your Team</h2>
+    <p>By default brain files are gitignored (personal context). To share with your team, remove the gitignore line:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash — .gitignore</span></div>
+      <pre><span class="cm"># Remove this line to share brain with team:</span>
+<span class="kw"># .supadense/brain/</span>
+
+<span class="cm"># Sources are never committed (usually large)</span>
+.supadense/sources/</pre>
+    </div>
+
+    <div class="callout">
+      <div class="callout-title">Team Workflow Tip</div>
+      <p>Commit L2 (architecture patterns) and L1 (summaries) to git. Keep L0 (raw session notes) gitignored per-developer. This gives the team durable context without noisy per-session writes.</p>
+    </div>
+
+    <h2>Monorepo Setup</h2>
+    <p>Each service or package can have its own <code>.supadense/</code>. You can also have a root-level brain that spans the whole repo:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">tree</span></div>
+      <pre>monorepo/
+├── .supadense/          <span class="cm"># root brain — shared architecture</span>
+├── packages/
+│   ├── api/
+│   │   └── .supadense/ <span class="cm"># api-specific brain</span>
+│   └── web/
+│       └── .supadense/ <span class="cm"># frontend-specific brain</span>
+└── .mcp.json</pre>
+    </div>
+
+    <p>Register each with <code>supadense init</code> from inside its directory. The MCP server handles multiple registered projects simultaneously.</p>
+
+    <div class="page-nav">
+      <a onclick="showPage('cli-brain')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">CLI — brain</span>
+      </a>
+      <a class="next" onclick="showPage('github')">
+        <span class="nav-label">Next →</span>
+        <span class="nav-title">GitHub Integration</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- GITHUB PAGE -->
+  <div class="content page" id="page-github">
+    <div class="page-badge">Guides</div>
+    <h1>GitHub Integration</h1>
+    <p>Supadense can detect the GitHub repo associated with a project and surface live PR and issue activity in the dashboard.</p>
+
+    <h2>Auto-Detection</h2>
+    <p>On <code>supadense init</code>, Supadense reads <code>.git/config</code> and parses the remote origin URL (SSH or HTTPS). The repo is stored in the project record automatically.</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash</span><button class="code-copy" onclick="copy(this)">Copy</button></div>
+      <pre><span class="cm"># Override or set manually</span>
+supadense github set owner/repo</pre>
+    </div>
+
+    <h2>Activity Dashboard</h2>
+    <p>The project's right rail shows a live <strong>Activity</strong> card with:</p>
+    <ul>
+      <li>Open PRs with review status (approved / changes requested / pending)</li>
+      <li>Draft PR badges</li>
+      <li>Open issues with labels</li>
+      <li>Comment counts and last-updated times</li>
+    </ul>
+
+    <div class="callout amber">
+      <div class="callout-title">Rate Limits</div>
+      <p>Unauthenticated GitHub requests are limited to 60/hr. Connect your GitHub account in Settings → GitHub to get 5,000/hr. Activity is cached for 5 minutes.</p>
+    </div>
+
+    <div class="page-nav">
+      <a onclick="showPage('teams')">
+        <span class="nav-label">← Previous</span>
+        <span class="nav-title">Teams &amp; Monorepos</span>
+      </a>
+      <span></span>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'))
+    document.getElementById('page-' + id)?.classList.add('active')
+    document.querySelectorAll('.sidebar-item').forEach(el => {
+      if (el.getAttribute('onclick')?.includes("'" + id + "'")) el.classList.add('active')
+    })
+    window.scrollTo(0, 0)
+  }
+
+  function copy(btn) {
+    const code = btn.closest('.code-block').querySelector('pre').innerText
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = 'Copied!'
+      setTimeout(() => btn.textContent = 'Copy', 1800)
+    })
+  }
+</script>
+</body>
+</html>

@@ -22,6 +22,7 @@ export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  fillInput: (text: string) => void
   review?: () => boolean
 }
 
@@ -552,6 +553,63 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const brainCommand = withCategory("Brain")
+  const brainCmds = () => [
+    brainCommand({
+      id: "brain.context",
+      title: "Brain: Surface context",
+      description: "Retrieve relevant knowledge for your current task",
+      slash: "brain-context",
+      onSelect: () => actions.fillInput("What does the brain know about what I'm currently working on?"),
+    }),
+    brainCommand({
+      id: "brain.search",
+      title: "Brain: Search",
+      description: "Search the engineering brain",
+      slash: "brain-search",
+      onSelect: () => actions.fillInput("Search the brain for: "),
+    }),
+    brainCommand({
+      id: "brain.save",
+      title: "Brain: Save knowledge",
+      description: "Capture a decision or insight into the brain",
+      slash: "brain-save",
+      onSelect: () => actions.fillInput("Save this to the brain: "),
+    }),
+  ]
+
+  const elCommand = withCategory("Projects")
+  const elCmds = () => [
+    elCommand({
+      id: "el.projects",
+      title: "List projects",
+      description: "List all your EL projects",
+      slash: "projects",
+      onSelect: () => actions.fillInput("List all my projects"),
+    }),
+    elCommand({
+      id: "el.sources",
+      title: "List sources",
+      description: "List sources for a project",
+      slash: "sources",
+      onSelect: () => actions.fillInput("List sources for project: "),
+    }),
+    elCommand({
+      id: "el.capture",
+      title: "Capture URL",
+      description: "Capture a link as a source",
+      slash: "capture",
+      onSelect: () => actions.fillInput("Capture this URL: "),
+    }),
+    elCommand({
+      id: "el.remove-source",
+      title: "Remove source",
+      description: "Remove a source from a project",
+      slash: "remove-source",
+      onSelect: () => actions.fillInput("Remove source with id: "),
+    }),
+  ]
+
   command.register("session", () => [
     ...sessionCmds(),
     ...shareCmds(),
@@ -564,5 +622,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...mcpCmds(),
     ...agentCmds(),
     ...permissionsCmds(),
+    ...brainCmds(),
+    ...elCmds(),
   ])
 }

@@ -9,9 +9,9 @@ export const BrainTools = {
 
   search_brain: {
     description:
-      "Search the project knowledge brain using hybrid semantic + keyword search. " +
-      "Cascades from L2 (patterns) → L1 (syntheses) → L0 (raw notes). " +
-      "ALWAYS call this before answering architectural or historical questions.",
+      "Search the engineering brain for this project using hybrid semantic + keyword search. " +
+      "Cascades from L2 (architecture) → L1 (patterns) → L0 (decisions). " +
+      "Call this before answering any architectural, historical, or 'why was X done' question — the brain may already have the answer.",
     parameters: z.object({
       query:     z.string().describe("What to search for"),
       layer:     z.number().int().min(0).max(2).optional().describe("Restrict to specific layer (0=raw, 1=synthesis, 2=patterns)"),
@@ -66,10 +66,10 @@ export const BrainTools = {
 
   save_to_brain: {
     description:
-      "Save a piece of knowledge to the brain. " +
-      "Use for decisions, discoveries, patterns, architectural choices. " +
-      "layer=0 for raw notes, layer=1 for synthesised summaries, layer=2 for durable patterns. " +
-      "Writes both a .md file on disk and a Postgres row.",
+      "Capture a decision, pattern, or architectural insight into the engineering brain. " +
+      "Call this after making architectural choices, solving hard problems, or learning something worth remembering across sessions. " +
+      "layer=0 for a specific decision made this session, layer=1 for a pattern seen more than once, layer=2 for a structural fact that rarely changes. " +
+      "Writes both a .md file on disk and a Postgres row for search.",
     parameters: z.object({
       content:    z.string().describe("Markdown content to save"),
       type:       z.string().optional().default("note"),
@@ -165,8 +165,9 @@ export const BrainTools = {
 
   get_brain_context: {
     description:
-      "Automatically retrieve relevant brain context for the current coding task. " +
-      "Call at the start of a session or when starting a new subtask.",
+      "Surface what the engineering brain already knows about the current task. " +
+      "Call this at the start of any significant work to avoid repeating past decisions, reinventing solved problems, or missing prior context. " +
+      "Returns the most relevant brain nodes across all layers for the given task.",
     parameters: z.object({
       task:      z.string().describe("Current task description"),
       max_nodes: z.number().int().min(1).max(10).optional().default(5),

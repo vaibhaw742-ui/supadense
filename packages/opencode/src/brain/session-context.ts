@@ -21,12 +21,27 @@ export function clearBrainSessionCtx(sessionId: string): void {
   _ctxMap.delete(sessionId)
 }
 
-/** Get brainDir + sourceId for a session, falling back to global BRAIN_DIR / "default" */
+/** Get brainDir + sourceId for a session, falling back to the user's inbox brain. */
 export function resolveBrainCtx(sessionId: string): { brainDir: string | null; sourceId: string } {
   const ctx = _ctxMap.get(sessionId)
   if (ctx) return { brainDir: ctx.brainDir, sourceId: ctx.sourceId }
+
+  // Fall back to per-user inbox brain scoped by userId from the current Instance.
+  // This ensures two users without an active project don't share the same brain.
+  try {
+    const { Instance } = require("../project/instance") as typeof import("../project/instance")
+    const userId = Instance.current.userId
+    if (userId) {
+      return {
+        brainDir: process.env.BRAIN_DIR ?? null,
+        sourceId: `inbox-${userId}`,
+      }
+    }
+  } catch {}
+
+  // Last resort: truly global fallback (CLI / unauthenticated use)
   return {
     brainDir: process.env.BRAIN_DIR ?? null,
-    sourceId: "default",
+    sourceId: process.env.BRAIN_SOURCE_ID ?? "default",
   }
 }

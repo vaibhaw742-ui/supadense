@@ -1,6 +1,6 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Portal } from "solid-js/web"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { getAuthToken } from "@/utils/server"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "@/context/global-sync"
@@ -16,6 +16,8 @@ import { useProviders } from "@/hooks/use-providers"
 import { Identifier } from "@/utils/id"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import { elApi } from "@/pages/projects/el-api"
+import { activeGraphProjectName, activeSourceName, activeSidebarView } from "@/context/sidebar-view"
 
 export function SupadenseMark(props: { size?: number; class?: string }) {
   const s = props.size ?? 20
@@ -168,9 +170,65 @@ const tbBtn: Record<string, string> = {
   transition: "background 100ms, color 100ms",
 }
 
-function SupadenseChatPanel(props: { onClose: () => void }) {
+export function SupadenseChatPanel(props: { onClose: () => void }) {
   const params = useParams<{ dir?: string; id?: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // ── Active scope — what the user is chatting "within" ──────────────────────
+  // { type, id, name } or null for workspace-wide. Auto-detects from route/view,
+  // but can be cleared by the user (X button on the chip).
+  type ScopeCtx = { type: "project" | "source"; id: string; name: string } | null
+  const [userScope, setUserScope] = createSignal<ScopeCtx>(undefined as unknown as ScopeCtx)
+  const [scopeCleared, setScopeCleared] = createSignal(false) // true when user explicitly cleared
+
+  // Route-based project detection
+  const scopeProjectId = createMemo(() => {
+    if (/^\/projects\/[^/]+/.test(location.pathname)) return params.id
+    return undefined
+  })
+  const [scopeProject] = createResource(scopeProjectId, (id) => elApi.getProject(id))
+
+  // Auto-derive scope from view signals when not manually cleared
+  const derivedScope = createMemo<ScopeCtx>(() => {
+    if (scopeCleared()) return null
+    const manual = userScope()
+    if (manual !== (undefined as unknown as ScopeCtx)) return manual
+    // Source open in Read panel
+    const sourceName = activeSourceName()
+    if (sourceName) return { type: "source", id: "", name: sourceName }
+    // Project route (/projects/:id)
+    const projData = scopeProject()
+    if (projData?.project) return { type: "project", id: projData.project.id, name: projData.project.name }
+    // Project open in Graph/Brain tab
+    const graphProject = activeGraphProjectName()
+    if (graphProject) return { type: "project", id: "", name: graphProject }
+    return null
+  })
+
+  // Reset cleared state when the view changes to a new project/source
+  createEffect(() => {
+    const source = activeSourceName()
+    const proj = scopeProject()?.project
+    const graph = activeGraphProjectName()
+    if (source || proj || graph) setScopeCleared(false)
+  })
+
+  const scopeLabel = createMemo(() => {
+    const s = derivedScope()
+    return s ? s.name : "workspace"
+  })
+
+  // Context string injected into messages when scope is active
+  const scopeContextPrefix = createMemo(() => {
+    const s = derivedScope()
+    if (!s) return ""
+    if (s.type === "project") return s.id
+      ? `[Project context: ${s.name} (id: ${s.id})]\n\n`
+      : `[Project context: ${s.name}]\n\n`
+    return `[Source context: ${s.name}]\n\n`
+  })
+
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   let sync: ReturnType<typeof useSync> | undefined
@@ -192,8 +250,10 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
   const directory = createMemo(() => {
     // If we're on an EL project route (/projects/:id), use that project's workspace dir
     const projId = (params as any).id as string | undefined
-    if (userId && projId) return `/workspaces/${userId}/el-projects/${projId}`
-    // Otherwise use the user root — now allowed by the backend guard fix
+    if (userId && projId && /^\/projects\/[^/]+/.test(location.pathname)) {
+      return `/workspaces/${userId}/el-projects/${projId}`
+    }
+    // Otherwise use the user root
     if (userId) return `/workspaces/${userId}`
     return undefined
   })
@@ -293,11 +353,19 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
 
   // Built-in chat commands
   const BUILTIN_SLASH = [
-    { id: "chat.new",     trigger: "new",     title: "New chat",    description: "Start a fresh conversation" },
-    { id: "chat.model",   trigger: "model",   title: "Model",       description: "Open the model selector" },
-    { id: "chat.clear",   trigger: "clear",   title: "Clear",       description: "Clear input" },
-    // Backend commands always available
-    { id: "compact",      trigger: "compact", title: "Compact",     description: "Summarise and compress this session's context" },
+    { id: "chat.new",          trigger: "new",           title: "New chat",         description: "Start a fresh conversation" },
+    { id: "chat.model",        trigger: "model",         title: "Model",            description: "Open the model selector" },
+    { id: "chat.clear",        trigger: "clear",         title: "Clear",            description: "Clear input" },
+    { id: "compact",           trigger: "compact",       title: "Compact",          description: "Summarise and compress this session's context" },
+    // Brain commands
+    { id: "brain.context",     trigger: "brain-context", title: "Brain context",    description: "What does the brain know about what I'm working on?" },
+    { id: "brain.search",      trigger: "brain-search",  title: "Brain search",     description: "Search the engineering brain" },
+    { id: "brain.save",        trigger: "brain-save",    title: "Brain save",       description: "Capture a decision or insight into the brain" },
+    // EL project commands
+    { id: "el.projects",       trigger: "projects",      title: "List projects",    description: "List all your EL projects" },
+    { id: "el.sources",        trigger: "sources",       title: "List sources",     description: "List sources for a project" },
+    { id: "el.capture",        trigger: "capture",       title: "Capture URL",      description: "Capture a URL as a source" },
+    { id: "el.remove-source",  trigger: "remove-source", title: "Remove source",    description: "Remove a source from a project" },
   ] as const
 
   const slashCommands = createMemo(() => {
@@ -345,6 +413,35 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
         return
       case "chat.clear":
         setInputVal("")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      // Brain + EL commands — pre-fill the textarea so the user can refine and send
+      case "brain.context":
+        setInputVal("What does the brain know about what I'm currently working on?")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "brain.search":
+        setInputVal("Search the brain for: ")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "brain.save":
+        setInputVal("Save this to the brain: ")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "el.projects":
+        setInputVal("List all my projects")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "el.sources":
+        setInputVal("List sources for project: ")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "el.capture":
+        setInputVal("Capture this URL: ")
+        requestAnimationFrame(() => textareaRef?.focus())
+        return
+      case "el.remove-source":
+        setInputVal("Remove source with id: ")
         requestAnimationFrame(() => textareaRef?.focus())
         return
     }
@@ -461,7 +558,7 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
         agent: "build",
         model,
         messageID,
-        parts: [{ id: Identifier.ascending("part"), type: "text" as const, text }],
+        parts: [{ id: Identifier.ascending("part"), type: "text" as const, text: scopeContextPrefix() + text }],
       })
       void sync?.session.sync(sid as string)
     } catch (err: any) {
@@ -473,6 +570,7 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
   }
 
   let textareaRef: HTMLTextAreaElement | undefined
+  let inputWrapRef: HTMLDivElement | undefined
 
   function autoResize() {
     if (!textareaRef) return
@@ -481,10 +579,10 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
   }
 
   return (
-    <div style={{ display: "flex", "flex-direction": "column", height: "100%", background: "#f4f4f5", "border-radius": "10px", overflow: "hidden", "font-family": "'Geist', system-ui, sans-serif" }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", "min-height": "0", background: "#ffffff", overflow: "hidden", "font-family": "'Geist', system-ui, sans-serif" }}>
 
       {/* Head */}
-      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "14px 18px", "border-bottom": "1px solid #e5e5e5", "flex-shrink": "0", background: "#f4f4f5" }}>
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "14px 18px", "border-bottom": "1px solid #e5e5e5", "flex-shrink": "0", background: "#ffffff" }}>
         <button type="button" style={{ display: "flex", "align-items": "center", gap: "8px", background: "none", border: "none", cursor: "pointer", "font-family": "'Geist', system-ui, sans-serif", "font-size": "14px", "font-weight": "500", color: "#0a0a0a", padding: "0" }}>
           {activeChatTitle() ?? "New chat"}
           <span style={{ color: "#737373", display: "inline-flex", "align-items": "center" }}>
@@ -532,9 +630,11 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
 
       {/* Chat tab */}
       <Show when={tab() === "chat"}>
-        <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "22px 22px 0", display: "flex", "flex-direction": "column", gap: "4px" }}>
+        <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "22px 22px 0", display: "flex", "flex-direction": "column", gap: "4px", "align-items": "center" }}>
+        <div style={{ width: "100%", "max-width": "720px", display: "flex", "flex-direction": "column", gap: "4px" }}>
           <Show when={hasMessages()} fallback={
-            <>
+            <div style={{ display: "flex", flex: "1", "align-items": "center", "justify-content": "center" }}>
+            <div style={{ "max-width": "480px", width: "100%" }}>
               <div style={{ width: "44px", height: "44px", "border-radius": "50%", background: "#ffffff", border: "1px solid #e5e5e5", display: "flex", "align-items": "center", "justify-content": "center", color: "#0a0a0a", "margin-bottom": "12px", "flex-shrink": "0" }}>
                 <span style={{ width: "22px", height: "22px", display: "grid", "grid-template-columns": "repeat(3, 1fr)", "grid-template-rows": "repeat(3, 1fr)", gap: "2px" }} aria-hidden="true">
                   {([0,1,2,3,4,5,6,7,8] as const).map((i) => (<span style={{ background: i === 4 ? "#d68a2e" : "#0a0a0a", "border-radius": "1px", display: "block" }} />))}
@@ -561,7 +661,8 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
                   </For>
                 </div>
               </Show>
-            </>
+            </div>
+            </div>
           }>
             <Show when={childStore && directory()}>
               <DataProvider
@@ -589,44 +690,100 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
               </DataProvider>
             </Show>
           </Show>
+        </div>{/* end centering inner div */}
         </div>
 
-        {/* Input wrap */}
-        <div style={{ margin: "0 14px 14px", border: "1.5px solid #d68a2e", "border-radius": "8px", background: "#ffffff", padding: "10px 12px 8px", display: "flex", "flex-direction": "column", gap: "8px", "flex-shrink": "0", position: "relative" }}>
-          {/* Scope pill */}
-          <button type="button" style={{ display: "inline-flex", "align-items": "center", gap: "6px", "align-self": "flex-start", padding: "4px 10px", border: "1px solid #e5e5e5", "border-radius": "6px", "font-family": "'Geist', system-ui, sans-serif", "font-size": "12px", color: "#404040", background: "#ffffff", cursor: "pointer" }}>
-            <span style={{ display: "inline-flex", color: "#737373" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-            Scope · this component
-          </button>
-
-          {/* Slash command popup */}
+        {/* Slash command popup — rendered in a Portal to escape overflow:hidden on the panel */}
+        <Portal mount={document.body}>
           <Show when={slashOpen() && filteredSlash().length > 0}>
-            <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "0", right: "0", background: "#ffffff", border: "1px solid #e5e5e5", "border-radius": "8px", "box-shadow": "0 4px 20px rgba(0,0,0,0.12)", "z-index": "300", overflow: "hidden", "max-height": "240px", "overflow-y": "auto" }}>
-              <For each={filteredSlash()}>
-                {(cmd, i) => (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); applySlashCommand(cmd) }}
-                    onMouseEnter={() => setSlashIdx(i())}
-                    style={{
-                      display: "flex", "align-items": "center", gap: "10px",
-                      width: "100%", padding: "8px 12px", border: "none",
-                      background: slashIdx() === i() ? "rgba(214,138,46,0.06)" : "transparent",
-                      "border-left": slashIdx() === i() ? "2px solid #d68a2e" : "2px solid transparent",
-                      cursor: "pointer", "text-align": "left",
-                    }}
-                  >
-                    <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", "font-weight": "600", color: "#d68a2e", "white-space": "nowrap", "min-width": "80px" }}>
-                      /{cmd.trigger}
-                    </span>
-                    <span style={{ "font-size": "12px", color: "#525252", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-                      {cmd.description ?? cmd.title}
-                    </span>
-                  </button>
-                )}
-              </For>
-            </div>
+            {(() => {
+              const rect = inputWrapRef?.getBoundingClientRect()
+              if (!rect) return null
+              return (
+                <div
+                  style={{
+                    position: "fixed",
+                    bottom: `${window.innerHeight - rect.top + 6}px`,
+                    left: `${rect.left}px`,
+                    width: `${rect.width}px`,
+                    background: "#ffffff",
+                    border: "1px solid #e5e5e5",
+                    "border-radius": "8px",
+                    "box-shadow": "0 4px 20px rgba(0,0,0,0.12)",
+                    "z-index": "9999",
+                    overflow: "hidden",
+                    "max-height": "240px",
+                    "overflow-y": "auto",
+                  }}
+                >
+                  <For each={filteredSlash()}>
+                    {(cmd, i) => (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); applySlashCommand(cmd) }}
+                        onMouseEnter={() => setSlashIdx(i())}
+                        style={{
+                          display: "flex", "align-items": "center", gap: "10px",
+                          width: "100%", padding: "8px 12px", border: "none",
+                          background: slashIdx() === i() ? "rgba(214,138,46,0.06)" : "transparent",
+                          "border-left": slashIdx() === i() ? "2px solid #d68a2e" : "2px solid transparent",
+                          cursor: "pointer", "text-align": "left",
+                        }}
+                      >
+                        <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", "font-weight": "600", color: "#d68a2e", "white-space": "nowrap", "min-width": "80px" }}>
+                          /{cmd.trigger}
+                        </span>
+                        <span style={{ "font-size": "12px", color: "#525252", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {cmd.description ?? cmd.title}
+                        </span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              )
+            })()}
           </Show>
+        </Portal>
+
+        {/* Input wrap — centered */}
+        <div style={{ display: "flex", "justify-content": "center", padding: "0 14px 14px", "flex-shrink": "0" }}>
+        <div ref={inputWrapRef} style={{ width: "100%", "max-width": "720px", border: "1.5px solid #d68a2e", "border-radius": "8px", background: "#ffffff", padding: "10px 12px 8px", display: "flex", "flex-direction": "column", gap: "8px", "flex-shrink": "0", position: "relative" }}>
+          {/* Scope pill */}
+          <div style={{ display: "inline-flex", "align-items": "center", gap: "4px", "align-self": "flex-start" }}>
+            <div style={{
+              display: "inline-flex", "align-items": "center", gap: "6px",
+              padding: "3px 8px 3px 10px",
+              border: derivedScope() ? "1px solid #d68a2e" : "1px solid #e5e5e5",
+              "border-radius": "6px",
+              "font-family": "'Geist', system-ui, sans-serif",
+              "font-size": "12px",
+              color: derivedScope() ? "#d68a2e" : "#737373",
+              background: derivedScope() ? "rgba(214,138,46,0.06)" : "#fafafa",
+              "font-weight": derivedScope() ? "500" : "400",
+            }}>
+              {/* icon */}
+              <span style={{ display: "inline-flex", opacity: "0.8" }}>
+                <Show when={derivedScope()?.type === "source"}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </Show>
+                <Show when={derivedScope()?.type === "project" || !derivedScope()}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                </Show>
+              </span>
+              <span>{scopeLabel()}</span>
+              {/* X button — only when scope is active */}
+              <Show when={derivedScope()}>
+                <button
+                  type="button"
+                  title="Clear scope"
+                  onMouseDown={(e) => { e.preventDefault(); setScopeCleared(true); setUserScope(null as unknown as ScopeCtx) }}
+                  style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "14px", height: "14px", border: "none", background: "transparent", cursor: "pointer", color: "#d68a2e", padding: "0", "margin-left": "2px", opacity: "0.7", "border-radius": "2px" }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </Show>
+            </div>
+          </div>
 
           {/* Textarea */}
           <textarea
@@ -707,7 +864,8 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
               </Show>
             </button>
           </div>
-        </div>
+        </div>{/* end input inner div */}
+        </div>{/* end centering outer div */}
       </Show>
 
       <Show when={captureOpen() && directory()}>
@@ -721,7 +879,7 @@ function SupadenseChatPanel(props: { onClose: () => void }) {
 export function SupadenseFAB() {
   const [hov, setHov] = createSignal(false)
   return (
-    <Show when={!chatOpen()}>
+    <Show when={!chatOpen() && activeSidebarView().view !== "ask"}>
       <button
         type="button"
         title="Ask supadense"
@@ -736,7 +894,7 @@ export function SupadenseFAB() {
           width: "52px",
           height: "52px",
           "border-radius": "50%",
-          background: "#f4f4f5",
+          background: "#ffffff",
           border: hov() ? "1px solid #d68a2e" : "1px solid #e5e5e5",
           "box-shadow": hov()
             ? "0 10px 28px -8px rgba(214,138,46,0.30), 0 2px 4px -2px rgba(0,0,0,0.10)"

@@ -11,19 +11,6 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
-import {
-  KbWorkspaceInitTool,
-  KbResourceCreateTool,
-  KbConceptUpsertTool,
-  KbWikiBuildTool,
-  KbRetrieveTool,
-  KbEventLogTool,
-  KbResourceExtractImagesTool,
-  KbPipelineRunTool,
-  KbWorkspaceDeleteTool,
-  KbPipelineStatusTool,
-  KbRemoveResourceTool,
-} from "./learning"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -38,6 +25,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { BrainSearchTool, BrainSaveTool, BrainContextTool, BrainDeleteTool } from "./brain"
+import { ElListProjectsTool, ElGetProjectTool, ElListResourcesTool, ElGetResourceTool, ElCaptureUrlTool, ElRemoveResourceTool } from "./el-projects"
 import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -106,8 +94,6 @@ export namespace ToolRegistry {
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
-      const kbPipelineRun = yield* KbPipelineRunTool
-
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
           const custom: Tool.Def[] = []
@@ -186,18 +172,13 @@ export namespace ToolRegistry {
             brain_save:    Tool.init(BrainSaveTool),
             brain_context: Tool.init(BrainContextTool),
             brain_delete:  Tool.init(BrainDeleteTool),
-            // Learning KB tools
-            kb_workspace_init: Tool.init(KbWorkspaceInitTool),
-            kb_resource_create: Tool.init(KbResourceCreateTool),
-            kb_concept_upsert: Tool.init(KbConceptUpsertTool),
-            kb_wiki_build: Tool.init(KbWikiBuildTool),
-            kb_retrieve: Tool.init(KbRetrieveTool),
-            kb_event_log: Tool.init(KbEventLogTool),
-            kb_resource_extract_images: Tool.init(KbResourceExtractImagesTool),
-            kb_pipeline_run: Tool.init(kbPipelineRun),
-            kb_workspace_delete: Tool.init(KbWorkspaceDeleteTool),
-            kb_pipeline_status: Tool.init(KbPipelineStatusTool),
-            kb_remove_resource: Tool.init(KbRemoveResourceTool),
+            // EL project tools
+            el_list_projects:  Tool.init(ElListProjectsTool),
+            el_get_project:    Tool.init(ElGetProjectTool),
+            el_list_resources: Tool.init(ElListResourcesTool),
+            el_get_resource:   Tool.init(ElGetResourceTool),
+            el_capture_url:    Tool.init(ElCaptureUrlTool),
+            el_remove_resource: Tool.init(ElRemoveResourceTool),
           })
 
           return {
@@ -220,17 +201,18 @@ export namespace ToolRegistry {
               tool.patch,
               ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
               ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
-              // Learning KB tools
-              tool.kb_workspace_init,
-              tool.kb_resource_create,
-              tool.kb_concept_upsert,
-              tool.kb_wiki_build,
-              tool.kb_retrieve,
-              tool.kb_event_log,
-              tool.kb_pipeline_run,
-              tool.kb_workspace_delete,
-              tool.kb_pipeline_status,
-              tool.kb_remove_resource,
+              // Brain knowledge tools
+              tool.brain_search,
+              tool.brain_save,
+              tool.brain_context,
+              tool.brain_delete,
+              // EL project tools
+              tool.el_list_projects,
+              tool.el_get_project,
+              tool.el_list_resources,
+              tool.el_get_resource,
+              tool.el_capture_url,
+              tool.el_remove_resource,
             ],
             task: tool.task,
             read: tool.read,

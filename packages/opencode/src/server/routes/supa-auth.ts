@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from "node:crypto"
 import { Database } from "@/storage/db"
 import { Flag } from "@/flag/flag"
 import { provisionWorkspace } from "@/util/workspace-provision"
+import { lookupApiKey } from "./api-keys"
 
 async function sendApprovalEmail(toEmail: string, password: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
@@ -168,14 +169,26 @@ export function SupaAuthRoutes() {
 
   app.get("/me", (c) => {
     const secret = Flag.SUPADENSE_AUTH_SECRET
-    if (!secret) return c.json({ error: "Auth not configured" }, 503)
 
     const authHeader = c.req.header("Authorization")
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
-    if (!token) return c.json({ error: "Unauthorized" }, 401)
+    const rawToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
+
+    // API key path — /supa-auth is skipped by middleware so look up directly
+    if (rawToken?.startsWith("supa_")) {
+      const userId = lookupApiKey(rawToken)
+      if (!userId) return c.json({ error: "Invalid API key" }, 401)
+      const user = Database.Client().$client
+        .prepare("SELECT email FROM auth_users WHERE id = ?")
+        .get(userId) as { email: string } | undefined
+      const email = user?.email ?? userId
+      return c.json({ userId, email, is_admin: email === Flag.SUPADENSE_ADMIN_EMAIL })
+    }
+
+    if (!secret) return c.json({ error: "Auth not configured" }, 503)
+    if (!rawToken) return c.json({ error: "Unauthorized" }, 401)
 
     try {
-      const payload = verifyToken(token, secret) as { userId: string; email: string }
+      const payload = verifyToken(rawToken, secret) as { userId: string; email: string }
       const isAdmin = payload.email === Flag.SUPADENSE_ADMIN_EMAIL
       return c.json({ userId: payload.userId, email: payload.email, is_admin: isAdmin })
     } catch {

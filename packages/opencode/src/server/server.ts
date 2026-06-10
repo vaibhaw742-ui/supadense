@@ -39,6 +39,7 @@ import { ProjectID } from "../project/schema"
 import { Database } from "../storage/db"
 import { rmSync, existsSync } from "node:fs"
 import { SupaAuthRoutes, seedAdminUser, verifyToken } from "./routes/supa-auth"
+import { ApiKeyRoutes, lookupApiKey } from "./routes/api-keys"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
@@ -53,6 +54,7 @@ import { BrainRoutes }        from "./routes/brain"
 import { McpRoutes }           from "../brain/mcp/server"
 import { BrainProjectRoutes }  from "./routes/brain-project"
 import { LocalProjectRoutes }  from "./routes/local-project"
+import { InstallRoutes }       from "./routes/install"
 import { runBrainMigrations } from "../brain/migrate"
 import { startEmbedWorker } from "../brain/embed"
 import { startVersioningBridge } from "../brain/versioning/bridge"
@@ -130,6 +132,8 @@ export namespace Server {
         if (c.req.path.startsWith("/supa-auth/")) return next()
         if (c.req.path === "/global/health") return next()
         if (c.req.path === "/el/github/callback") return next()
+        if (c.req.path === "/install.sh") return next()
+        if (c.req.path.startsWith("/cli/")) return next()
 
         const secret = Flag.SUPADENSE_AUTH_SECRET
         if (secret) {
@@ -139,6 +143,13 @@ export namespace Server {
           const rawToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : (c.req.query("auth_token") ?? null)
           if (!rawToken) return c.json({ error: "Unauthorized" }, 401)
           try {
+            // API key shortcut — starts with "supa_"
+            if (rawToken.startsWith("supa_")) {
+              const userId = lookupApiKey(rawToken)
+              if (!userId) return c.json({ error: "Unauthorized" }, 401)
+              ;(c as any).set("userId", userId)
+              return next()
+            }
             const payload = verifyToken(rawToken, secret)
             ;(c as any).set("userId", payload.userId as string)
             return next()
@@ -388,6 +399,8 @@ export namespace Server {
       .route("/mcp",           McpRoutes)
       .route("/brain-project",  BrainProjectRoutes)
       .route("/local-projects", LocalProjectRoutes)
+      .route("/api-keys",      ApiKeyRoutes)
+      .route("/",              InstallRoutes)
       // Intercept GET /provider and GET /provider/auth ONLY when no directory is
       // specified — that is, global-context calls from bootstrapGlobal or the
       // connect-provider dialog that don't have a KB open yet.

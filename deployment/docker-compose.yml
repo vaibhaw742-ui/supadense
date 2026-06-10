@@ -56,6 +56,8 @@ services:
       - ../data/workspaces:/workspaces
       # Global brain removed — brain lives inside each project's .supadense/
       # - ../data/.supadense/brain:/brain
+      # Host projects dir — allows backend to read/write .supadense/ inside local projects
+      - /Users/vaibhawkhemka/Desktop:/Users/vaibhawkhemka/Desktop
     env_file:
       - .env
     restart: unless-stopped
