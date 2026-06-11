@@ -97,6 +97,7 @@ import { ReadPanel } from "@/pages/read-panel"
 import ProjectsPanel from "@/pages/projects/projects-panel"
 import { RequestsPanel } from "@/pages/requests-panel"
 import { ImportPanel } from "@/pages/import-panel"
+import WorkspaceGraph from "@/pages/projects/workspace-graph"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2568,7 +2569,13 @@ export default function Layout(props: ParentProps) {
           </div>
         </Show>
 
-        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden", display: (activeSidebarView().view === "read" || activeSidebarView().view === "ask" || activeSidebarView().view === "project-tags" || activeSidebarView().view === "requests" || activeSidebarView().view === "import") ? "none" : undefined }}>
+        <Show when={activeSidebarView().view === "workspace-graph"}>
+          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff" }}>
+            <WorkspaceGraph />
+          </div>
+        </Show>
+
+        <div class="flex-1 min-h-0 relative" style={{ background: "#ffffff", "border-radius": "10px", overflow: "hidden", display: (activeSidebarView().view === "read" || activeSidebarView().view === "ask" || activeSidebarView().view === "project-tags" || activeSidebarView().view === "requests" || activeSidebarView().view === "import" || activeSidebarView().view === "workspace-graph") ? "none" : undefined }}>
           <div class="size-full relative overflow-x-hidden">
             <nav
               aria-label={language.t("sidebar.nav.projectsAndSessions")}
