@@ -211,8 +211,9 @@ LocalProjectRoutes.get("/", (c) => {
 })
 
 // GET /local-projects/all-sources
-// Aggregate all sources across all local projects for the Sources tab
-LocalProjectRoutes.get("/all-sources", (c) => {
+// Aggregate all sources across all local projects — reads from Postgres brain_pages
+// (filesystem writes inside Docker are ephemeral; Postgres is the source of truth)
+LocalProjectRoutes.get("/all-sources", async (c) => {
   const userId = getUserId(c)
   if (!userId) return json(c, { error: "Not authenticated" }, 401)
 
@@ -221,59 +222,87 @@ LocalProjectRoutes.get("/all-sources", (c) => {
     .where(eq(LocalProjectTable.user_id, userId))
     .all()
 
-  const allSources: Array<{
-    id:           string
-    project_id:   string
-    project_name: string
-    filename:     string
-    title:        string
-    url:          string | null
-    source_type:  string
-    status:       "processing" | "done" | "failed"
-    size:         number
-    time_created: number
-  }> = []
+  if (projects.length === 0) return json(c, { sources: [], total: 0 })
 
-  for (const proj of projects) {
-    if (!existsSync(proj.sources_dir)) continue
-    const files = readdirSync(proj.sources_dir)
-    for (const filename of files) {
-      const filePath = join(proj.sources_dir, filename as string)
-      const stat     = statSync(filePath)
-      let title    = (filename as string).replace(/\.(md|txt)$/, "").replace(/-/g, " ")
+  try {
+    const { brainDb } = await import("../../brain/db")
+    const pgDb = brainDb()
+
+    const sourceIds = projects.map(p => p.source_id)
+    const rows = await pgDb`
+      SELECT source_id, slug, title, compiled_truth, type, created_at
+      FROM brain_pages
+      WHERE source_id = ANY(${sourceIds})
+        AND slug LIKE 'L0/sources/%'
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC
+    ` as Array<{ source_id: string; slug: string; title: string | null; compiled_truth: string | null; type: string; created_at: Date }>
+
+    const projById = new Map(projects.map(p => [p.source_id, p]))
+
+    const allSources = rows.map((r) => {
+      const proj     = projById.get(r.source_id)!
+      const filename = r.slug.replace(/^L0\/sources\//, "") + ".md"
+      const content  = r.compiled_truth ?? ""
       let url: string | null = null
       let status: "processing" | "done" | "failed" = "done"
-      let source_type: SourceType = "web"
 
-      try {
-        const first500 = readFileSync(filePath, "utf8").slice(0, 500)
-        const titleMatch = first500.match(/^#\s+(.+)$/m)
-        if (titleMatch) title = titleMatch[1].trim()
-        const urlMatch = first500.match(/^Source:\s+(https?:\/\/.+)$/m)
-        if (urlMatch) url = urlMatch[1].trim()
-        const typeMatch = first500.match(/^SourceType:\s+(\S+)$/m)
-        source_type = typeMatch ? (typeMatch[1].trim() as SourceType) : detectSourceType(url, filename as string)
-        if (first500.includes("Status: processing")) status = "processing"
-        else if (first500.includes("Status: failed")) status = "failed"
-      } catch { /* skip unreadable */ }
+      const urlMatch = content.match(/^Source:\s+(https?:\/\/.+)$/m)
+      if (urlMatch) url = urlMatch[1].trim()
+      if (content.includes("Status: processing")) status = "processing"
+      else if (content.includes("Status: failed")) status = "failed"
 
-      allSources.push({
-        id:           `local-src-${proj.id}-${(filename as string)}`,
+      const source_type: SourceType = detectSourceType(url, filename)
+      const title = r.title ?? filename.replace(/\.(md|txt)$/, "").replace(/-/g, " ")
+
+      return {
+        id:           `local-src-${proj.id}-${filename}`,
         project_id:   proj.id,
         project_name: proj.name,
-        filename:     filename as string,
+        filename,
         title,
         url,
         source_type,
         status,
-        size:         stat.size,
-        time_created: Math.floor(stat.birthtimeMs ?? stat.ctimeMs),
-      })
-    }
-  }
+        size:         content.length,
+        time_created: r.created_at instanceof Date ? r.created_at.getTime() : Date.now(),
+      }
+    })
 
-  allSources.sort((a, b) => b.time_created - a.time_created)
-  return json(c, { sources: allSources, total: allSources.length })
+    return json(c, { sources: allSources, total: allSources.length })
+  } catch (e) {
+    // Fallback to filesystem
+    const allSources: Array<{
+      id: string; project_id: string; project_name: string; filename: string
+      title: string; url: string | null; source_type: string
+      status: "processing" | "done" | "failed"; size: number; time_created: number
+    }> = []
+    for (const proj of projects) {
+      if (!existsSync(proj.sources_dir)) continue
+      for (const filename of readdirSync(proj.sources_dir)) {
+        const filePath = join(proj.sources_dir, filename as string)
+        const stat = statSync(filePath)
+        let title = (filename as string).replace(/\.(md|txt)$/, "").replace(/-/g, " ")
+        let url: string | null = null
+        let status: "processing" | "done" | "failed" = "done"
+        let source_type: SourceType = "web"
+        try {
+          const first500 = readFileSync(filePath, "utf8").slice(0, 500)
+          const titleMatch = first500.match(/^#\s+(.+)$/m)
+          if (titleMatch) title = titleMatch[1].trim()
+          const urlMatch = first500.match(/^Source:\s+(https?:\/\/.+)$/m)
+          if (urlMatch) url = urlMatch[1].trim()
+          const typeMatch = first500.match(/^SourceType:\s+(\S+)$/m)
+          source_type = typeMatch ? (typeMatch[1].trim() as SourceType) : detectSourceType(url, filename as string)
+          if (first500.includes("Status: processing")) status = "processing"
+          else if (first500.includes("Status: failed")) status = "failed"
+        } catch { /* skip */ }
+        allSources.push({ id: `local-src-${proj.id}-${filename as string}`, project_id: proj.id, project_name: proj.name, filename: filename as string, title, url, source_type, status, size: stat.size, time_created: Math.floor(stat.birthtimeMs ?? stat.ctimeMs) })
+      }
+    }
+    allSources.sort((a, b) => b.time_created - a.time_created)
+    return json(c, { sources: allSources, total: allSources.length })
+  }
 })
 
 // GET /local-projects/:id
@@ -822,7 +851,9 @@ LocalProjectRoutes.get("/:id/sources/:filename", (c) => {
 })
 
 // GET /local-projects/:id/sources
-LocalProjectRoutes.get("/:id/sources", (c) => {
+// Queries brain_pages in Postgres (source of truth) — filesystem writes inside
+// Docker containers are ephemeral, so we read from the DB instead.
+LocalProjectRoutes.get("/:id/sources", async (c) => {
   const userId = getUserId(c)
   const id     = c.req.param("id")
   if (!userId) return json(c, { error: "Not authenticated" }, 401)
@@ -833,28 +864,69 @@ LocalProjectRoutes.get("/:id/sources", (c) => {
     .get()
 
   if (!row) return json(c, { error: "Not found" }, 404)
-  if (!existsSync(row.sources_dir)) return json(c, { sources: [] })
 
-  const files = readdirSync(row.sources_dir).map(f => {
-    const filePath = join(row.sources_dir, f as string)
-    let title    = (f as string).replace(/\.(md|txt)$/, "").replace(/-/g, " ")
-    let url: string | null = null
-    let status: "processing" | "done" | "failed" = "done"
-    let source_type: SourceType = "web"
-    try {
-      const first500 = readFileSync(filePath, "utf8").slice(0, 500)
-      const titleMatch = first500.match(/^#\s+(.+)$/m)
-      if (titleMatch) title = titleMatch[1].trim()
-      const urlMatch = first500.match(/^Source:\s+(https?:\/\/.+)$/m)
+  try {
+    const { brainDb } = await import("../../brain/db")
+    const pgDb = brainDb()
+    const rows = await pgDb`
+      SELECT slug, title, compiled_truth, type, created_at, updated_at
+      FROM brain_pages
+      WHERE source_id = ${row.source_id}
+        AND slug LIKE 'L0/sources/%'
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC
+    ` as Array<{ slug: string; title: string | null; compiled_truth: string | null; type: string; created_at: Date; updated_at: Date }>
+
+    const sources = rows.map((r) => {
+      const filename = r.slug.replace(/^L0\/sources\//, "") + ".md"
+      const content  = r.compiled_truth ?? ""
+      let url: string | null = null
+      let status: "processing" | "done" | "failed" = "done"
+
+      const urlMatch  = content.match(/^Source:\s+(https?:\/\/.+)$/m)
       if (urlMatch) url = urlMatch[1].trim()
-      const typeMatch = first500.match(/^SourceType:\s+(\S+)$/m)
-      source_type = typeMatch ? (typeMatch[1].trim() as SourceType) : detectSourceType(url, f as string)
-      if (first500.includes("Status: processing")) status = "processing"
-      else if (first500.includes("Status: failed"))  status = "failed"
-    } catch { /* skip */ }
-    return { name: f as string, size: statSync(filePath).size, title, url, source_type, status }
-  })
-  return json(c, { sources: files, total: files.length })
+      if (content.includes("Status: processing")) status = "processing"
+      else if (content.includes("Status: failed")) status = "failed"
+
+      const source_type: SourceType = detectSourceType(url, filename)
+      const title = r.title ?? filename.replace(/\.(md|txt)$/, "").replace(/-/g, " ")
+
+      return {
+        name:        filename,
+        size:        content.length,
+        title,
+        url,
+        source_type,
+        status,
+        time_created: r.created_at instanceof Date ? r.created_at.getTime() : Date.now(),
+      }
+    })
+
+    return json(c, { sources, total: sources.length })
+  } catch (e) {
+    // Fallback to filesystem if Postgres is unavailable
+    if (!existsSync(row.sources_dir)) return json(c, { sources: [] })
+    const files = readdirSync(row.sources_dir).map(f => {
+      const filePath = join(row.sources_dir, f as string)
+      let title    = (f as string).replace(/\.(md|txt)$/, "").replace(/-/g, " ")
+      let url: string | null = null
+      let status: "processing" | "done" | "failed" = "done"
+      let source_type: SourceType = "web"
+      try {
+        const first500 = readFileSync(filePath, "utf8").slice(0, 500)
+        const titleMatch = first500.match(/^#\s+(.+)$/m)
+        if (titleMatch) title = titleMatch[1].trim()
+        const urlMatch = first500.match(/^Source:\s+(https?:\/\/.+)$/m)
+        if (urlMatch) url = urlMatch[1].trim()
+        const typeMatch = first500.match(/^SourceType:\s+(\S+)$/m)
+        source_type = typeMatch ? (typeMatch[1].trim() as SourceType) : detectSourceType(url, f as string)
+        if (first500.includes("Status: processing")) status = "processing"
+        else if (first500.includes("Status: failed"))  status = "failed"
+      } catch { /* skip */ }
+      return { name: f as string, size: statSync(filePath).size, title, url, source_type, status }
+    })
+    return json(c, { sources: files, total: files.length })
+  }
 })
 
 // DELETE /local-projects/:id/sources/:filename
