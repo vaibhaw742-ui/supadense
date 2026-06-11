@@ -249,11 +249,8 @@ export function SupadenseSidebar(props: {
                 type="button"
                 data-nav-id={item.id}
                 onClick={() => {
-                  if (item.id === "graph") {
-                    // Project Tags virtual panel
-                    setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })
-                  } else if (item.id === "experiments") {
-                    // Workspace graph — all project tags as nodes
+                  if (item.id === "graph" || item.id === "experiments") {
+                    // Workspace graph — all project tags as D3 force nodes
                     setActiveSidebarView({ section: "workspace", view: "workspace-graph", label: "Graph" })
                   } else if (item.id === "chat") {
                     setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" })
