@@ -253,19 +253,8 @@ export function SupadenseSidebar(props: {
                     // Project Tags virtual panel
                     setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })
                   } else if (item.id === "experiments") {
-                    // Graph — navigate to the project's directory session so WikiGraphPanel can render
-                    void elApi.listLocalProjects().then((projects) => {
-                      const first = projects[0]
-                      if (first) {
-                        setActiveGraphProjectId(first.id)
-                        setActiveGraphProjectName(first.name)
-                        setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
-                        // Navigate to /:dir/session so WikiGraphPanel (in SessionRouteContent) renders
-                        navigate(`/${base64Encode(first.local_path)}/session`)
-                      } else {
-                        setActiveSidebarView({ section: "workspace", view: "lib", label: "Graph" })
-                      }
-                    })
+                    // Workspace graph — all project tags as nodes
+                    setActiveSidebarView({ section: "workspace", view: "workspace-graph", label: "Graph" })
                   } else if (item.id === "chat") {
                     setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" })
                     props.onPlayground?.()
