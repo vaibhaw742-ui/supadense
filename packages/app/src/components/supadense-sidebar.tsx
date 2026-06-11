@@ -128,7 +128,7 @@ export function SupadenseSidebar(props: {
     const view = activeSidebarView().view
     if (view === "read") return "sources"
     if (view === "notes") return "notes"
-    if (view === "lib") return "experiments"
+    if (view === "lib" || view === "workspace-graph") return "experiments"
     if (view === "project-tags") return "graph"
     if (view === "ask") return "chat"
     // For other view values that match a nav id directly
