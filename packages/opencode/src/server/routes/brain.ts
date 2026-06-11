@@ -507,3 +507,61 @@ BrainRoutes.post("/sync", async (c) => {
 
   return json(c, { synced, skipped, errors })
 })
+
+// GET /brain/export?source_id=xxx&project_id=xxx
+// Returns all brain pages for a source/project so the CLI can pull them locally
+BrainRoutes.get("/export", async (c) => {
+  const sourceId  = c.req.query("source_id")
+  const projectId = c.req.query("project_id")
+
+  const db = brainDb()
+
+  let rows: Array<{ slug: string; layer: number; type: string; compiled_truth: string | null; frontmatter: Record<string, unknown>; updated_at: Date }>
+
+  if (sourceId) {
+    rows = await db`
+      SELECT slug, layer, type, compiled_truth, frontmatter, updated_at
+      FROM brain_pages
+      WHERE source_id = ${sourceId} AND deleted_at IS NULL
+      ORDER BY layer, slug
+    ` as typeof rows
+  } else if (projectId) {
+    // Look up source_id from local_project table then export
+    try {
+      const { Database } = await import("../../storage/db")
+      const project = Database.use((db) => db.query("SELECT source_id FROM local_project WHERE id = ?").get(projectId)) as { source_id: string } | undefined
+      if (!project) return json(c, { error: "project not found" }, 404)
+      rows = await db`
+        SELECT slug, layer, type, compiled_truth, frontmatter, updated_at
+        FROM brain_pages
+        WHERE source_id = ${project.source_id} AND deleted_at IS NULL
+        ORDER BY layer, slug
+      ` as typeof rows
+    } catch (e) {
+      return json(c, { error: String(e) }, 500)
+    }
+  } else {
+    return json(c, { error: "source_id or project_id required" }, 400)
+  }
+
+  // Reconstruct markdown with frontmatter
+  const files = rows.map((row) => {
+    const fm = row.frontmatter as Record<string, unknown> ?? {}
+    const fmLines = [
+      "---",
+      `type: ${row.type}`,
+      `layer: ${row.layer}`,
+      ...(fm.query ? [`query: "${String(fm.query).replace(/"/g, '\\"')}"`] : []),
+      "---",
+      "",
+    ]
+    const content = fmLines.join("\n") + (row.compiled_truth ?? "") + "\n"
+    return {
+      path:        `L${row.layer}/${row.slug.replace(/^L[012]\//, "")}.md`,
+      content,
+      updated_at:  row.updated_at instanceof Date ? row.updated_at.getTime() : Date.now(),
+    }
+  })
+
+  return json(c, { files, total: files.length })
+})
