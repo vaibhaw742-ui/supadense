@@ -248,6 +248,12 @@ export default function ProjectsPanel() {
     const rows = sources() ?? []
     const map = new Map<string, TagRow>()
     const seen = new Set<string>() // project_id + filename dedup
+
+    // Seed map with all registered projects (even those with 0 docs)
+    for (const proj of projects() ?? []) {
+      map.set(proj.id, { name: proj.name, project_id: proj.id, doc_count: 0, last_activity: proj.time_created ?? 0 })
+    }
+
     for (const row of rows) {
       const key = `${row.project_id}::${row.filename}`
       if (!map.has(row.project_id)) {
@@ -355,7 +361,7 @@ export default function ProjectsPanel() {
             </thead>
             <tbody>
               {/* Loading skeletons */}
-              <Show when={sources.loading}>
+              <Show when={sources.loading || projects.loading}>
                 <For each={[1, 2, 3, 4]}>
                   {() => (
                     <tr style={{ "border-bottom": "1px solid #f3f4f6" }}>
@@ -369,7 +375,7 @@ export default function ProjectsPanel() {
               </Show>
 
               {/* Empty state */}
-              <Show when={!sources.loading && tagRows().length === 0}>
+              <Show when={!sources.loading && !projects.loading && tagRows().length === 0}>
                 <tr>
                   <td colspan="4" style={{ padding: "60px 20px", "text-align": "center" }}>
                     <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "13px", color: "#9ca3af" }}>
@@ -396,7 +402,7 @@ export default function ProjectsPanel() {
         </div>
 
         {/* Footer total */}
-        <Show when={!sources.loading && tagRows().length > 0}>
+        <Show when={!sources.loading && !projects.loading && tagRows().length > 0}>
           <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "12px" }}>
             <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#9ca3af" }}>
               {tagRows().length} total
