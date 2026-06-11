@@ -1,66 +1,76 @@
-// workspace-graph.tsx — force-directed graph of all project tags
+// workspace-graph.tsx — force-directed graph of all project tags + their nodes
 import { createResource, createEffect, onCleanup, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import * as d3 from "d3"
 import { elApi } from "./el-api"
 import { setActiveSidebarView } from "@/context/sidebar-view"
 
-interface ProjectNode extends d3.SimulationNodeDatum {
-  id:            string
-  name:          string
-  doc_count:     number
-  last_activity: number
-  color:         string
+interface GraphNode extends d3.SimulationNodeDatum {
+  id:        string
+  label:     string
+  type:      string   // "project" | "category" | "source" | "brain"
+  projectId: string
+  color:     string
+}
+interface GraphEdge {
+  source: string | GraphNode
+  target: string | GraphNode
 }
 
 const COLORS = ["#f59e0b", "#10b981", "#6366f1", "#ec4899", "#3b82f6", "#f97316", "#14b8a6", "#8b5cf6"]
 
 export default function WorkspaceGraph() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
   let container!: HTMLDivElement
-  let simRef: d3.Simulation<ProjectNode, undefined> | null = null
+  let simRef: d3.Simulation<GraphNode, GraphEdge> | null = null
 
-  const [projects]   = createResource(() => elApi.listLocalProjects())
-  const [allSources] = createResource(() => elApi.listAllLocalSources())
+  const [projects] = createResource(() => elApi.listLocalProjects())
+
+  // Once projects load, fetch each project's graph and merge
+  const [graphData] = createResource(
+    () => projects(),
+    async (projs) => {
+      if (!projs?.length) return { nodes: [] as GraphNode[], edges: [] as GraphEdge[] }
+      const allNodes: GraphNode[] = []
+      const allEdges: GraphEdge[] = []
+      const seen = new Set<string>()
+
+      await Promise.all(projs.map(async (p, i) => {
+        const color = COLORS[i % COLORS.length]
+        const g = await elApi.getLocalProjectGraph(p.id)
+        for (const n of g.nodes) {
+          if (seen.has(n.id)) continue
+          seen.add(n.id)
+          allNodes.push({ id: n.id, label: n.label, type: n.type, projectId: p.id, color })
+        }
+        for (const e of g.edges) {
+          allEdges.push({ source: e.source, target: e.target })
+        }
+      }))
+      return { nodes: allNodes, edges: allEdges }
+    }
+  )
 
   createEffect(() => {
-    const projs   = projects()
-    const sources = allSources()
-    if (!projs || !sources) return
+    const data = graphData()
+    if (!data || data.nodes.length === 0) return
 
-    const docCount     = new Map<string, number>()
-    const lastActivity = new Map<string, number>()
-    for (const s of sources) {
-      docCount.set(s.project_id, (docCount.get(s.project_id) ?? 0) + 1)
-      const prev = lastActivity.get(s.project_id) ?? 0
-      if (s.time_created > prev) lastActivity.set(s.project_id, s.time_created)
-    }
-
-    const nodes: ProjectNode[] = projs.map((p, i) => ({
-      id:            p.id,
-      name:          p.name,
-      doc_count:     docCount.get(p.id) ?? 0,
-      last_activity: lastActivity.get(p.id) ?? (p.time_created ?? 0),
-      color:         COLORS[i % COLORS.length],
-    }))
-
-    // Retry until container has real dimensions
     const tryDraw = () => {
       if (!container) return
       const rect = container.getBoundingClientRect()
       if (rect.width < 10 || rect.height < 10) { requestAnimationFrame(tryDraw); return }
-      drawGraph(nodes, rect.width, rect.height)
+      drawGraph(data.nodes, data.edges, rect.width, rect.height)
     }
     requestAnimationFrame(tryDraw)
   })
 
-  function drawGraph(nodes: ProjectNode[], w: number, h: number) {
+  function drawGraph(nodes: GraphNode[], edges: GraphEdge[], w: number, h: number) {
     simRef?.stop()
     d3.select(container).selectAll("*").remove()
     if (nodes.length === 0) return
 
-    // Small nodes like the wiki graph — radius ~14-22px based on doc count
-    const radius = (n: ProjectNode) => Math.max(14, Math.min(28, 14 + n.doc_count * 2))
+    const nodeRadius = (n: GraphNode) =>
+      n.type === "project" ? 20 : n.type === "category" ? 14 : 10
 
     const svg = d3.select(container)
       .append("svg")
@@ -77,50 +87,71 @@ export default function WorkspaceGraph() {
       .on("end",   () => svg.style("cursor", "grab"))
     svg.call(zoom)
 
-    const sim = d3.forceSimulation<ProjectNode>(nodes)
-      .force("charge",  d3.forceManyBody<ProjectNode>().strength(-200))
-      .force("center",  d3.forceCenter(w / 2, h / 2))
-      .force("collide", d3.forceCollide<ProjectNode>((n) => radius(n) + 40).strength(0.8))
-      .alphaDecay(0.02)
-    simRef = sim
+    const nodeById = new Map(nodes.map(n => [n.id, n]))
 
-    const node = g.selectAll<SVGGElement, ProjectNode>("g.node")
+    const sim = d3.forceSimulation<GraphNode>(nodes)
+      .force("link", d3.forceLink<GraphNode, GraphEdge>(edges)
+        .id((d) => d.id).distance(80).strength(0.6))
+      .force("charge", d3.forceManyBody<GraphNode>().strength(-180))
+      .force("center", d3.forceCenter(w / 2, h / 2))
+      .force("collide", d3.forceCollide<GraphNode>((n) => nodeRadius(n) + 20).strength(0.8))
+      .alphaDecay(0.02)
+    simRef = sim as any
+
+    // Edges
+    const link = g.append("g")
+      .selectAll<SVGLineElement, GraphEdge>("line")
+      .data(edges)
+      .join("line")
+      .attr("stroke", "#e5e7eb")
+      .attr("stroke-width", 1.5)
+
+    // Node groups
+    const node = g.selectAll<SVGGElement, GraphNode>("g.node")
       .data(nodes, (d) => d.id)
       .join("g")
       .attr("class", "node")
-      .style("cursor", "pointer")
+      .style("cursor", (d) => d.type === "project" ? "pointer" : "default")
       .call(
-        d3.drag<SVGGElement, ProjectNode>()
+        d3.drag<SVGGElement, GraphNode>()
           .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
           .on("drag",  (e, d) => { d.fx = e.x; d.fy = e.y })
           .on("end",   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null })
       )
       .on("click", (_, d) => {
-        setActiveSidebarView({ section: "workspace", view: "project", label: d.name })
-        navigate(`/local-projects/${d.id}`)
+        if (d.type !== "project") return
+        setActiveSidebarView({ section: "workspace", view: "project", label: d.label })
+        navigate(`/local-projects/${d.projectId}`)
       })
 
-    // Main circle — small, light fill, coloured stroke
+    // Circle
     node.append("circle")
-      .attr("r", radius)
+      .attr("r", nodeRadius)
       .attr("fill", (d) => d.color)
-      .attr("fill-opacity", 0.15)
+      .attr("fill-opacity", (d) => d.type === "project" ? 0.15 : 0.1)
       .attr("stroke", (d) => d.color)
-      .attr("stroke-width", 2)
+      .attr("stroke-width", (d) => d.type === "project" ? 2.5 : 1.5)
 
-    // Name label to the right of the node
+    // Label to the right
     node.append("text")
       .attr("text-anchor", "start")
       .attr("dominant-baseline", "central")
-      .attr("x", (d) => radius(d) + 6)
-      .attr("fill", (d) => d.color)
-      .attr("font-size", "12px")
-      .attr("font-weight", "500")
+      .attr("x", (d) => nodeRadius(d) + 5)
+      .attr("fill", (d) => d.type === "project" ? d.color : "#6b7280")
+      .attr("font-size", (d) => d.type === "project" ? "12px" : "10px")
+      .attr("font-weight", (d) => d.type === "project" ? "600" : "400")
       .attr("font-family", "inherit")
       .attr("pointer-events", "none")
-      .text((d) => d.name)
+      .text((d) => d.label)
 
-    sim.on("tick", () => node.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`))
+    sim.on("tick", () => {
+      link
+        .attr("x1", (d) => (d.source as GraphNode).x ?? 0)
+        .attr("y1", (d) => (d.source as GraphNode).y ?? 0)
+        .attr("x2", (d) => (d.target as GraphNode).x ?? 0)
+        .attr("y2", (d) => (d.target as GraphNode).y ?? 0)
+      node.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
+    })
 
     onCleanup(() => { sim.stop() })
   }
@@ -145,7 +176,7 @@ export default function WorkspaceGraph() {
 
       {/* Canvas */}
       <div style={{ flex: "1", position: "relative", overflow: "hidden" }}>
-        <Show when={projects.loading || allSources.loading}>
+        <Show when={projects.loading || graphData.loading}>
           <div style={{ position: "absolute", inset: "0", display: "flex", "align-items": "center", "justify-content": "center" }}>
             <span style={{ "font-size": "13px", color: "#9ca3af", "font-family": "'Geist Mono', monospace" }}>Loading…</span>
           </div>
