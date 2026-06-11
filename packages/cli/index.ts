@@ -9,7 +9,7 @@
 //   projects                 — list all registered projects
 //   sources list|add|remove  — manage sources
 //   brain list|search        — brain file ops
-//   sync                     — push all pending brain files to server
+//   sync                     — push all pending brain files to server (MCP does this automatically)
 //   unregister [id]          — remove project registration
 //   deinit [-f] [id]         — unregister + delete .supadense/ from disk
 //   --mcp                    — launch MCP stdio bridge (used by .mcp.json)
@@ -1019,78 +1019,6 @@ async function runMcp() {
   }
 }
 
-// ── pull: download brain files from server → local .supadense/brain/ ─────────
-
-async function cmdPull(args: string[]) {
-  const cfg = readConfig()
-  if (!cfg) { err("Not logged in. Run: supadense login"); process.exit(1) }
-
-  const projBase = await resolveProject(cfg, args)
-  if (!projBase) { err("Not inside a registered project. Run: supadense init\n  Or use: --project <id>"); process.exit(1) }
-
-  // Fetch full project to get source_id
-  const fullRes = await api(cfg.url, `/local-projects/${projBase.id}`, { token: cfg.apiKey })
-  if (!fullRes.ok) { err(`Project "${projBase.id}" not found`); process.exit(1) }
-  const proj = fullRes.data as { id: string; name: string; local_path: string; source_id: string }
-
-  const sourceId     = proj.source_id ?? `local-${proj.id}`
-  const supadenseDir = join(proj.local_path, ".supadense")
-  const brainDir     = join(supadenseDir, "brain")
-  const syncStatePath = join(supadenseDir, ".sync-state.json")
-
-  log("")
-  info(`Pulling brain files from ${cfg.url} for project ${c("cyan", proj.id)}…`)
-
-  const res = await api(cfg.url, `/brain/export?source_id=${encodeURIComponent(sourceId)}`, {
-    method: "GET",
-    token:  cfg.apiKey,
-  })
-
-  if (!res.ok) {
-    err(`Pull failed: ${res.data?.error ?? res.status}`)
-    process.exit(1)
-  }
-
-  const { files, total } = res.data as { files: Array<{ path: string; content: string; updated_at: number }>; total: number }
-
-  if (total === 0) {
-    warn("No brain files found on server for this project.")
-    return
-  }
-
-  // Read existing sync state
-  let syncState: Record<string, { hash: string; synced: boolean; modified_at: number }> = {}
-  try { syncState = JSON.parse(readFileSync(syncStatePath, "utf8")) } catch {}
-
-  let written = 0, skipped = 0
-
-  for (const file of files) {
-    const absPath    = join(brainDir, file.path)
-    const relPath    = `brain/${file.path}`
-    const newHash    = fileHash(file.content)
-    const existing   = syncState[relPath]
-
-    // Skip if local version is identical
-    if (existing?.hash === newHash && existsSync(absPath)) {
-      skipped++
-      continue
-    }
-
-    mkdirSync(dirname(absPath), { recursive: true })
-    writeFileSync(absPath, file.content, "utf8")
-    syncState[relPath] = { hash: newHash, synced: true, modified_at: file.updated_at }
-    written++
-  }
-
-  // Persist sync state
-  mkdirSync(supadenseDir, { recursive: true })
-  writeFileSync(syncStatePath, JSON.stringify(syncState, null, 2), "utf8")
-
-  log("")
-  ok(`Pull complete: ${written} file(s) written, ${skipped} unchanged`)
-  info(`Brain files are in: ${brainDir}`)
-  log("")
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -1115,7 +1043,6 @@ function printHelp() {
   log("  " + c("cyan", "brain list") + "                 List all brain files in current project")
   log("  " + c("cyan", "brain search") + " <query>       Search the brain")
   log("  " + c("cyan", "sync") + "                       Push all pending brain files to server")
-  log("  " + c("cyan", "pull") + "                       Pull brain files from server → local .supadense/")
   log("")
   log(c("dim", "  Sources"))
   log("  " + c("cyan", "sources list") + "                           List captured sources in current project")
@@ -1145,7 +1072,6 @@ if (command === "--mcp") {
     case "sources":     await cmdSources(rest);       break
     case "brain":       await cmdBrain(rest);         break
     case "sync":        await cmdSync(rest);          break
-    case "pull":        await cmdPull(rest);          break
     case "unregister":  await cmdUnregister(rest);    break
     case "deinit":      await cmdDeinit(rest);        break
     default:            printHelp();                  break
