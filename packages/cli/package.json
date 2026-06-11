@@ -1,0 +1,14 @@
+{
+  "name": "supadense",
+  "version": "0.1.0",
+  "description": "Supadense CLI — register projects, add sources, search brain",
+  "type": "module",
+  "bin": {
+    "supadense": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "keywords": ["supadense", "brain", "mcp", "knowledge"],
+  "engines": { "bun": ">=1.0.0" }
+}

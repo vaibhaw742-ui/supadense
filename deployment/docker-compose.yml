@@ -54,10 +54,7 @@ services:
       - ../data/opencode:/root/.local/share/opencode
       - ../data/opencode-config:/root/.config/opencode
       - ../data/workspaces:/workspaces
-      # Global brain removed — brain lives inside each project's .supadense/
-      # - ../data/.supadense/brain:/brain
-      # Host projects dir — allows backend to read/write .supadense/ inside local projects
-      - /Users/vaibhawkhemka/Desktop:/Users/vaibhawkhemka/Desktop
+      # No host volume mount — MCP stdio.ts pushes brain files via HTTP
     env_file:
       - .env
     restart: unless-stopped

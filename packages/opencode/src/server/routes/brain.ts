@@ -463,3 +463,47 @@ BrainRoutes.get("/files", async (c) => {
   const total = JSON.stringify(tree).match(/"type":"file"/g)?.length ?? 0
   return json(c, { tree, total, brain_dir: brainDir })
 })
+
+// POST /brain/sync — bulk receive brain files from MCP on shutdown or manual sync
+BrainRoutes.post("/sync", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  if (!body?.files || !Array.isArray(body.files)) return json(c, { error: "files array required" }, 400)
+
+  const sourceId  = body.source_id ?? "default"
+  const projectId = body.project_id as string | undefined
+
+  let synced  = 0
+  let skipped = 0
+  const errors: string[] = []
+
+  for (const f of body.files as Array<{ path: string; content: string; modified_at?: number }>) {
+    if (!f.path || !f.content) { skipped++; continue }
+    try {
+      const layerMatch = f.path.match(/^L([012])\//)
+      const layer = layerMatch ? parseInt(layerMatch[1]) as 0 | 1 | 2 : 0
+      const slug  = f.path.replace(/\.md$/, "")
+      await captureToBrain({
+        content:  f.content,
+        slug,
+        layer,
+        source_id: sourceId,
+        contribution_type: "capture",
+      })
+      synced++
+    } catch (e) {
+      errors.push(f.path)
+    }
+  }
+
+  // If project_id provided, update last_synced_at on the project
+  if (projectId) {
+    try {
+      const { Database } = await import("../../storage/db")
+      Database.use((db) => {
+        db.run(`UPDATE local_project SET last_synced_at = ${Date.now()} WHERE id = '${projectId}'`)
+      })
+    } catch {}
+  }
+
+  return json(c, { synced, skipped, errors })
+})
