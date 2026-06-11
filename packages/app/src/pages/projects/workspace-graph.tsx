@@ -59,7 +59,8 @@ export default function WorkspaceGraph() {
     d3.select(container).selectAll("*").remove()
     if (nodes.length === 0) return
 
-    const radius = (n: ProjectNode) => Math.max(36, Math.min(80, 36 + n.doc_count * 8))
+    // Small nodes like the wiki graph — radius ~14-22px based on doc count
+    const radius = (n: ProjectNode) => Math.max(14, Math.min(28, 14 + n.doc_count * 2))
 
     const svg = d3.select(container)
       .append("svg")
@@ -77,9 +78,9 @@ export default function WorkspaceGraph() {
     svg.call(zoom)
 
     const sim = d3.forceSimulation<ProjectNode>(nodes)
-      .force("charge",  d3.forceManyBody<ProjectNode>().strength(-500))
+      .force("charge",  d3.forceManyBody<ProjectNode>().strength(-200))
       .force("center",  d3.forceCenter(w / 2, h / 2))
-      .force("collide", d3.forceCollide<ProjectNode>((n) => radius(n) + 30).strength(0.9))
+      .force("collide", d3.forceCollide<ProjectNode>((n) => radius(n) + 40).strength(0.8))
       .alphaDecay(0.02)
     simRef = sim
 
@@ -99,67 +100,29 @@ export default function WorkspaceGraph() {
         navigate(`/local-projects/${d.id}`)
       })
 
-    // Glow ring
-    node.append("circle")
-      .attr("r", (d) => radius(d) + 10)
-      .attr("fill", "none")
-      .attr("stroke", (d) => d.color)
-      .attr("stroke-width", 1.5)
-      .attr("opacity", 0.18)
-
-    // Main circle
+    // Main circle — small, light fill, coloured stroke
     node.append("circle")
       .attr("r", radius)
       .attr("fill", (d) => d.color)
-      .attr("fill-opacity", 0.13)
+      .attr("fill-opacity", 0.15)
       .attr("stroke", (d) => d.color)
-      .attr("stroke-width", 2.5)
+      .attr("stroke-width", 2)
 
-    // Initial letter
+    // Name label to the right of the node
     node.append("text")
-      .attr("text-anchor", "middle").attr("dominant-baseline", "central")
-      .attr("dy", (d) => `-${radius(d) * 0.18}px`)
+      .attr("text-anchor", "start")
+      .attr("dominant-baseline", "central")
+      .attr("x", (d) => radius(d) + 6)
       .attr("fill", (d) => d.color)
-      .attr("font-size", (d) => `${Math.round(radius(d) * 0.62)}px`)
-      .attr("font-weight", "700").attr("font-family", "inherit")
+      .attr("font-size", "12px")
+      .attr("font-weight", "500")
+      .attr("font-family", "inherit")
       .attr("pointer-events", "none")
-      .text((d) => d.name.charAt(0).toUpperCase())
-
-    // Doc count
-    node.append("text")
-      .attr("text-anchor", "middle").attr("dominant-baseline", "central")
-      .attr("dy", (d) => `${radius(d) * 0.45}px`)
-      .attr("fill", (d) => d.color)
-      .attr("font-size", "10px").attr("font-family", "'Geist Mono', monospace")
-      .attr("opacity", 0.75).attr("pointer-events", "none")
-      .text((d) => `${d.doc_count} doc${d.doc_count !== 1 ? "s" : ""}`)
-
-    // Name label below
-    node.append("text")
-      .attr("text-anchor", "middle").attr("dominant-baseline", "hanging")
-      .attr("dy", (d) => `${radius(d) + 10}px`)
-      .attr("fill", "#374151").attr("font-size", "12px").attr("font-weight", "600")
-      .attr("font-family", "inherit").attr("pointer-events", "none")
       .text((d) => d.name)
 
     sim.on("tick", () => node.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`))
 
-    // Auto-fit
-    const timer = setTimeout(() => {
-      const pad = 100
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-      nodes.forEach((n) => {
-        const r = radius(n)
-        x0 = Math.min(x0, (n.x ?? 0) - r - pad); y0 = Math.min(y0, (n.y ?? 0) - r - pad)
-        x1 = Math.max(x1, (n.x ?? 0) + r + pad); y1 = Math.max(y1, (n.y ?? 0) + r + pad)
-      })
-      const s  = Math.min(w / (x1 - x0), h / (y1 - y0), 1.4)
-      const tx = (w - s * (x0 + x1)) / 2
-      const ty = (h - s * (y0 + y1)) / 2
-      svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(s))
-    }, 1500)
-
-    onCleanup(() => { sim.stop(); clearTimeout(timer) })
+    onCleanup(() => { sim.stop() })
   }
 
   return (
