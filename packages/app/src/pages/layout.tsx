@@ -90,14 +90,446 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 import { SupadenseMark, SupadenseChatOverlay, SupadenseChatPanel } from "@/components/supadense-chat-panel"
 import { SupadenseSidebar, SidebarCollapseToggle } from "@/components/supadense-sidebar"
+import { NewProjectDialog } from "@/components/dialog-new-project"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
 import { CaptureDialog } from "@/components/capture-dialog"
-import { activeSidebarView, setActiveSidebarView, setActiveSourceName } from "@/context/sidebar-view"
+import { activeSidebarView, setActiveSidebarView, setActiveSourceName, setActiveChatProjectDir, codeDrawerOpen, setCodeDrawerOpen, activeChatProjectDir, sourcesDrawerOpen, setSourcesDrawerOpen, projectPanelMode, setPendingNewChatDir } from "@/context/sidebar-view"
 import { ReadPanel } from "@/pages/read-panel"
 import ProjectsPanel from "@/pages/projects/projects-panel"
 import { RequestsPanel } from "@/pages/requests-panel"
 import { ImportPanel } from "@/pages/import-panel"
 import WorkspaceGraph from "@/pages/projects/workspace-graph"
+
+type FsEntry = { path: string; name: string; type: "file" | "directory" }
+
+// ── Brain D3 graph ──────────────────────────────────────────────────────────
+type GraphNode = { id: string; label: string; type: "project" | "source" | "brain" | "commit" | "note" | "folder" }
+type GraphLink = { source: string; target: string }
+
+function BrainGraph(props: { dir: string }) {
+  let svgRef: SVGSVGElement | undefined
+  const [nodes, setNodes] = createSignal<GraphNode[]>([])
+  const [links, setLinks] = createSignal<GraphLink[]>([])
+  const [tooltip, setTooltip] = createSignal<{ x: number; y: number; label: string } | null>(null)
+  const [size, setSize] = createSignal({ w: 280, h: 400 })
+
+  const loadGraph = async () => {
+    const supadense = (window as any).supadense
+    if (!supadense?.listDir) return
+
+    // props.dir is the project root (activeChatProjectDir)
+    const projectRoot = props.dir
+    const supadenseDir = `${projectRoot}/.supadense`
+    const projectName = projectRoot.split("/").filter(Boolean).pop() ?? "project"
+
+    const ns: GraphNode[] = [{ id: "root", label: projectName, type: "project" }]
+    const ls: GraphLink[] = []
+
+    // GitHub remote node
+    const remote: string | null = supadense.gitRemote ? await supadense.gitRemote(projectRoot) : null
+    if (remote) {
+      const repoSlug = remote.replace(/\.git$/, "").split(/[:/]/).slice(-2).join("/")
+      ns.push({ id: "github", label: repoSlug, type: "folder" })
+      ls.push({ source: "root", target: "github" })
+    }
+
+    // Real source files from .supadense/sources/
+    try {
+      const sources: FsEntry[] = await supadense.listDir(`${supadenseDir}/sources`)
+      if (sources.length > 0) {
+        ns.push({ id: "folder:sources", label: "sources", type: "folder" })
+        ls.push({ source: "root", target: "folder:sources" })
+        for (const e of sources.slice(0, 15)) {
+          const nodeId = `src:${e.name}`
+          // Try to read URL/title from file
+          let label = e.name.replace(/\.[^.]+$/, "")
+          try {
+            const content: string | null = supadense.readFile ? await supadense.readFile(e.path) : null
+            if (content) {
+              const urlMatch = content.match(/url["\s:]+([^\s"]+)/i)
+              const titleMatch = content.match(/title["\s:]+([^\n"]+)/i)
+              if (titleMatch?.[1]) label = titleMatch[1].trim().slice(0, 20)
+              else if (urlMatch?.[1]) label = urlMatch[1].replace(/^https?:\/\/(www\.)?/, "").split("/")[0]
+            }
+          } catch {}
+          ns.push({ id: nodeId, label, type: "source" })
+          ls.push({ source: "folder:sources", target: nodeId })
+        }
+      }
+    } catch {}
+
+    // Brain nodes
+    try {
+      const brainFiles: FsEntry[] = await supadense.listDir(`${supadenseDir}/brain`)
+      if (brainFiles.length > 0) {
+        ns.push({ id: "folder:brain", label: "brain", type: "folder" })
+        ls.push({ source: "root", target: "folder:brain" })
+        for (const e of brainFiles.slice(0, 10)) {
+          const nodeId = `brain:${e.name}`
+          ns.push({ id: nodeId, label: e.name.replace(/\.[^.]+$/, "").slice(0, 18), type: "brain" })
+          ls.push({ source: "folder:brain", target: nodeId })
+        }
+      }
+    } catch {}
+
+    setNodes(ns)
+    setLinks(ls)
+  }
+
+  createEffect(on(() => props.dir, () => {
+    void loadGraph()
+  }))
+
+  // D3 force simulation
+  createEffect(on([nodes, links, size], () => {
+    const ns = nodes()
+    const ls = links()
+    if (!ns.length || !svgRef) return
+
+    import("d3").then((d3) => {
+      const { w, h } = size()
+      const svg = d3.select(svgRef!)
+      svg.selectAll("*").remove()
+
+      const nodeMap = new Map(ns.map(n => ({ ...n })).map(n => [n.id, n as any]))
+      const simLinks = ls.map(l => ({ source: l.source, target: l.target }))
+
+      const sim = d3.forceSimulation(ns as any)
+        .force("link", d3.forceLink(simLinks).id((d: any) => d.id).distance(60).strength(0.8))
+        .force("charge", d3.forceManyBody().strength(-120))
+        .force("center", d3.forceCenter(w / 2, h / 2))
+        .force("collision", d3.forceCollide(22))
+
+      const defs = svg.append("defs")
+      defs.append("marker").attr("id", "arrow").attr("viewBox", "0 -4 8 8").attr("refX", 14).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto")
+        .append("path").attr("d", "M0,-4L8,0L0,4").attr("fill", "#d1d5db")
+
+      const link = svg.append("g").selectAll("line").data(simLinks).join("line")
+        .attr("stroke", "#e5e7eb").attr("stroke-width", 1.5)
+
+      const typeColor: Record<string, string> = {
+        project: "#d68a2e", source: "#3b82f6", brain: "#8b5cf6",
+        note: "#10b981", commit: "#f59e0b", folder: "#6b7280",
+      }
+      const typeRadius: Record<string, number> = {
+        project: 18, folder: 13, source: 9, brain: 9, note: 9, commit: 9,
+      }
+
+      const node = svg.append("g").selectAll("g").data(ns as any[]).join("g")
+        .style("cursor", "pointer")
+        .call(d3.drag<any, any>()
+          .on("start", (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
+          .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y })
+          .on("end", (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null })
+        )
+        .on("mouseenter", (event, d: any) => {
+          const rect = svgRef!.getBoundingClientRect()
+          setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top - 28, label: d.label })
+        })
+        .on("mouseleave", () => setTooltip(null))
+
+      node.append("circle")
+        .attr("r", (d: any) => typeRadius[d.type] ?? 9)
+        .attr("fill", (d: any) => typeColor[d.type] ?? "#6b7280")
+        .attr("fill-opacity", (d: any) => d.type === "folder" ? 0.15 : 0.9)
+        .attr("stroke", (d: any) => typeColor[d.type] ?? "#6b7280")
+        .attr("stroke-width", (d: any) => d.type === "project" ? 2.5 : 1.5)
+
+      node.filter((d: any) => ["project", "folder"].includes(d.type))
+        .append("text")
+        .attr("text-anchor", "middle").attr("dy", (d: any) => d.type === "project" ? "0.35em" : "0.35em")
+        .attr("font-size", (d: any) => d.type === "project" ? "9px" : "8px")
+        .attr("font-family", "'Geist', system-ui")
+        .attr("font-weight", "600")
+        .attr("fill", (d: any) => d.type === "project" ? "#fff" : typeColor[d.type])
+        .attr("pointer-events", "none")
+        .text((d: any) => d.label.slice(0, 8))
+
+      sim.on("tick", () => {
+        link
+          .attr("x1", (d: any) => d.source.x).attr("y1", (d: any) => d.source.y)
+          .attr("x2", (d: any) => d.target.x).attr("y2", (d: any) => d.target.y)
+        node.attr("transform", (d: any) => `translate(${Math.max(18, Math.min(w - 18, d.x))},${Math.max(18, Math.min(h - 18, d.y))})`)
+      })
+    })
+  }))
+
+  // Observe resize
+  onMount(() => {
+    if (!svgRef) return
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0]
+      if (e) setSize({ w: e.contentRect.width, h: e.contentRect.height })
+    })
+    ro.observe(svgRef.parentElement!)
+    onCleanup(() => ro.disconnect())
+  })
+
+  // Legend
+  const legend = [
+    { color: "#d68a2e", label: "project" },
+    { color: "#3b82f6", label: "sources" },
+    { color: "#8b5cf6", label: "brain" },
+    { color: "#10b981", label: "notes" },
+    { color: "#f59e0b", label: "commits" },
+  ]
+
+  return (
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", position: "relative" }}>
+      <div style={{ flex: "1", position: "relative", "min-height": "0" }}>
+        <svg ref={svgRef} width="100%" height="100%" style={{ display: "block" }} />
+        <Show when={tooltip()}>
+          <div style={{
+            position: "absolute", top: `${tooltip()!.y}px`, left: `${tooltip()!.x}px`,
+            background: "#0a0a0a", color: "#fff", "font-size": "11px", padding: "4px 8px",
+            "border-radius": "4px", "pointer-events": "none", "white-space": "nowrap",
+            "font-family": "'Geist', system-ui", transform: "translate(-50%,-100%)",
+            "z-index": "20",
+          }}>
+            {tooltip()!.label}
+          </div>
+        </Show>
+      </div>
+      {/* Legend */}
+      <div style={{ padding: "8px 12px", "border-top": "1px solid #f0f0f0", display: "flex", gap: "10px", "flex-wrap": "wrap", "flex-shrink": "0" }}>
+        <For each={legend}>
+          {(item) => (
+            <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+              <div style={{ width: "7px", height: "7px", "border-radius": "50%", background: item.color, "flex-shrink": "0" }} />
+              <span style={{ "font-size": "10px", color: "#6b7280", "font-family": "'Geist', system-ui" }}>{item.label}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  )
+}
+
+type DiffFileStat = { added: number; removed: number; status: "added" | "deleted" | "modified" }
+
+function CodeDiffPanel(props: { dir: string }) {
+  const [tab, setTab] = createSignal<"code" | "diff">("code")
+  return (
+    <div style={{ flex: "1", "min-height": "0", display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+      {/* toggle bar */}
+      <div style={{ display: "flex", gap: "2px", padding: "8px 10px 0", "flex-shrink": "0" }}>
+        <button
+          onClick={() => setTab("code")}
+          style={{
+            padding: "4px 16px", "font-size": "12px", "font-weight": "600",
+            "font-family": "'Geist', system-ui, sans-serif",
+            border: "1px solid",
+            "border-color": tab() === "code" ? "#0a0a0a" : "#e5e7eb",
+            "border-radius": "6px 0 0 6px",
+            cursor: "pointer",
+            background: tab() === "code" ? "#0a0a0a" : "#ffffff",
+            color: tab() === "code" ? "#ffffff" : "#6b7280",
+            transition: "all 120ms",
+          }}
+        >Code</button>
+        <button
+          onClick={() => setTab("diff")}
+          style={{
+            padding: "4px 16px", "font-size": "12px", "font-weight": "600",
+            "font-family": "'Geist', system-ui, sans-serif",
+            border: "1px solid",
+            "border-color": tab() === "diff" ? "#0a0a0a" : "#e5e7eb",
+            "border-radius": "0 6px 6px 0",
+            "border-left": tab() === "diff" ? undefined : "none",
+            cursor: "pointer",
+            background: tab() === "diff" ? "#0a0a0a" : "#ffffff",
+            color: tab() === "diff" ? "#ffffff" : "#6b7280",
+            transition: "all 120ms",
+          }}
+        >Diff</button>
+      </div>
+      <div style={{ height: "1px", background: "#f0f0f0", margin: "8px 0 0" }} />
+      <Show when={tab() === "code"}>
+        <div style={{ flex: "1", "min-height": "0", overflow: "auto" }}>
+          <ProjectFileBrowser dir={props.dir} />
+        </div>
+      </Show>
+      <Show when={tab() === "diff"}>
+        <div style={{ flex: "1", "min-height": "0", overflow: "auto" }}>
+          <DiffOnlyBrowser dir={props.dir} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function DiffOnlyBrowser(props: { dir: string }) {
+  const [diffStats, setDiffStats] = createSignal<Record<string, DiffFileStat>>({})
+  const [selectedFile, setSelectedFile] = createSignal<string | null>(null)
+  const [fileDiff, setFileDiff] = createSignal<string | null>(null)
+  const [loadingDiff, setLoadingDiff] = createSignal(false)
+
+  const loadDiffStats = async () => {
+    const s = (window as any).supadense
+    if (!s?.gitDiffFiles || !props.dir) return
+    try { setDiffStats(await s.gitDiffFiles(props.dir)) } catch { /* ignore */ }
+  }
+
+  createEffect(on(() => props.dir, () => {
+    setDiffStats({}); setSelectedFile(null); setFileDiff(null)
+    void loadDiffStats()
+  }))
+
+  onMount(() => {
+    const id = setInterval(() => void loadDiffStats(), 5000)
+    onCleanup(() => clearInterval(id))
+  })
+
+  const selectFile = async (filePath: string) => {
+    if (selectedFile() === filePath) { setSelectedFile(null); setFileDiff(null); return }
+    setSelectedFile(filePath); setFileDiff(null); setLoadingDiff(true)
+    try {
+      const s = (window as any).supadense
+      setFileDiff(s?.gitFileDiff ? await s.gitFileDiff(props.dir, filePath) : null)
+    } catch { setFileDiff(null) }
+    setLoadingDiff(false)
+  }
+
+  const files = () => Object.entries(diffStats())
+  const statusColor = (s: string) => s === "added" ? "#22c55e" : s === "deleted" ? "#ef4444" : "#f59e0b"
+
+  return (
+    <div style={{ padding: "8px 0" }}>
+      <Show when={files().length === 0}>
+        <div style={{ padding: "20px 16px", color: "#a3a3a3", "font-size": "12.5px", "font-family": "'Geist', system-ui", "text-align": "center" }}>
+          No uncommitted changes
+        </div>
+      </Show>
+      <For each={files()}>
+        {([filePath, stat]) => {
+          const relPath = filePath.startsWith(props.dir) ? filePath.slice(props.dir.length).replace(/^\//, "") : filePath
+          const isSelected = () => selectedFile() === filePath
+          return (
+            <div>
+              <div
+                style={{
+                  display: "flex", "align-items": "center", gap: "7px",
+                  padding: "5px 12px",
+                  cursor: "pointer",
+                  background: isSelected() ? "#f5f5f5" : "transparent",
+                  "border-left": `3px solid ${isSelected() ? "#0a0a0a" : "transparent"}`,
+                }}
+                onClick={() => void selectFile(filePath)}
+                onMouseEnter={(e) => { if (!isSelected()) (e.currentTarget as HTMLElement).style.background = "#f9fafb" }}
+                onMouseLeave={(e) => { if (!isSelected()) (e.currentTarget as HTMLElement).style.background = "transparent" }}
+              >
+                <div style={{ width: "7px", height: "7px", "border-radius": "50%", background: statusColor(stat.status), "flex-shrink": "0" }} />
+                <span style={{ flex: "1", "font-size": "12px", color: "#374151", "font-family": "'Geist Mono', monospace", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{relPath}</span>
+                <span style={{ "font-size": "10.5px", color: "#22c55e", "font-family": "monospace" }}>+{stat.added}</span>
+                <span style={{ "font-size": "10.5px", color: "#ef4444", "font-family": "monospace", "margin-left": "3px" }}>-{stat.removed}</span>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" style={{ transform: isSelected() ? "rotate(90deg)" : "none", transition: "transform 100ms", "flex-shrink": "0" }}><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+              <Show when={isSelected()}>
+                <div style={{ background: "#fafafa", "border-top": "1px solid #f0f0f0", "border-bottom": "1px solid #f0f0f0" }}>
+                  <Show when={loadingDiff()}>
+                    <div style={{ padding: "10px 16px", color: "#a3a3a3", "font-size": "12px", "font-family": "'Geist', system-ui" }}>Loading…</div>
+                  </Show>
+                  <Show when={!loadingDiff() && fileDiff()}>
+                    <div style={{ overflow: "auto", "max-height": "500px", padding: "4px 0" }}>
+                      <For each={parseDiffLines(fileDiff()!)}>
+                        {(line) => (
+                          <div style={{
+                            "font-family": "'Geist Mono', monospace", "font-size": "11.5px",
+                            "line-height": "1.55", "white-space": "pre", padding: "0 16px",
+                            background: line.type === "add" ? "#f0fdf4" : line.type === "del" ? "#fef2f2" : line.type === "hunk" ? "#eff6ff" : "transparent",
+                            color: line.type === "add" ? "#15803d" : line.type === "del" ? "#b91c1c" : line.type === "hunk" ? "#1d4ed8" : line.type === "meta" ? "#9ca3af" : "#374151",
+                          }}>{line.text}</div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                  <Show when={!loadingDiff() && !fileDiff()}>
+                    <div style={{ padding: "10px 16px", color: "#a3a3a3", "font-size": "12px", "font-family": "'Geist', system-ui" }}>No diff available</div>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+          )
+        }}
+      </For>
+    </div>
+  )
+}
+
+function parseDiffLines(raw: string): { type: "add" | "del" | "ctx" | "hunk" | "meta"; text: string }[] {
+  return raw.split("\n").map(line => {
+    if (line.startsWith("+") && !line.startsWith("+++")) return { type: "add" as const, text: line }
+    if (line.startsWith("-") && !line.startsWith("---")) return { type: "del" as const, text: line }
+    if (line.startsWith("@@")) return { type: "hunk" as const, text: line }
+    if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("--- ") || line.startsWith("+++ ")) return { type: "meta" as const, text: line }
+    return { type: "ctx" as const, text: line }
+  })
+}
+
+function ProjectFileBrowser(props: { dir: string }) {
+  const [expanded, setExpanded] = createSignal<Set<string>>(new Set())
+  const [entries, setEntries] = createSignal<Record<string, FsEntry[]>>({})
+
+  const listDir = async (path: string) => {
+    if (entries()[path]) return
+    try {
+      const supadense = (window as any).supadense
+      const items: FsEntry[] = supadense?.listDir ? await supadense.listDir(path) : []
+      setEntries(prev => ({ ...prev, [path]: items }))
+    } catch (e) { console.error("[CodePanel] listDir error", path, e) }
+  }
+
+  createEffect(on(() => props.dir, (dir) => {
+    setEntries({})
+    setExpanded(new Set())
+    void listDir(dir)
+  }))
+
+  const toggle = (path: string) => {
+    const next = new Set(expanded())
+    if (next.has(path)) { next.delete(path) } else { next.add(path); void listDir(path) }
+    setExpanded(next)
+  }
+
+  const renderEntries = (dirPath: string, depth: number): any => {
+    const items = entries()[dirPath]
+    if (!items) return <div style={{ "font-size": "12px", color: "#a3a3a3", padding: "6px 16px", "font-family": "'Geist', system-ui" }}>Loading…</div>
+    return (
+      <For each={items}>
+        {(item) => (
+          <>
+            <div
+              style={{
+                display: "flex", "align-items": "center", gap: "5px",
+                padding: `4px 12px 4px ${depth * 14 + 12}px`,
+                cursor: "pointer", "font-size": "12.5px",
+                color: item.type === "directory" ? "#374151" : "#525252",
+                "font-family": "'Geist Mono', ui-monospace, monospace",
+                "border-radius": "4px", margin: "0 4px",
+              }}
+              onClick={() => toggle(item.path)}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f5f5f5" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+            >
+              <Show when={item.type === "directory"}>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" style={{ transform: expanded().has(item.path) ? "rotate(90deg)" : "none", "flex-shrink": "0", transition: "transform 100ms" }}><polyline points="9 18 15 12 9 6"/></svg>
+              </Show>
+              <Show when={item.type !== "directory"}>
+                <span style={{ width: "9px", "flex-shrink": "0" }} />
+              </Show>
+              <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{item.name}</span>
+            </div>
+            <Show when={item.type === "directory" && expanded().has(item.path)}>
+              {renderEntries(item.path, depth + 1)}
+            </Show>
+          </>
+        )}
+      </For>
+    )
+  }
+
+  return <div style={{ padding: "8px 0" }}>{renderEntries(props.dir, 0)}</div>
+}
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -140,6 +572,8 @@ export default function Layout(props: ParentProps) {
   const language = useLanguage()
 
   const [supadenseSidebarCollapsed, setSupadenseSidebarCollapsed] = createSignal(false)
+  const [rightPanelWidth, setRightPanelWidth] = createSignal(308)
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = createSignal(false)
 
   const initialDirectory = decode64(params.dir)
   const route = createMemo(() => {
@@ -2502,7 +2936,7 @@ export default function Layout(props: ParentProps) {
         background: "#ffffff",
         height: "100vh",
         "box-sizing": "border-box",
-        "padding-right": chatOpen() ? "484px" : "8px",
+        "padding-right": "8px",
         transition: "grid-template-columns 220ms cubic-bezier(0.22,1,0.36,1), padding 240ms cubic-bezier(0.22,1,0.36,1)",
         overflow: "hidden",
       }}
@@ -2516,7 +2950,26 @@ export default function Layout(props: ParentProps) {
           onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
           onCapture={() => setTopbarCaptureOpen(true)}
           onPlayground={() => setActiveSidebarView({ section: "workspace", view: "ask", label: "Playground" })}
+          onNewProject={() => setNewProjectDialogOpen(true)}
+          onOpenProject={(dir) => {
+            openProject(dir, false) // register with opencode server so sessions can be created
+            setActiveChatProjectDir(dir)
+            setActiveSidebarView({ section: "workspace", view: "ask", label: dir.split("/").filter(Boolean).pop() ?? "Project" })
+            void (window as any).supadense?.initProject(dir)
+          }}
         />
+        <Show when={newProjectDialogOpen()}>
+          <NewProjectDialog
+            onClose={() => setNewProjectDialogOpen(false)}
+            onProjectOpened={(dir) => {
+              setNewProjectDialogOpen(false)
+              openProject(dir, false) // register without navigating away
+              setActiveChatProjectDir(dir)
+              setActiveSidebarView({ section: "workspace", view: "ask", label: dir.split("/").filter(Boolean).pop() ?? "Project" })
+              void (window as any).supadense?.initProject(dir)
+            }}
+          />
+        </Show>
       </div>
 
       {/* ── Main area (second grid cell) ── */}
@@ -2527,16 +2980,28 @@ export default function Layout(props: ParentProps) {
           overflow: "hidden",
           "min-width": "0",
           background: "#ffffff",
+          position: "relative",
           "border-radius": "10px",
         }}
       >
-        <Titlebar
-          sidebarCollapsed={supadenseSidebarCollapsed()}
-          onToggleSidebar={() => setSupadenseSidebarCollapsed(v => !v)}
-          onCapture={() => setTopbarCaptureOpen(true)}
-          userEmail={getTopLevelUserEmail()}
-          onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
-        />
+        <div style={{
+          "margin-right": activeSidebarView().view === "ask" && !!activeChatProjectDir() ? `${rightPanelWidth()}px` : "0",
+          transition: "margin-right 200ms ease",
+          "flex-shrink": "0",
+        }}>
+          <Titlebar
+            sidebarCollapsed={supadenseSidebarCollapsed()}
+            onToggleSidebar={() => setSupadenseSidebarCollapsed(v => !v)}
+            onCapture={() => setTopbarCaptureOpen(true)}
+            userEmail={getTopLevelUserEmail()}
+            onLogout={() => { clearAuthToken(); navigate("/auth/login") }}
+            onNewChat={() => {
+              setChatOpen(true)
+              const dir = activeChatProjectDir()
+              if (dir) setPendingNewChatDir(dir)
+            }}
+          />
+        </div>
 
         {/* ── Virtual panels (Sources etc.) — shown instead of router children ── */}
         <Show when={activeSidebarView().view === "read"}>
@@ -2546,9 +3011,94 @@ export default function Layout(props: ParentProps) {
         </Show>
 
         <Show when={activeSidebarView().view === "ask"}>
-          <div style={{ flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff", height: "100%", display: "flex", "flex-direction": "column" }}>
+          <div style={{
+            flex: "1", "min-height": "0", overflow: "hidden", background: "#ffffff", height: "100%",
+            "margin-right": !!activeChatProjectDir() ? `${rightPanelWidth()}px` : "0",
+            transition: "margin-right 200ms ease",
+          }}>
             <SupadenseChatPanel onClose={() => setActiveSidebarView({ section: "workspace", view: "project-tags", label: "Project Tags" })} />
           </div>
+        </Show>
+
+        {/* ── Right panel — always visible in project sessions, resizable ── */}
+        <Show when={activeSidebarView().view === "ask" && !!activeChatProjectDir()}>
+          {(() => {
+            const MIN_W = 240, MAX_W = 600
+            let dragging = false
+            const onMouseDown = (e: MouseEvent) => {
+              e.preventDefault()
+              dragging = true
+              const startX = e.clientX
+              const startW = rightPanelWidth()
+              const onMove = (ev: MouseEvent) => {
+                if (!dragging) return
+                const delta = startX - ev.clientX
+                setRightPanelWidth(Math.max(MIN_W, Math.min(MAX_W, startW + delta)))
+              }
+              const onUp = () => { dragging = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+              window.addEventListener("mousemove", onMove)
+              window.addEventListener("mouseup", onUp)
+            }
+            return (
+          <div style={{
+            position: "absolute", top: "0", right: "0", bottom: "0",
+            width: `${rightPanelWidth()}px`,
+            background: "transparent",
+            padding: "8px 8px 8px 0",
+            display: "flex", "flex-direction": "row",
+            "z-index": "10",
+          }}>
+            {/* drag handle */}
+            <div
+              onMouseDown={onMouseDown}
+              style={{
+                width: "6px", "flex-shrink": "0", cursor: "col-resize",
+                display: "flex", "align-items": "center", "justify-content": "center",
+                "border-radius": "4px 0 0 4px",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.08)" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+            >
+              <div style={{ width: "2px", height: "32px", background: "#d1d5db", "border-radius": "1px" }} />
+            </div>
+            <div style={{ flex: "1", "min-width": "0", display: "flex", "flex-direction": "column" }}>
+            {/* inner card — white, fully rounded */}
+            <div style={{
+              flex: "1", "min-height": "0",
+              background: "#ffffff",
+              "border-radius": "10px",
+              border: "1px solid #e5e5e5",
+              "box-shadow": "0 1px 4px rgba(0,0,0,0.06)",
+              display: "flex", "flex-direction": "column",
+              overflow: "hidden",
+            }}>
+              {/* header */}
+              <div style={{ padding: "12px 14px 10px", "border-bottom": "1px solid #f0f0f0", "flex-shrink": "0" }}>
+                <span style={{ color: "#0a0a0a", "font-size": "13px", "font-weight": "600", "font-family": "'Geist', system-ui, sans-serif" }}>
+                  {projectPanelMode() === "code" ? "Code" : projectPanelMode() === "brain" ? "Brain" : "Eng Commits"}
+                </span>
+                <div style={{ color: "#9ca3af", "font-size": "10px", "font-family": "monospace", "margin-top": "3px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                  {activeChatProjectDir() ?? ""}
+                </div>
+              </div>
+              {/* content */}
+              <Show when={projectPanelMode() === "code"}>
+                <CodeDiffPanel dir={activeChatProjectDir()!} />
+              </Show>
+              <Show when={projectPanelMode() === "brain"}>
+                <div style={{ flex: "1", "min-height": "0", overflow: "hidden" }}>
+                  <BrainGraph dir={activeChatProjectDir()!} />
+                </div>
+              </Show>
+              <Show when={projectPanelMode() === "commits"}>
+                <div style={{ flex: "1", "min-height": "0", overflow: "auto", padding: "16px" }}>
+                  <p style={{ color: "#a3a3a3", "font-size": "13px", "font-family": "'Geist', system-ui", margin: "0" }}>Commits for this project will appear here.</p>
+                </div>
+              </Show>
+            </div>
+            </div>{/* flex wrapper for handle + card */}
+          </div>
+          )})()}
         </Show>
 
         <Show when={activeSidebarView().view === "project-tags"}>
@@ -2726,10 +3276,9 @@ export default function Layout(props: ParentProps) {
         {false && <DebugBar />}
       </main>
       <Toast.Region />
-      <SupadenseChatOverlay />
 
       {/* ── Floating chat button — visible on every tab ── */}
-      <Show when={!chatOpen()}>
+      <Show when={false && !chatOpen()}>
         <button
           type="button"
           title="Ask AI"

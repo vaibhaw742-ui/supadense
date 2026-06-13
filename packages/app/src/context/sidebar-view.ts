@@ -38,6 +38,25 @@ export const [projectViewMode, setProjectViewMode] = createSignal<ProjectViewMod
 export type SessionViewMode = "code" | "brain" | "sources" | "layers"
 export const [sessionViewMode, setSessionViewMode] = createSignal<SessionViewMode>("code")
 
+// ── Code drawer open (right-side overlay) ──
+export const [codeDrawerOpen, setCodeDrawerOpen] = createSignal(false)
+
+// ── Eng Commits drawer open (right-side panel, default open in project sessions) ──
+export const [sourcesDrawerOpen, setSourcesDrawerOpen] = createSignal(true)
+
+// ── Project right-panel mode: which content is shown in the always-on right panel ──
+export type ProjectPanelMode = "commits" | "code" | "brain"
+export const [projectPanelMode, setProjectPanelMode] = createSignal<ProjectPanelMode>("commits")
+
+// ── Active local git project opened from Recents (for chat context) ──
+export const [activeChatProjectDir, setActiveChatProjectDir] = createSignal<string | null>(null)
+
+// ── Pending new chat: set to a project dir to trigger session creation in that project ──
+export const [pendingNewChatDir, setPendingNewChatDir] = createSignal<string | null>(null)
+
+// ── Currently active session ID (published by chat panel, consumed by sidebar highlight) ──
+export const [activeSessionId, setActiveSessionId] = createSignal<string | undefined>(undefined)
+
 // ── Brain graph overlay open (local project view) ──
 export const [brainGraphOpen, setBrainGraphOpen] = createSignal(false)
 

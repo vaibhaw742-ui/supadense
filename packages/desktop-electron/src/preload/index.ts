@@ -64,6 +64,55 @@ const api: ElectronAPI = {
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
+  gitClone: (repoUrl: string, targetDir: string) => ipcRenderer.invoke("git-clone", repoUrl, targetDir),
 }
 
 contextBridge.exposeInMainWorld("api", api)
+
+// Supadense-specific IPC — secrets, tray events
+const supadenseApi = {
+  getSecret: (name: string): Promise<string | null> => ipcRenderer.invoke("supadense:get-secret", name),
+  setSecret: (name: string, value: string): Promise<void> => ipcRenderer.invoke("supadense:set-secret", name, value),
+  deleteSecret: (name: string): Promise<void> => ipcRenderer.invoke("supadense:delete-secret", name),
+  hasSecret: (name: string): Promise<boolean> => ipcRenderer.invoke("supadense:has-secret", name),
+  onQuickAdd: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("supadense:quick-add", handler)
+    return () => ipcRenderer.removeListener("supadense:quick-add", handler)
+  },
+  onOpenSettings: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("supadense:open-settings", handler)
+    return () => ipcRenderer.removeListener("supadense:open-settings", handler)
+  },
+  onCopyMcpConfig: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("supadense:copy-mcp-config", handler)
+    return () => ipcRenderer.removeListener("supadense:copy-mcp-config", handler)
+  },
+  onRegisterClaudeDesktop: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("supadense:register-claude-desktop", handler)
+    return () => ipcRenderer.removeListener("supadense:register-claude-desktop", handler)
+  },
+  initProject: (projectDir: string): Promise<{ path: string; created: boolean }> =>
+    ipcRenderer.invoke("supadense:init-project", projectDir),
+  listDir: (dirPath: string): Promise<{ name: string; path: string; type: "file" | "directory" }[]> =>
+    ipcRenderer.invoke("supadense:list-dir", dirPath),
+  gitRemote: (projectDir: string): Promise<string | null> =>
+    ipcRenderer.invoke("supadense:git-remote", projectDir),
+  gitInfo: (projectDir: string): Promise<{ branch: string; added: number; removed: number; prUrl: string | null; remote: string | null } | null> =>
+    ipcRenderer.invoke("supadense:git-info", projectDir),
+  readFile: (filePath: string): Promise<string | null> =>
+    ipcRenderer.invoke("supadense:read-file", filePath),
+  writeFile: (filePath: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke("supadense:write-file", filePath, content),
+  showInFinder: (dirPath: string): Promise<void> =>
+    ipcRenderer.invoke("supadense:show-in-finder", dirPath),
+  gitDiffFiles: (projectDir: string): Promise<Record<string, { added: number; removed: number; status: "added" | "deleted" | "modified" }>> =>
+    ipcRenderer.invoke("supadense:git-diff-files", projectDir),
+  gitFileDiff: (projectDir: string, filePath: string): Promise<string | null> =>
+    ipcRenderer.invoke("supadense:git-file-diff", projectDir, filePath),
+}
+
+contextBridge.exposeInMainWorld("supadense", supadenseApi)

@@ -30,6 +30,7 @@ import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
+import { SDKProvider } from "@/context/sdk"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -49,7 +50,10 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { createSizing } from "@/pages/session/helpers"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { activeSidebarView, activeGraphProjectId } from "@/context/sidebar-view"
+import { activeSidebarView, activeGraphProjectId, codeDrawerOpen, setCodeDrawerOpen, activeChatProjectDir } from "@/context/sidebar-view"
+import FileTree from "@/components/file-tree"
+import { useFile } from "@/context/file"
+import { useSessionLayout } from "@/pages/session/session-layout"
 import { ReadPanel } from "@/pages/read-panel"
 import { WikiGraphPanel } from "@/pages/wiki/wiki-graph-panel"
 import { WikiNotesPanel } from "@/pages/wiki/wiki-notes-panel"
@@ -131,6 +135,36 @@ const SessionRoute = () => (
 
 const SessionIndexRoute = () => <Navigate href="session" />
 
+function CodeDrawerFileTreeInner(props: { onClose: () => void }) {
+  const file = useFile()
+  const { tabs } = useSessionLayout()
+  return (
+    <div style={{ flex: "1", "min-height": "0", overflow: "auto" }}>
+      <FileTree
+        path=""
+        onFileClick={(node) => {
+          tabs().open(file.tab(node.path))
+          props.onClose()
+        }}
+      />
+    </div>
+  )
+}
+
+function CodeDrawerFileTree(props: { onClose: () => void }) {
+  return (
+    <Show when={activeChatProjectDir()}>
+      {(dir) => (
+        <SDKProvider directory={() => dir()}>
+          <FileProvider>
+            <CodeDrawerFileTreeInner onClose={props.onClose} />
+          </FileProvider>
+        </SDKProvider>
+      )}
+    </Show>
+  )
+}
+
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
@@ -138,6 +172,16 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
+    supadense?: {
+      listDir: (dirPath: string) => Promise<{ name: string; path: string; type: "file" | "directory" }[]>
+      gitRemote: (projectDir: string) => Promise<string | null>
+      gitInfo: (projectDir: string) => Promise<{ branch: string; added: number; removed: number; prUrl: string | null; remote: string | null } | null>
+      readFile: (filePath: string) => Promise<string | null>
+      writeFile: (filePath: string, content: string) => Promise<boolean>
+      showInFinder: (dirPath: string) => Promise<void>
+      gitDiffFiles: (projectDir: string) => Promise<Record<string, { added: number; removed: number; status: "added" | "deleted" | "modified" }>>
+      gitFileDiff: (projectDir: string, filePath: string) => Promise<string | null>
+    }
     __OPENCODE__?: {
       updaterEnabled?: boolean
       deepLinks?: string[]

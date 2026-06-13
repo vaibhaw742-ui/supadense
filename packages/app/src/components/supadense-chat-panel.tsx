@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { getAuthToken } from "@/utils/server"
@@ -17,7 +17,7 @@ import { Identifier } from "@/utils/id"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { elApi } from "@/pages/projects/el-api"
-import { activeGraphProjectName, activeSourceName, activeSidebarView } from "@/context/sidebar-view"
+import { activeGraphProjectName, activeSourceName, activeSidebarView, activeChatProjectDir, pendingNewChatDir, setPendingNewChatDir, setActiveSessionId } from "@/context/sidebar-view"
 
 export function SupadenseMark(props: { size?: number; class?: string }) {
   const s = props.size ?? 20
@@ -215,6 +215,8 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
   })
 
   const scopeLabel = createMemo(() => {
+    const localDir = activeChatProjectDir()
+    if (localDir) return localDir.split("/").filter(Boolean).pop() ?? "project"
     const s = derivedScope()
     return s ? s.name : "workspace"
   })
@@ -248,6 +250,9 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
   })()
 
   const directory = createMemo(() => {
+    // Local git project opened from Recents
+    const localDir = activeChatProjectDir()
+    if (localDir) return localDir
     // If we're on an EL project route (/projects/:id), use that project's workspace dir
     const projId = (params as any).id as string | undefined
     if (userId && projId && /^\/projects\/[^/]+/.test(location.pathname)) {
@@ -258,11 +263,19 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
     return undefined
   })
 
-  const [childStore] = createMemo(() => {
+  const childStoreMemo = createMemo(() => {
     const dir = directory()
-    if (!dir) return [undefined, undefined] as const
-    return globalSync.child(dir) // bootstrap: true (default) — registers dir for SSE events + loads sessions
-  })() ?? [undefined]
+    if (!dir) return undefined
+    const [store] = globalSync.child(dir)
+    return store
+  })
+  const childStore = () => childStoreMemo()
+
+  // Git context bar — branch, diff stats, PR link
+  const [gitInfo] = createResource(directory, async (dir) => {
+    if (!dir || !window.supadense?.gitInfo) return null
+    return window.supadense.gitInfo(dir)
+  })
 
   // Model list from connected providers
   const allModels = createMemo(() => {
@@ -310,32 +323,54 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
   const [sending, setSending] = createSignal(false)
   const [tab, setTab] = createSignal<"chat" | "sessions">("chat")
   const [selectedSessionID, setSelectedSessionID] = createSignal<string | undefined>(undefined)
+
+  // When project changes, load the most recent session for that project
+  createEffect(on(directory, () => {
+    setSending(false)
+    setTab("chat")
+    const sessions = (childStore()?.session ?? [])
+      .filter((s: Session) => !s.parentID)
+      .sort((a: Session, b: Session) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+    const latest = sessions[0]
+    if (latest) {
+      setChatSessionId(latest.id)
+      setSelectedSessionID(latest.id)
+      void sync?.session.sync(latest.id)
+    } else {
+      setChatSessionId(undefined)
+      setSelectedSessionID(undefined)
+    }
+  }, { defer: true }))
   const [captureOpen, setCaptureOpen] = createSignal(false)
+  const [chatDropdownOpen, setChatDropdownOpen] = createSignal(false)
 
   // Active session for chat tab: chatSessionId or route param
   const activeSessionID = createMemo(() => selectedSessionID() ?? chatSessionId() ?? params.id)
 
   const messages = createMemo((): Message[] => {
     const id = activeSessionID()
-    if (!id || !childStore) return []
-    return (childStore as any).message?.[id] ?? []
+    const store = childStore()
+    if (!id || !store) return []
+    return (store as any).message?.[id] ?? []
   })
 
   const isActive = createMemo(() => {
     const id = activeSessionID()
-    if (!id || !childStore) return false
-    const status = (childStore as any).session_status?.[id]
+    const store = childStore()
+    if (!id || !store) return false
+    const status = (store as any).session_status?.[id]
     return status?.type !== "idle" && status !== undefined
   })
 
   const hasMessages = createMemo(() => messages().length > 0)
   const allSessions = createMemo(() =>
-    (childStore?.session ?? []).filter((s: Session) => !s.parentID).slice().sort((a: Session, b: Session) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+    (childStore()?.session ?? []).filter((s: Session) => !s.parentID).slice().sort((a: Session, b: Session) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
   )
   const activeChatTitle = createMemo(() => {
     const id = activeSessionID()
-    if (!id || !childStore) return undefined
-    const session = (childStore as any).session?.find((s: Session) => s.id === id)
+    const store = childStore()
+    if (!id || !store) return undefined
+    const session = (store as any).session?.find((s: Session) => s.id === id)
     return session ? sessionTitle(session.title?.trim()) ?? "New chat" : undefined
   })
 
@@ -345,6 +380,37 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
     setTab("chat")
     void sync?.session.sync(id)
   }
+
+  // Publish active session ID to sidebar for highlight sync
+  createEffect(() => {
+    setActiveSessionId(activeSessionID())
+  })
+
+  // Listen for session selection events dispatched from the sidebar
+  onMount(() => {
+    const handler = (e: Event) => {
+      const { sessionId, dir } = (e as CustomEvent).detail as { sessionId: string; dir: string }
+      if (dir === directory()) {
+        selectSession(sessionId)
+      }
+    }
+    window.addEventListener("supadense:select-session", handler)
+    onCleanup(() => window.removeEventListener("supadense:select-session", handler))
+  })
+
+  // Watch for pending new chat triggered from sidebar + button
+  createEffect(() => {
+    const pending = pendingNewChatDir()
+    if (!pending) return
+    const dir = directory()
+    if (dir && dir === pending) {
+      setPendingNewChatDir(null)
+      setChatSessionId(undefined)
+      setSelectedSessionID(undefined)
+      setTab("chat")
+      requestAnimationFrame(() => textareaRef?.focus())
+    }
+  })
 
   // ── Slash commands ──────────────────────────────────────────────────────────
   const [slashOpen, setSlashOpen] = createSignal(false)
@@ -507,8 +573,9 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
   // Surface session errors (e.g. "Agent not found") as toasts
   createEffect(() => {
     const id = activeSessionID()
-    if (!id || !childStore) return
-    const status = (childStore as any).session_status?.[id]
+    const store = childStore()
+    if (!id || !store) return
+    const status = (store as any).session_status?.[id]
     if (status?.type === "error" && status.error) {
       const msg = status.error.message ?? JSON.stringify(status.error)
       showToast({ variant: "error", title: "Session error", description: msg })
@@ -518,6 +585,7 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
 
   async function handleSend() {
     const text = inputVal().trim()
+    console.log("[supadense-chat] handleSend called, text:", text, "sending:", sending(), "model:", selectedModel(), "dir:", directory())
     if (!text || sending()) return
 
     // Detect slash command submission: /command-name [args]
@@ -538,31 +606,43 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
     console.log("[supadense-chat] sending with model:", model.providerID, model.modelID)
 
     const dir = directory()
-    // Use directory-scoped client only when we have a valid /workspaces/ path; otherwise
-    // let the server default to the authenticated user's workspace (userWorkspaceDir)
+    console.log("[supadense-chat] directory:", dir)
     const client = dir ? globalSDK.createClient({ directory: dir, throwOnError: true }) : globalSDK.createClient({ throwOnError: true })
     setSending(true)
     setInputVal("")
     try {
       let sid = chatSessionId()
       if (!sid) {
-        const created = await client.session.create().then((x: any) => x.data)
-        if (!created?.id) throw new Error("Failed to create session")
+        console.log("[supadense-chat] creating session for dir:", dir)
+        const res = await Promise.race([
+          client.session.create(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("session.create timed out — directory may not be accessible: " + dir)), 10000)),
+        ])
+        console.log("[supadense-chat] session.create response:", JSON.stringify(res))
+        const created = (res as any).data
+        if (!created?.id) throw new Error("Failed to create session: " + JSON.stringify(res))
         sid = created.id as string
         setChatSessionId(sid)
         void sync?.session.sync(sid)
       }
       const messageID = Identifier.ascending("message")
-      await client.session.promptAsync({
-        sessionID: sid as string,
-        agent: "build",
-        model,
-        messageID,
-        parts: [{ id: Identifier.ascending("part"), type: "text" as const, text: scopeContextPrefix() + text }],
-      })
+      console.log("[supadense-chat] sending prompt to session:", sid)
+      const promptRes = await Promise.race([
+        client.session.promptAsync({
+          sessionID: sid as string,
+          agent: "build",
+          model,
+          messageID,
+          parts: [{ id: Identifier.ascending("part"), type: "text" as const, text: scopeContextPrefix() + text }],
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out after 15s")), 15000)),
+      ])
+      console.log("[supadense-chat] promptAsync response:", JSON.stringify(promptRes))
       void sync?.session.sync(sid as string)
     } catch (err: any) {
-      showToast({ variant: "error", title: "Send failed", description: err?.message ?? "Unknown error" })
+      const errMsg = err?.message ?? err?.error?.message ?? JSON.stringify(err)
+      console.error("[supadense-chat] handleSend error:", errMsg, err)
+      showToast({ variant: "error", title: "Send failed", description: errMsg })
       setInputVal(text)
     } finally {
       setSending(false)
@@ -581,26 +661,52 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%", "min-height": "0", background: "#ffffff", overflow: "hidden", "font-family": "'Geist', system-ui, sans-serif" }}>
 
-      {/* Head */}
-      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "14px 18px", "border-bottom": "1px solid #e5e5e5", "flex-shrink": "0", background: "#ffffff" }}>
-        <button type="button" style={{ display: "flex", "align-items": "center", gap: "8px", background: "none", border: "none", cursor: "pointer", "font-family": "'Geist', system-ui, sans-serif", "font-size": "14px", "font-weight": "500", color: "#0a0a0a", padding: "0" }}>
-          {activeChatTitle() ?? "New chat"}
-          <span style={{ color: "#737373", display: "inline-flex", "align-items": "center" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-          </span>
-        </button>
-        <div style={{ display: "flex", gap: "4px" }}>
-          <button type="button" title="New chat" aria-label="New chat" onClick={() => { setChatSessionId(undefined); setSelectedSessionID(undefined); setTab("chat") }} style={actionBtn}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="10" y1="11" x2="14" y2="11"/></svg>
-          </button>
-          <button type="button" title="Sessions" onClick={() => setTab(tab() === "sessions" ? "chat" : "sessions")} style={{ ...actionBtn, background: tab() === "sessions" ? "rgba(214,138,46,0.08)" : "transparent", color: tab() === "sessions" ? "#d68a2e" : "#525252" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="11" y="9" width="8" height="6" rx="1" fill="currentColor" opacity="0.3"/></svg>
-          </button>
-          <button type="button" title="Minimize" onClick={props.onClose} style={actionBtn}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-        </div>
-      </div>
+      {/* Chat dropdown (hidden head, still accessible programmatically) */}
+      <Show when={chatDropdownOpen()}>
+        <div style={{ position: "fixed", inset: "0", "z-index": "998" }} onClick={() => setChatDropdownOpen(false)} />
+        <div style={{ position: "absolute", top: "4px", left: "14px", "min-width": "260px", background: "#ffffff", border: "1px solid #e5e5e5", "border-radius": "8px", "box-shadow": "0 8px 24px rgba(0,0,0,0.12)", "z-index": "999", overflow: "hidden" }}>
+            {/* + New chat */}
+            <button
+              type="button"
+              onClick={() => { setChatSessionId(undefined); setSelectedSessionID(undefined); setTab("chat"); setChatDropdownOpen(false) }}
+              style={{ display: "flex", "align-items": "center", gap: "8px", width: "100%", padding: "10px 14px", border: "none", "border-bottom": "1px solid #f4f4f5", background: "none", cursor: "pointer", "font-family": "'Geist', system-ui, sans-serif", "font-size": "13px", "font-weight": "500", color: "#d68a2e", "text-align": "left" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New chat
+            </button>
+            {/* Sessions list */}
+            <div style={{ "max-height": "280px", "overflow-y": "auto" }}>
+              <Show when={allSessions().length > 0} fallback={
+                <div style={{ padding: "12px 14px", "font-size": "12px", color: "#737373" }}>No previous sessions</div>
+              }>
+                <For each={allSessions()}>
+                  {(session: Session) => (
+                    <button
+                      type="button"
+                      onClick={() => { selectSession(session.id); setChatDropdownOpen(false) }}
+                      style={{ display: "flex", "align-items": "center", width: "100%", padding: "9px 14px", border: "none", "border-left": activeSessionID() === session.id ? "2px solid #d68a2e" : "2px solid transparent", background: activeSessionID() === session.id ? "#fafafa" : "none", cursor: "pointer", "font-family": "'Geist', system-ui, sans-serif", "text-align": "left" }}
+                      onMouseEnter={(e) => { if (activeSessionID() !== session.id) (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+                      onMouseLeave={(e) => { if (activeSessionID() !== session.id) (e.currentTarget as HTMLElement).style.background = "none" }}
+                    >
+                      <div style={{ flex: "1", "min-width": "0" }}>
+                        <div style={{ "font-size": "13px", color: activeSessionID() === session.id ? "#0a0a0a" : "#525252", "font-weight": activeSessionID() === session.id ? "500" : "400", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          {sessionTitle(session.title?.trim()) ?? "New session"}
+                        </div>
+                        <Show when={session.time?.updated}>
+                          <div style={{ "font-size": "11px", color: "#a3a3a3", "margin-top": "1px" }}>
+                            {new Date(session.time!.updated!).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        </Show>
+                      </div>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
+        </Show>
 
       {/* Sessions tab */}
       <Show when={tab() === "sessions"}>
@@ -630,8 +736,8 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
 
       {/* Chat tab */}
       <Show when={tab() === "chat"}>
-        <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "22px 22px 0", display: "flex", "flex-direction": "column", gap: "4px", "align-items": "center" }}>
-        <div style={{ width: "100%", "max-width": "720px", display: "flex", "flex-direction": "column", gap: "4px" }}>
+        <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "22px 22px 0", display: "flex", "flex-direction": "column", gap: "4px" }}>
+        <div style={{ width: "100%", "max-width": "720px", display: "flex", "flex-direction": "column", gap: "4px", margin: "0 auto" }}>
           <Show when={hasMessages()} fallback={
             <div style={{ display: "flex", flex: "1", "align-items": "center", "justify-content": "center" }}>
             <div style={{ "max-width": "480px", width: "100%" }}>
@@ -664,9 +770,9 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
             </div>
             </div>
           }>
-            <Show when={childStore && directory()}>
+            <Show when={childStore() && directory()}>
               <DataProvider
-                data={childStore as any}
+                data={childStore() as any}
                 directory={directory()!}
               >
                 <div style={{ display: "flex", "flex-direction": "column", "padding-bottom": "8px" }}>
@@ -745,46 +851,106 @@ export function SupadenseChatPanel(props: { onClose: () => void }) {
           </Show>
         </Portal>
 
+        {/* Git context bar — just above input */}
+        <Show when={gitInfo() && directory()}>
+          {(() => {
+            const [gitMenuOpen, setGitMenuOpen] = createSignal(false)
+            const repoName = () => directory()!.split("/").filter(Boolean).pop() ?? ""
+            const ghRepoUrl = () => {
+              const remote = gitInfo()?.remote
+              if (!remote) return null
+              const m = remote.match(/github\.com[:/](.+?)(?:\.git)?$/)
+              return m ? `https://github.com/${m[1]}` : null
+            }
+            return (
+              <div style={{ display: "flex", "justify-content": "center", padding: "0 14px 4px", "flex-shrink": "0" }}>
+              <div style={{ width: "100%", "max-width": "720px", display: "flex", "align-items": "center", gap: "8px", padding: "5px 10px", "border-radius": "6px", background: "#f5f5f5", border: "1px solid #ebebeb", position: "relative" }}>
+                {/* Clickable left section — repo + branch */}
+                <button
+                  type="button"
+                  onClick={() => setGitMenuOpen(v => !v)}
+                  style={{ display: "flex", "align-items": "center", gap: "8px", background: "none", border: "none", cursor: "pointer", padding: "0", "flex-shrink": "0" }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0" }}>
+                    <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+                    <path d="M6 9v3a3 3 0 0 0 3 3h3"/><line x1="6" y1="9" x2="6" y2="15"/>
+                  </svg>
+                  <span style={{ "font-size": "12px", color: "#525252", "font-family": "'Geist Mono', monospace", "font-weight": "500" }}>{repoName()}</span>
+                  <span style={{ "font-size": "12px", color: "#c4c4c4" }}>·</span>
+                  <span style={{ "font-size": "12px", color: "#737373", "font-family": "'Geist Mono', monospace" }}>{gitInfo()?.branch ?? "main"}</span>
+                </button>
+
+                {/* Diff stats */}
+                <Show when={(gitInfo()?.added ?? 0) > 0 || (gitInfo()?.removed ?? 0) > 0}>
+                  <span style={{ "font-size": "12px", color: "#c4c4c4" }}>·</span>
+                  <Show when={(gitInfo()?.added ?? 0) > 0}>
+                    <span style={{ "font-size": "12px", "font-weight": "600", color: "#16a34a", "font-family": "'Geist Mono', monospace" }}>+{gitInfo()!.added}</span>
+                  </Show>
+                  <Show when={(gitInfo()?.removed ?? 0) > 0}>
+                    <span style={{ "font-size": "12px", "font-weight": "600", color: "#dc2626", "font-family": "'Geist Mono', monospace" }}>−{gitInfo()!.removed}</span>
+                  </Show>
+                </Show>
+
+                <div style={{ flex: "1" }} />
+
+                {/* Create PR button */}
+                <Show when={gitInfo()?.prUrl}>
+                  <button
+                    type="button"
+                    onClick={() => window.open(gitInfo()!.prUrl!, "_blank")}
+                    style={{ display: "flex", "align-items": "center", gap: "5px", padding: "3px 9px", "font-size": "12px", "font-family": "'Geist', system-ui, sans-serif", "font-weight": "500", color: "#0a0a0a", background: "#ffffff", border: "1px solid #d4d4d4", "border-radius": "5px", cursor: "pointer", transition: "background 100ms, border-color 100ms" }}
+                    onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "#f0f0f0"; el.style.borderColor = "#a3a3a3" }}
+                    onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "#ffffff"; el.style.borderColor = "#d4d4d4" }}
+                  >
+                    Create PR
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </Show>
+
+                {/* Dropdown menu */}
+                <Show when={gitMenuOpen()}>
+                  <div style={{ position: "fixed", inset: "0", "z-index": "998" }} onClick={() => setGitMenuOpen(false)} />
+                  <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "0", "z-index": "999", background: "#1e1e1e", border: "1px solid #333", "border-radius": "8px", "min-width": "180px", overflow: "hidden", "box-shadow": "0 8px 24px rgba(0,0,0,0.3)", padding: "4px 0" }}>
+                    <button
+                      type="button"
+                      onClick={() => { setGitMenuOpen(false); window.supadense?.showInFinder?.(directory()!) }}
+                      style={{ display: "block", width: "100%", padding: "8px 14px", background: "none", border: "none", "text-align": "left", "font-size": "13px", "font-family": "'Geist', system-ui, sans-serif", color: "#e5e5e5", cursor: "pointer" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#2a2a2a" }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                    >
+                      Show in Finder
+                    </button>
+                    <button
+                      type="button"
+                      style={{ display: "block", width: "100%", padding: "8px 14px", background: "none", border: "none", "text-align": "left", "font-size": "13px", "font-family": "'Geist', system-ui, sans-serif", color: "#e5e5e5", cursor: "pointer" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#2a2a2a" }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                      onClick={() => { setGitMenuOpen(false); navigator.clipboard.writeText(directory()!) }}
+                    >
+                      Copy path
+                    </button>
+                    <Show when={ghRepoUrl()}>
+                      <button
+                        type="button"
+                        style={{ display: "block", width: "100%", padding: "8px 14px", background: "none", border: "none", "text-align": "left", "font-size": "13px", "font-family": "'Geist', system-ui, sans-serif", color: "#e5e5e5", cursor: "pointer" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#2a2a2a" }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+                        onClick={() => { setGitMenuOpen(false); window.open(ghRepoUrl()!, "_blank") }}
+                      >
+                        Open repo in GitHub
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+              </div>
+            )
+          })()}
+        </Show>
+
         {/* Input wrap — centered */}
         <div style={{ display: "flex", "justify-content": "center", padding: "0 14px 14px", "flex-shrink": "0" }}>
         <div ref={inputWrapRef} style={{ width: "100%", "max-width": "720px", border: "1.5px solid #d68a2e", "border-radius": "8px", background: "#ffffff", padding: "10px 12px 8px", display: "flex", "flex-direction": "column", gap: "8px", "flex-shrink": "0", position: "relative" }}>
-          {/* Scope pill */}
-          <div style={{ display: "inline-flex", "align-items": "center", gap: "4px", "align-self": "flex-start" }}>
-            <div style={{
-              display: "inline-flex", "align-items": "center", gap: "6px",
-              padding: "3px 8px 3px 10px",
-              border: derivedScope() ? "1px solid #d68a2e" : "1px solid #e5e5e5",
-              "border-radius": "6px",
-              "font-family": "'Geist', system-ui, sans-serif",
-              "font-size": "12px",
-              color: derivedScope() ? "#d68a2e" : "#737373",
-              background: derivedScope() ? "rgba(214,138,46,0.06)" : "#fafafa",
-              "font-weight": derivedScope() ? "500" : "400",
-            }}>
-              {/* icon */}
-              <span style={{ display: "inline-flex", opacity: "0.8" }}>
-                <Show when={derivedScope()?.type === "source"}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                </Show>
-                <Show when={derivedScope()?.type === "project" || !derivedScope()}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                </Show>
-              </span>
-              <span>{scopeLabel()}</span>
-              {/* X button — only when scope is active */}
-              <Show when={derivedScope()}>
-                <button
-                  type="button"
-                  title="Clear scope"
-                  onMouseDown={(e) => { e.preventDefault(); setScopeCleared(true); setUserScope(null as unknown as ScopeCtx) }}
-                  style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "14px", height: "14px", border: "none", background: "transparent", cursor: "pointer", color: "#d68a2e", padding: "0", "margin-left": "2px", opacity: "0.7", "border-radius": "2px" }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </Show>
-            </div>
-          </div>
-
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -934,34 +1100,5 @@ export function SupadenseFAB() {
 
 /** Side panel — slides in from the right, pushes main content left (matches app.html .ask-pop) */
 export function SupadenseChatOverlay() {
-  return (
-    <Portal mount={document.body}>
-      <div
-        style={{
-          position: "fixed",
-          top: "68px",
-          right: "8px",
-          bottom: "8px",
-          width: "460px",
-          "max-width": "calc(100vw - 16px)",
-          "z-index": "70",
-          "border-radius": "10px",
-          overflow: "hidden",
-          background: "#ffffff",
-          border: "1px solid #e5e5e5",
-          "box-shadow": "-12px 0 32px -16px rgba(0,0,0,0.12)",
-          display: "flex",
-          "flex-direction": "column",
-          transform: chatOpen() ? "translateX(0)" : "translateX(calc(100% + 16px))",
-          "pointer-events": chatOpen() ? "auto" : "none",
-          transition: "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
-      >
-        {/* Only mount the panel (which calls useSync) when it's open and inside a SyncProvider context */}
-        <Show when={chatOpen()}>
-          <SupadenseChatPanel onClose={() => setChatOpen(false)} />
-        </Show>
-      </div>
-    </Portal>
-  )
+  return null
 }

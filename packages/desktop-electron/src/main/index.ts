@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Event } from "electron"
-import { app, BrowserWindow, dialog } from "electron"
+import { app, BrowserWindow, dialog, ipcMain } from "electron"
 import pkg from "electron-updater"
 
 import contextMenu from "electron-context-menu"
@@ -14,17 +14,17 @@ contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithG
 process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
 const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "Supadense Dev",
+  beta: "Supadense Beta",
+  prod: "Supadense",
 }
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.supadense.desktop.dev",
+  beta: "ai.supadense.desktop.beta",
+  prod: "ai.supadense.desktop",
 }
-app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
+app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "Supadense Dev")
+app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.supadense.desktop.dev"))
 const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
@@ -36,6 +36,9 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
+import { setupTray, updateTrayTooltip, destroyTray } from "./tray"
+import { getSecret, setSecret, deleteSecret, injectSecretsToEnv } from "./secrets"
+import { writeMcpPortFile, deleteMcpPortFile } from "./mcp-port"
 import type { Server } from "virtual:opencode-server"
 
 const initEmitter = new EventEmitter()
@@ -43,6 +46,13 @@ let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
 let server: Server.Listener | null = null
+
+// Extend app with isQuitting flag to distinguish close vs quit
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Electron { interface App { isQuitting: boolean } }
+}
+app.isQuitting = false
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -81,11 +91,27 @@ function setupApp() {
     emitDeepLinks([url])
   })
 
+  // Keep app alive in tray when all windows are closed (macOS default behaviour)
+  app.on("window-all-closed", () => {
+    // Do nothing — app stays alive via tray icon
+  })
+
+  app.on("activate", () => {
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+
   app.on("before-quit", () => {
+    app.isQuitting = true
+    deleteMcpPortFile()
+    destroyTray()
     killSidecar()
   })
 
   app.on("will-quit", () => {
+    deleteMcpPortFile()
     killSidecar()
   })
 
@@ -97,9 +123,11 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
-    app.setAsDefaultProtocolClient("opencode")
+    app.setAsDefaultProtocolClient("supadense")
     setDockIcon()
     setupAutoUpdater()
+    injectSecretsToEnv()
+    registerSupadenseIpcHandlers()
     await initialize()
   })
 }
@@ -135,6 +163,7 @@ async function initialize() {
   logger.log("spawning sidecar", { url })
   const { listener, health } = await spawnLocalServer(hostname, port, password)
   server = listener
+  writeMcpPortFile(port)
   serverReady.resolve({
     url,
     username: "opencode",
@@ -189,6 +218,23 @@ async function initialize() {
 
   mainWindow = createMainWindow(globals)
   wireMenu()
+
+  // Hide window on close instead of quitting — app lives in tray
+  mainWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
+  // Set up menubar tray
+  setupTray(() => mainWindow)
+  updateTrayTooltip("Supadense — brain ready")
+
+  // Auto-launch on login (first run)
+  if (!app.getLoginItemSettings().openAtLogin) {
+    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true })
+  }
 
   overlay?.close()
 }
@@ -291,6 +337,9 @@ async function getSidecarPort() {
 }
 
 function sqliteFileExists() {
+  // Check userData path first (macOS/Windows), then XDG fallback (Linux)
+  const userDataDb = join(app.getPath("userData"), "opencode-local.db")
+  if (existsSync(userDataDb)) return true
   const xdg = process.env.XDG_DATA_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
   return existsSync(join(base, "opencode", "opencode.db"))
@@ -397,6 +446,153 @@ async function checkForUpdates(alertOnFail: boolean) {
   if (response.response === 0) {
     await installUpdate()
   }
+}
+
+function registerSupadenseIpcHandlers() {
+  ipcMain.handle("supadense:get-secret", (_e, name: string) => getSecret(name))
+  ipcMain.handle("supadense:set-secret", (_e, name: string, value: string) => {
+    setSecret(name, value)
+    // Re-inject into process.env so server picks it up without restart
+    injectSecretsToEnv()
+  })
+  ipcMain.handle("supadense:delete-secret", (_e, name: string) => deleteSecret(name))
+  ipcMain.handle("supadense:has-secret", (_e, name: string) => getSecret(name) !== null)
+  ipcMain.handle("supadense:init-project", (_e, projectDir: string) => {
+    const supadenseDir = join(projectDir, ".supadense")
+    const subdirs = ["sources", "brain", "notes", "commits"]
+    mkdirSync(supadenseDir, { recursive: true })
+    for (const sub of subdirs) mkdirSync(join(supadenseDir, sub), { recursive: true })
+    return { path: supadenseDir, created: !existsSync(supadenseDir) }
+  })
+  ipcMain.handle("supadense:git-remote", async (_e, projectDir: string) => {
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+      const { stdout } = await exec("git", ["remote", "get-url", "origin"], { cwd: projectDir })
+      return stdout.trim()
+    } catch { return null }
+  })
+  ipcMain.handle("supadense:show-in-finder", async (_e, dirPath: string) => {
+    const { shell } = await import("electron")
+    shell.openPath(dirPath)
+  })
+  ipcMain.handle("supadense:git-info", async (_e, projectDir: string) => {
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+      const [branchRes, diffRes, remoteRes] = await Promise.allSettled([
+        exec("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: projectDir }),
+        exec("git", ["diff", "--shortstat", "HEAD"], { cwd: projectDir }),
+        exec("git", ["remote", "get-url", "origin"], { cwd: projectDir }),
+      ])
+      const branch = branchRes.status === "fulfilled" ? branchRes.value.stdout.trim() : "main"
+      const remote = remoteRes.status === "fulfilled" ? remoteRes.value.stdout.trim() : null
+
+      // Parse +added -removed from shortstat: "2 files changed, 31 insertions(+), 0 deletions(-)"
+      let added = 0, removed = 0
+      if (diffRes.status === "fulfilled") {
+        const m = diffRes.value.stdout.match(/(\d+) insertion|(\d+) deletion/g) ?? []
+        for (const part of m) {
+          const n = parseInt(part)
+          if (part.includes("insertion")) added = n
+          if (part.includes("deletion")) removed = n
+        }
+      }
+
+      // Derive GitHub PR creation URL from remote
+      let prUrl: string | null = null
+      if (remote) {
+        const ghMatch = remote.match(/github\.com[:/](.+?)(?:\.git)?$/)
+        if (ghMatch) prUrl = `https://github.com/${ghMatch[1]}/compare/${branch}?expand=1`
+      }
+
+      return { branch, added, removed, prUrl, remote }
+    } catch { return null }
+  })
+  ipcMain.handle("supadense:git-diff-files", async (_e, projectDir: string) => {
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+      // --numstat: added\tremoved\tfilepath per changed file
+      const [numstatRes, statusRes] = await Promise.allSettled([
+        exec("git", ["diff", "--numstat", "HEAD"], { cwd: projectDir }),
+        exec("git", ["status", "--porcelain"], { cwd: projectDir }),
+      ])
+      const result: Record<string, { added: number; removed: number; status: "added" | "deleted" | "modified" }> = {}
+      if (numstatRes.status === "fulfilled") {
+        for (const line of numstatRes.value.stdout.trim().split("\n")) {
+          const parts = line.split("\t")
+          if (parts.length < 3) continue
+          const added = parseInt(parts[0] ?? "0") || 0
+          const removed = parseInt(parts[1] ?? "0") || 0
+          const file = parts[2]!.trim()
+          result[file] = { added, removed, status: "modified" }
+        }
+      }
+      if (statusRes.status === "fulfilled") {
+        for (const line of statusRes.value.stdout.trim().split("\n")) {
+          if (!line.trim()) continue
+          const code = line.slice(0, 2).trim()
+          const file = line.slice(3).trim()
+          if (file && result[file]) {
+            if (code === "A" || code === "??") result[file]!.status = "added"
+            else if (code === "D") result[file]!.status = "deleted"
+          } else if (file) {
+            // untracked or status-only changes not in numstat
+            if (code === "A" || code === "??") result[file] = { added: 0, removed: 0, status: "added" }
+            else if (code === "D") result[file] = { added: 0, removed: 0, status: "deleted" }
+          }
+        }
+      }
+      return result
+    } catch { return {} }
+  })
+  ipcMain.handle("supadense:git-file-diff", async (_e, projectDir: string, filePath: string) => {
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+      const res = await exec("git", ["diff", "HEAD", "--", filePath], { cwd: projectDir })
+      return res.stdout
+    } catch { return null }
+  })
+  ipcMain.handle("supadense:read-file", async (_e, filePath: string) => {
+    try {
+      const { readFileSync } = await import("node:fs")
+      return readFileSync(filePath, "utf-8")
+    } catch { return null }
+  })
+  ipcMain.handle("supadense:write-file", async (_e, filePath: string, content: string) => {
+    try {
+      const { writeFileSync, mkdirSync } = await import("node:fs")
+      const { dirname } = await import("node:path")
+      mkdirSync(dirname(filePath), { recursive: true })
+      writeFileSync(filePath, content, "utf-8")
+      return true
+    } catch { return false }
+  })
+  ipcMain.handle("supadense:list-dir", (_e, dirPath: string) => {
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true })
+      const EXCLUDE = new Set([".git", ".DS_Store", "node_modules", "__pycache__"])
+      return entries
+        .filter((e) => !EXCLUDE.has(e.name))
+        .map((e) => ({
+          name: e.name,
+          path: join(dirPath, e.name),
+          type: e.isDirectory() ? "directory" : "file",
+        }))
+        .sort((a, b) => {
+          if (a.type !== b.type) return a.type === "directory" ? -1 : 1
+          return a.name.localeCompare(b.name)
+        })
+    } catch {
+      return []
+    }
+  })
 }
 
 function delay(ms: number) {

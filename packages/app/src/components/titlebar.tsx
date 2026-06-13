@@ -2,7 +2,7 @@
  * Supadense Topbar — matches app.html .topbar exactly
  * breadcrumbs · view-mode-group · Capture · ask-glyph toggle
  */
-import { createEffect, createSignal, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { useTheme } from "@opencode-ai/ui/theme/context"
@@ -26,8 +26,17 @@ import {
   brainGraphOpen,
   brainViewMode,
   setBrainViewMode,
+  codeDrawerOpen,
+  setCodeDrawerOpen,
+  sourcesDrawerOpen,
+  setSourcesDrawerOpen,
+  projectPanelMode,
+  setProjectPanelMode,
 } from "@/context/sidebar-view"
 import { chatOpen, setChatOpen } from "@/context/chat-overlay"
+import { useGlobalSync } from "@/context/global-sync"
+import { activeChatProjectDir, activeSessionId } from "@/context/sidebar-view"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -46,7 +55,7 @@ const C = {
   fontSans:  '"Geist", ui-sans-serif, system-ui, sans-serif',
 }
 
-export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () => void; sidebarCollapsed?: boolean; userEmail?: string; onLogout?: () => void }) {
+export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () => void; sidebarCollapsed?: boolean; userEmail?: string; onLogout?: () => void; onNewChat?: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
   const command = useCommand()
@@ -118,6 +127,29 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
   // show view-mode-group only in session routes
   const isSession = () => /\/session(?:\/|$)/.test(location.pathname)
 
+  // ── New Chat dropdown ─────────────────────────────────────────────────────
+  const [newChatDropOpen, setNewChatDropOpen] = createSignal(false)
+  const [newChatSessionId, setNewChatSessionId] = createSignal<string | undefined>(undefined)
+  const globalSync = useGlobalSync()
+
+  // Keep dropdown highlight in sync with the chat panel's active session
+  createEffect(() => {
+    const id = activeSessionId()
+    if (id) setNewChatSessionId(id)
+  })
+
+  // Reactive child store — re-subscribes whenever the active project changes
+  const newChatSessions = createMemo(() => {
+    const dir = activeChatProjectDir()
+    if (!dir) return [] as Session[]
+    const [store] = globalSync.child(dir, { bootstrap: false })
+    const sessions: Session[] = (store?.session ?? [])
+    return sessions
+      .filter((s: Session) => !s.parentID)
+      .slice()
+      .sort((a: Session, b: Session) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+  })
+
   // ── Hover states ─────────────────────────────────────────────────────────
   const [hovCapture, setHovCapture] = createSignal(false)
 
@@ -162,10 +194,6 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
           gap: "0",
         }}
       >
-        <span style={{ cursor: "pointer" }} onClick={() => navigate("/projects")}>
-          workspace
-        </span>
-        <span style={{ padding: "0 10px", color: C.borderMid, "user-select": "none" }}>·</span>
         <Show
           when={activeGraphProjectName()}
           fallback={<span style={{ color: C.ink100 }}>{activeSidebarView().label || "Graph"}</span>}
@@ -181,85 +209,105 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
         </Show>
       </div>
 
+      {/* ── New Chat dropdown — only when a project is active ── */}
+      <Show when={activeChatProjectDir()}>
+      <div style={{ position: "relative", "flex-shrink": "0" }}>
+        <button
+          type="button"
+          onClick={() => { setChatOpen(true); setNewChatDropOpen(o => !o) }}
+          style={{ display: "inline-flex", "align-items": "center", gap: "4px", padding: "5px 8px", border: "none", background: "none", color: "#737373", "font-family": '"Geist Mono", ui-monospace, monospace', "font-size": "11px", "letter-spacing": "0.04em", cursor: "pointer", transition: "background 120ms, color 120ms", "flex-shrink": "0" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; (e.currentTarget as HTMLElement).style.color = "#262626" }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none"; (e.currentTarget as HTMLElement).style.color = "#737373" }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        <Show when={newChatDropOpen()}>
+          <div style={{ position: "fixed", inset: "0", "z-index": "498" }} onClick={() => setNewChatDropOpen(false)} />
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: "0", "min-width": "240px", background: "#ffffff", border: `1px solid ${C.border}`, "border-radius": "8px", "box-shadow": "0 8px 24px rgba(0,0,0,0.12)", "z-index": "499", overflow: "hidden" }}>
+            {/* + New chat */}
+            <button
+              type="button"
+              onClick={() => { setNewChatSessionId(undefined); setNewChatDropOpen(false); props.onNewChat?.() }}
+              style={{ display: "flex", "align-items": "center", gap: "8px", width: "100%", padding: "10px 14px", border: "none", "border-bottom": `1px solid ${C.border}`, background: "none", cursor: "pointer", "font-family": C.fontSans, "font-size": "13px", "font-weight": "500", color: C.amber, "text-align": "left" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none" }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New chat
+            </button>
+            {/* Sessions */}
+            <div style={{ "max-height": "260px", "overflow-y": "auto" }}>
+              <Show when={newChatSessions().length > 0} fallback={
+                <div style={{ padding: "12px 14px", "font-size": "12px", color: C.ink500 }}>No previous sessions</div>
+              }>
+                <For each={newChatSessions()}>
+                  {(session: Session) => (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewChatSessionId(session.id)
+                        setNewChatDropOpen(false)
+                        const dir = activeChatProjectDir()
+                        if (dir) window.dispatchEvent(new CustomEvent("supadense:select-session", { detail: { sessionId: session.id, dir } }))
+                      }}
+                      style={{ display: "flex", "align-items": "flex-start", "flex-direction": "column", width: "100%", padding: "8px 14px", border: "none", "border-left": newChatSessionId() === session.id ? `2px solid ${C.amber}` : "2px solid transparent", background: newChatSessionId() === session.id ? "#fafafa" : "none", cursor: "pointer", "font-family": C.fontSans, "text-align": "left" }}
+                      onMouseEnter={(e) => { if (newChatSessionId() !== session.id) (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
+                      onMouseLeave={(e) => { if (newChatSessionId() !== session.id) (e.currentTarget as HTMLElement).style.background = "none" }}
+                    >
+                      <span style={{ "font-size": "13px", color: C.ink200, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", width: "100%" }}>
+                        {(session.title?.trim() || "New session")}
+                      </span>
+                      <Show when={session.time?.updated}>
+                        <span style={{ "font-size": "11px", color: C.ink500, "margin-top": "1px" }}>
+                          {new Date(session.time!.updated!).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </div>
+      </Show>
+
       {/* ── Right actions ── */}
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-left": "auto" }}>
 
-        {/* View-mode-group — only in brain graph (session views), hide when project group is also showing */}
-        <Show when={isSession() && !activeGraphProjectId()}>
-          <div
-            style={{
-              display: "inline-flex",
-              "align-items": "center",
-              border: `1px solid ${C.borderMid}`,
-              "border-radius": "6px",
-              overflow: "hidden",
-              background: C.bg,
-            }}
-          >
+        {/* View-mode-group — in project session or local project chat */}
+        <Show when={!activeGraphProjectId() && (activeSidebarView().view === "ask" || activeChatProjectDir())}>
+          <div style={{ display: "inline-flex", "align-items": "center", border: `1px solid ${C.borderMid}`, "border-radius": "6px", overflow: "hidden", background: C.bg }}>
+            {/* Eng Commits */}
+            <VmgBtn active={projectPanelMode() === "commits"} title="Eng Commits" onClick={() => setProjectPanelMode("commits")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/></svg>
+            </VmgBtn>
             {/* Brain */}
-            <VmgBtn
-              active={sessionViewMode() === "brain"}
-              title="Brain"
-              onClick={() => setSessionViewMode("brain")}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                <path d="M12 5a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V20h8v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/>
-                <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="15" y1="9" x2="15" y2="9.01"/>
-              </svg>
+            <VmgBtn active={projectPanelMode() === "brain"} title="Brain" onClick={() => setProjectPanelMode("brain")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V20h8v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="15" y1="9" x2="15" y2="9.01"/></svg>
             </VmgBtn>
-
-            {/* Sources/Files */}
-            <VmgBtn
-              active={sessionViewMode() === "sources"}
-              title="Sources"
-              onClick={() => setSessionViewMode("sources")}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>
-              </svg>
+            {/* Code */}
+            <VmgBtn active={projectPanelMode() === "code"} title="Code" onClick={() => setProjectPanelMode("code")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             </VmgBtn>
-
-            {/* Code — active by default */}
-            <VmgBtn
-              active={sessionViewMode() === "code"}
-              title="Code"
-              onClick={() => setSessionViewMode("code")}
-              label="Code"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <polyline points="16 18 22 12 16 6"/>
-                <polyline points="8 6 2 12 8 18"/>
-              </svg>
-            </VmgBtn>
-
-            {/* Layers */}
-            <VmgBtn
-              active={sessionViewMode() === "layers"}
-              title="Layers"
-              onClick={() => setSessionViewMode("layers")}
-              last
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-                <polyline points="2 17 12 22 22 17"/>
-                <polyline points="2 12 12 17 22 12"/>
-              </svg>
+            {/* More */}
+            <VmgBtn active={sessionViewMode() === "layers"} title="More" onClick={() => setSessionViewMode("layers")} last>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
             </VmgBtn>
           </div>
         </Show>
 
-        {/* Project action group — shown when viewing a project */}
+        {/* Project action group */}
         <Show when={activeGraphProjectId()}>
           <div style={{ display: "inline-flex", "align-items": "center", border: `1px solid ${C.borderMid}`, "border-radius": "6px", overflow: "hidden", background: C.bg }}>
             <VmgBtn active={projectViewMode() === "graph"} title="Graph" onClick={() => setProjectViewMode("graph")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             </VmgBtn>
-            <VmgBtn active={projectViewMode() === "brain"} title="Brain files (.supadense)" onClick={() => setProjectViewMode(projectViewMode() === "brain" ? "graph" : "brain")}>
+            <VmgBtn active={projectViewMode() === "brain"} title="Brain files" onClick={() => setProjectViewMode(projectViewMode() === "brain" ? "graph" : "brain")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             </VmgBtn>
-            <VmgBtn active={projectViewMode() === "code"} title="Source code" onClick={() => setProjectViewMode(projectViewMode() === "code" ? "graph" : "code")} label="Code">
+            <VmgBtn active={codeDrawerOpen()} title="Source code" onClick={() => setCodeDrawerOpen(o => !o)} label="Code">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             </VmgBtn>
             <VmgBtn active={false} title="Layers" onClick={() => {}} last>
@@ -288,90 +336,14 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
         </Show>
 
         {/* Capture button */}
-        <button
-          type="button"
-          title="Capture"
-          onMouseEnter={() => setHovCapture(true)}
-          onMouseLeave={() => setHovCapture(false)}
-          onClick={() => props.onCapture?.()}
-          style={{
-            display: "inline-flex",
-            "align-items": "center",
-            gap: "6px",
-            padding: "6px 12px",
-            "border-radius": "4px",
-            "font-family": C.fontSans,
-            "font-size": "12px",
-            "font-weight": "500",
-            border: `1px solid ${hovCapture() ? C.borderMid : C.border}`,
-            background: hovCapture() ? C.ground000 : C.bg,
-            color: C.ink300,
-            cursor: "pointer",
-            transition: "all 120ms",
-          }}
-        >
+        <VmgBtn active={false} title="Capture" onClick={() => props.onCapture?.()} last>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Capture
-        </button>
+        </VmgBtn>
 
-        {/* Rail toggle — 3×3 ask glyph */}
-        <button
-          type="button"
-          title="Toggle Ask panel"
-          aria-label="Toggle Ask panel"
-          onClick={() => setChatOpen((v) => !v)}
-          style={{
-            ...iconBtn(chatOpen()),
-            background: chatOpen() ? C.amberBg : "transparent",
-            border: `1px solid ${chatOpen() ? C.amberBorder : C.border}`,
-            color: chatOpen() ? C.amber : C.ink300,
-          }}
-        >
-          {/* 3×3 glyph */}
-          <span
-            style={{
-              display: "inline-grid",
-              "grid-template-columns": "repeat(3, 1fr)",
-              "grid-template-rows": "repeat(3, 1fr)",
-              gap: "1.5px",
-              width: "14px",
-              height: "14px",
-            }}
-            aria-hidden="true"
-          >
-            {([0,1,2,3,4,5,6,7,8] as const).map((i) => (
-              <span style={{
-                display: "block",
-                background: i === 4 ? C.amber : chatOpen() ? C.amber : C.ink100,
-                "border-radius": "1px",
-              }} />
-            ))}
-          </span>
-        </button>
-
-        {/* DOCS + SUPPORT links */}
-        <div style={{ display: "flex", "align-items": "center", "font-family": C.fontMono, "font-size": "10px", "letter-spacing": "0.1em" }}>
-          <a href="/docs" target="_blank" style={{ display: "inline-flex", "align-items": "center", gap: "3px", color: C.ink400, "text-decoration": "none", padding: "4px 8px", "border-radius": "3px", transition: "color 120ms" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink100 }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink400 }}
-          >
-            DOCS
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
-          </a>
-          <a href="#" style={{ color: C.ink400, "text-decoration": "none", padding: "4px 8px", "border-radius": "3px", transition: "color 120ms", "font-family": C.fontMono, "font-size": "10px", "letter-spacing": "0.1em" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink100 }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = C.ink400 }}
-          >
-            SUPPORT
-          </a>
-        </div>
-
-        {/* Divider */}
-        <div style={{ width: "1px", height: "20px", background: C.border, "flex-shrink": "0" }} />
 
         {/* User avatar — rightmost */}
         <Show when={props.userEmail}>
@@ -417,6 +389,7 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
         </Show>
 
       </div>
+
     </header>
   )
 }
