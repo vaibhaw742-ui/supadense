@@ -11,9 +11,11 @@ import {
   createEffect,
   createComputed,
   createSignal,
+  createResource,
   on,
   onMount,
   untrack,
+  For,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -58,6 +60,8 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { codeDrawerOpen, setCodeDrawerOpen } from "@/context/sidebar-view"
+import FileTree from "@/components/file-tree"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -2087,6 +2091,229 @@ const reviewEmptyText = createMemo(() => {
       </div>
 
       <TerminalPanel />
+
+      {/* ── Code drawer — right-side overlay ── */}
+      <Show when={codeDrawerOpen()}>
+        {(() => {
+          const projectDir = () => info()?.directory ?? ""
+          const [diffFiles, { refetch: refetchDiff }] = createResource(
+            () => codeDrawerOpen() ? projectDir() : null,
+            async (dir) => {
+              if (!dir || !window.supadense?.gitDiffFiles) return {}
+              return await window.supadense.gitDiffFiles(dir)
+            }
+          )
+          const [selectedFile, setSelectedFile] = createSignal<string | null>(null)
+          const [fileDiff, { refetch: refetchFileDiff }] = createResource(
+            () => selectedFile() ? { dir: projectDir(), file: selectedFile()! } : null,
+            async ({ dir, file }) => {
+              if (!window.supadense?.gitFileDiff) return null
+              return await window.supadense.gitFileDiff(dir, file)
+            }
+          )
+
+          // Poll diff stats every 5s while drawer is open
+          createEffect(() => {
+            if (!codeDrawerOpen()) return
+            const t = setInterval(() => void refetchDiff(), 5000)
+            onCleanup(() => clearInterval(t))
+          })
+
+          const changedFiles = createMemo(() => {
+            const d = diffFiles() ?? {}
+            return Object.entries(d).sort((a, b) => a[0].localeCompare(b[0]))
+          })
+
+          const branchInfo = createMemo(() => {
+            // derive from gitInfo already in chat panel — just show directory basename
+            const dir = projectDir()
+            return dir.split("/").filter(Boolean).pop() ?? ""
+          })
+
+          const parseDiff = (raw: string) => {
+            if (!raw) return []
+            const lines = raw.split("\n")
+            const result: { type: "header" | "meta" | "add" | "del" | "ctx"; text: string }[] = []
+            for (const line of lines) {
+              if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
+                result.push({ type: "meta", text: line })
+              } else if (line.startsWith("@@")) {
+                result.push({ type: "header", text: line })
+              } else if (line.startsWith("+")) {
+                result.push({ type: "add", text: line })
+              } else if (line.startsWith("-")) {
+                result.push({ type: "del", text: line })
+              } else {
+                result.push({ type: "ctx", text: line })
+              }
+            }
+            return result
+          }
+
+          return (
+            <>
+            <div style={{ position: "fixed", inset: "0", "z-index": "298", background: "rgba(0,0,0,0.15)" }} onClick={() => { setCodeDrawerOpen(false); setSelectedFile(null) }} />
+            <div style={{
+              position: "fixed", top: "52px", right: "0", bottom: "0",
+              width: selectedFile() ? "600px" : "400px", "max-width": "calc(100vw - 64px)",
+              background: "#0d1117",
+              "border-left": "1px solid #30363d",
+              "box-shadow": "-8px 0 32px rgba(0,0,0,0.3)",
+              "z-index": "299",
+              display: "flex", "flex-direction": "column",
+              overflow: "hidden",
+              transition: "width 200ms ease",
+            }}>
+              {/* Header */}
+              <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "10px 14px", "border-bottom": "1px solid #30363d", "flex-shrink": "0" }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                  <Show when={selectedFile()}>
+                    <button type="button" onClick={() => setSelectedFile(null)}
+                      style={{ border: "none", background: "transparent", cursor: "pointer", color: "#8b949e", display: "flex", "align-items": "center", padding: "2px" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e6edf3" }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#8b949e" }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                  </Show>
+                  <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", "font-weight": "600", color: "#e6edf3" }}>
+                    {selectedFile() ? selectedFile()!.split("/").pop() : branchInfo()}
+                  </span>
+                  <Show when={selectedFile()}>
+                    <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#8b949e" }}>
+                      {selectedFile()}
+                    </span>
+                  </Show>
+                  <Show when={!selectedFile() && changedFiles().length > 0}>
+                    <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", color: "#8b949e" }}>
+                      {changedFiles().length} changed file{changedFiles().length !== 1 ? "s" : ""}
+                    </span>
+                  </Show>
+                </div>
+                <button type="button" onClick={() => { setCodeDrawerOpen(false); setSelectedFile(null) }}
+                  style={{ border: "none", background: "transparent", cursor: "pointer", color: "#8b949e", display: "flex", "align-items": "center", padding: "2px" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e6edf3" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#8b949e" }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              {/* Body */}
+              <Show when={!selectedFile()}>
+                {/* File list with diff stats */}
+                <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "8px 0" }}>
+                  {/* Changed files section */}
+                  <Show when={changedFiles().length > 0}>
+                    <div style={{ padding: "6px 14px 4px", "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", "letter-spacing": "0.08em", "text-transform": "uppercase", color: "#8b949e" }}>
+                      Changes
+                    </div>
+                    <For each={changedFiles()}>
+                      {([filePath, stats]) => {
+                        const fileName = () => filePath.split("/").pop() ?? filePath
+                        const dirPart = () => {
+                          const parts = filePath.split("/")
+                          return parts.length > 1 ? parts.slice(0, -1).join("/") + "/" : ""
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFile(filePath)}
+                            style={{
+                              display: "flex", "align-items": "center", gap: "6px",
+                              width: "100%", padding: "5px 14px",
+                              background: "transparent", border: "none",
+                              cursor: "pointer", "text-align": "left",
+                              transition: "background 80ms",
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)" }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                          >
+                            {/* Status dot */}
+                            <span style={{
+                              width: "6px", height: "6px", "border-radius": "50%", "flex-shrink": "0",
+                              background: stats.status === "added" ? "#3fb950" : stats.status === "deleted" ? "#f85149" : "#d29922",
+                            }} />
+                            {/* Filename */}
+                            <span style={{ flex: "1", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                              <Show when={dirPart()}>
+                                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#8b949e" }}>{dirPart()}</span>
+                              </Show>
+                              <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#e6edf3" }}>{fileName()}</span>
+                            </span>
+                            {/* +N -N stats */}
+                            <span style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
+                              <Show when={stats.added > 0}>
+                                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600", color: "#3fb950" }}>+{stats.added}</span>
+                              </Show>
+                              <Show when={stats.removed > 0}>
+                                <span style={{ "font-family": "'Geist Mono', monospace", "font-size": "11px", "font-weight": "600", color: "#f85149" }}>-{stats.removed}</span>
+                              </Show>
+                            </span>
+                            {/* Arrow */}
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                          </button>
+                        )
+                      }}
+                    </For>
+                  </Show>
+
+                  {/* Divider */}
+                  <Show when={changedFiles().length > 0}>
+                    <div style={{ height: "1px", background: "#30363d", margin: "8px 14px" }} />
+                  </Show>
+
+                  {/* All files file tree */}
+                  <div style={{ padding: "6px 14px 4px", "font-family": "'Geist Mono', monospace", "font-size": "10px", "font-weight": "600", "letter-spacing": "0.08em", "text-transform": "uppercase", color: "#8b949e" }}>
+                    All Files
+                  </div>
+                  <div style={{ padding: "0 4px" }}>
+                    <FileTree
+                      path=""
+                      onFileClick={(node) => {
+                        tabs().open(file.tab(node.path))
+                        setCodeDrawerOpen(false)
+                      }}
+                    />
+                  </div>
+                </div>
+              </Show>
+
+              {/* Diff view for selected file */}
+              <Show when={selectedFile()}>
+                <div style={{ flex: "1", "min-height": "0", "overflow-y": "auto", padding: "0" }}>
+                  <Show when={fileDiff.loading}>
+                    <div style={{ padding: "20px", "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#8b949e" }}>Loading diff…</div>
+                  </Show>
+                  <Show when={!fileDiff.loading && !fileDiff()}>
+                    <div style={{ padding: "20px", "font-family": "'Geist Mono', monospace", "font-size": "12px", color: "#8b949e" }}>No diff available</div>
+                  </Show>
+                  <Show when={fileDiff()}>
+                    <div style={{ "font-family": "'Geist Mono', monospace", "font-size": "12px", "line-height": "1.6" }}>
+                      <For each={parseDiff(fileDiff()!)}>
+                        {(line) => (
+                          <div style={{
+                            padding: "0 16px",
+                            background: line.type === "add" ? "rgba(63,185,80,0.12)" : line.type === "del" ? "rgba(248,81,73,0.12)" : line.type === "header" ? "rgba(88,166,255,0.08)" : "transparent",
+                            color: line.type === "add" ? "#3fb950" : line.type === "del" ? "#f85149" : line.type === "header" ? "#58a6ff" : line.type === "meta" ? "#8b949e" : "#e6edf3",
+                            "white-space": "pre",
+                            "border-left": line.type === "add" ? "2px solid rgba(63,185,80,0.4)" : line.type === "del" ? "2px solid rgba(248,81,73,0.4)" : "2px solid transparent",
+                            overflow: "hidden",
+                            "text-overflow": "ellipsis",
+                          }}>
+                            {line.text || " "}
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+            </>
+          )
+        })()}
+      </Show>
     </div>
   )
 }

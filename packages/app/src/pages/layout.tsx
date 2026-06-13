@@ -481,7 +481,7 @@ function ProjectFileBrowser(props: { dir: string }) {
 
   createEffect(on(() => props.dir, (dir) => {
     setEntries({})
-    setExpanded(new Set())
+    setExpanded(new Set<string>())
     void listDir(dir)
   }))
 

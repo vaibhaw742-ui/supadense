@@ -5,6 +5,7 @@ import { Portal } from "solid-js/web"
 import { getAuthToken } from "@/utils/server"
 import { setActiveSidebarView } from "@/context/sidebar-view"
 import { elApi } from "@/pages/projects/el-api"
+import { useServer } from "@/context/server"
 
 function kbApiBase() {
   return import.meta.env.DEV
@@ -31,11 +32,26 @@ export function CaptureDialog(props: Props) {
   const [selectedProjectIds, setSelectedProjectIds] = createSignal<Set<string>>(new Set())
 
   const [localProjects] = createResource(() => elApi.listLocalProjects().catch(() => []))
+  const server = useServer()
 
-  // Only local projects
-  const allProjects = createMemo(() =>
-    (localProjects() ?? []).map((p) => ({ id: p.id, name: p.name, type: "local" as const }))
-  )
+  // Combine opencode server projects + elApi local projects
+  const allProjects = createMemo(() => {
+    const serverProjects = server.projects.list().map((p) => ({
+      id: p.worktree,
+      name: p.worktree.split("/").filter(Boolean).pop() ?? p.worktree,
+      type: "local" as const,
+      source: "server" as const,
+    }))
+    const elProjects = (localProjects() ?? []).map((p) => ({ id: p.id, name: p.name, type: "local" as const, source: "el" as const }))
+    // Merge, preferring server projects; deduplicate by id
+    const seen = new Set<string>()
+    const merged = [...serverProjects, ...elProjects].filter((p) => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+    return merged
+  })
 
   // Auto-select first project once loaded
   createEffect(() => {
@@ -95,6 +111,25 @@ export function CaptureDialog(props: Props) {
 
       const results = await Promise.allSettled(
         projects.map(async (proj) => {
+          // Server projects (opencode worktree path as ID) — write directly to disk
+          if ((proj as any).source === "server") {
+            const projectDir = proj.id
+            const timestamp = Date.now()
+            if (isUrl) {
+              const slug = rawUrl.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 60)
+              const filename = `${timestamp}_${slug}.md`
+              const content = `# ${rawUrl}\nSource: ${rawUrl}\nCaptured: ${new Date().toISOString()}\n`
+              const ok = await window.supadense?.writeFile(`${projectDir}/.supadense/sources/${filename}`, content)
+              if (!ok) throw new Error("Failed to write source file")
+            } else if (isText) {
+              const filename = `${timestamp}_note.md`
+              const content = `# Note\nCaptured: ${new Date().toISOString()}\n\n${rawText}`
+              const ok = await window.supadense?.writeFile(`${projectDir}/.supadense/sources/${filename}`, content)
+              if (!ok) throw new Error("Failed to write note file")
+            }
+            return
+          }
+          // elApi projects (UUID IDs)
           if (isUrl) {
             if (proj.type === "local") {
               const res = await fetch(`${kbApiBase()}/local-projects/${proj.id}/sources`, {

@@ -255,7 +255,7 @@ export function Titlebar(props: { onCapture?: () => void; onToggleSidebar?: () =
                       onMouseEnter={(e) => { if (newChatSessionId() !== session.id) (e.currentTarget as HTMLElement).style.background = "#fafafa" }}
                       onMouseLeave={(e) => { if (newChatSessionId() !== session.id) (e.currentTarget as HTMLElement).style.background = "none" }}
                     >
-                      <span style={{ "font-size": "13px", color: C.ink200, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", width: "100%" }}>
+                      <span style={{ "font-size": "13px", color: C.ink100, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", width: "100%" }}>
                         {(session.title?.trim() || "New session")}
                       </span>
                       <Show when={session.time?.updated}>
